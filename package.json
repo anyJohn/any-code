@@ -1,0 +1,22 @@
+{
+  "name": "any-code",
+  "version": "1.0.0",
+  "description": "A Simple Code Agent",
+  "license": "MIT",
+  "author": "AnyJohn",
+  "type": "commonjs",
+  "main": "main.ts",
+  "scripts": {
+    "dev": "ts-node src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "openai": "^6.32.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
