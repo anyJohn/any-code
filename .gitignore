@@ -8,3 +8,4 @@ build/
 .DS_Store
 *.tgz
 .cache/
+CLAUDE.md
