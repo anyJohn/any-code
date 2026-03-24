@@ -1,6 +1,8 @@
 import { OpenAI } from "openai";
 import { ChatCompletionMessage } from "openai/resources/index";
 import { tools, toolsMap } from "./tools";
+import { loadMemory } from "./memory";
+import { Config } from "./config";
 
 type ChatMessage = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 
@@ -37,11 +39,17 @@ async function callLLM(
  * @returns
  */
 async function agentLoop(userInput: string, maxIterations = 20) {
+  const memory = loadMemory();
+  let systemPrompt =
+    "You are a powerful code assistant. First, figure out what kind of project & system this is. Last, Be concise and helpful.";
+  if (memory) {
+    systemPrompt += `Previous context:\n${memory}`;
+  }
+
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content:
-        "You are a helpful assistant that can interact with the system using bash commands. Be concise and helpful.",
+      content: systemPrompt,
     },
     {
       role: "user",
@@ -63,7 +71,7 @@ async function agentLoop(userInput: string, maxIterations = 20) {
           console.log(`\n[Tool Call] ${funcName}:`, args);
           let toolOutput = "";
           if (typeof toolsMap[funcName] === "function") {
-            toolOutput = await toolsMap[funcName](args.command);
+            toolOutput = await toolsMap[funcName](args);
             console.log(`[Output]:\n${toolOutput}`);
           } else {
             toolOutput = `Unknown tool: ${funcName}`;

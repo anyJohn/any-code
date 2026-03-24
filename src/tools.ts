@@ -1,38 +1,19 @@
 import OpenAI from "openai";
-import { exec } from "child_process";
-import { promisify } from "util";
+import { executeBashSchema, executeBashFunc } from "./tools/executeBash";
+import { readFileSchema, readFileFunc } from "./tools/readFile";
+import { editFileSchema, editFileFunc } from "./tools/editFile";
+import { writeFileSchema, writeFileFunc } from "./tools/writeFile";
 
 export const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
-  {
-    type: "function",
-    function: {
-      name: "execute_bash",
-      description: "Execute a bash command on the system",
-      parameters: {
-        type: "object",
-        properties: {
-          command: {
-            type: "string",
-            description: "The bash command to execute",
-          },
-        },
-        required: ["command"],
-      },
-    },
-  },
+  executeBashSchema,
+  readFileSchema,
+  editFileSchema,
+  writeFileSchema,
 ];
 
-export const toolsMap: { [k: string]: (arg: string) => Promise<string> } = {
-  execute_bash: async (command: string): Promise<string> => {
-    const execAsync = promisify(exec);
-    try {
-      const { stdout, stderr } = await execAsync(command);
-      return stdout + stderr;
-    } catch (error) {
-      if (error instanceof Error) {
-        return `Error: ${error.message}`;
-      }
-      return `Error: ${String(error)}`;
-    }
-  },
+export const toolsMap: { [k: string]: (args: any) => Promise<string> } = {
+  execute_bash: executeBashFunc,
+  read_file: readFileFunc,
+  edit_file: editFileFunc,
+  write_file: writeFileFunc,
 };
