@@ -24,7 +24,7 @@ export function saveMemory(task: string, result: string): void {
  * @param windowSize 窗口大小（字符数），默认 4000
  * @returns 记忆内容字符串
  */
-export function loadMemory(windowSize: number = 4000): string {
+export function loadMemory(windowSize: number = 1000): string {
   if (!fs.existsSync(MEMORY_FILE)) {
     return "";
   }

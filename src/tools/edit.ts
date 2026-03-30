@@ -7,7 +7,7 @@ interface EditFileArgs {
   newString: string;
 }
 
-export const editFileSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
+export const editSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
   type: "function",
   function: {
     name: "edit_file",
@@ -33,7 +33,7 @@ export const editFileSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
   },
 };
 
-export const editFileFunc = async (args: EditFileArgs): Promise<string> => {
+export const editFunc = async (args: EditFileArgs): Promise<string> => {
   try {
     const { filePath, oldString, newString } = args;
     const content = await fs.readFile(filePath, "utf-8");

@@ -1,13 +1,13 @@
 import OpenAI from "openai";
 import fs from "fs/promises";
 
-interface ReadFileArgs {
+interface ReadArgs {
   filePath: string;
   offset?: number;
   limit?: number;
 }
 
-export const readFileSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
+export const readSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
   type: "function",
   function: {
     name: "read_file",
@@ -33,7 +33,7 @@ export const readFileSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
   },
 };
 
-export const readFileFunc = async (args: ReadFileArgs): Promise<string> => {
+export const readFunc = async (args: ReadArgs): Promise<string> => {
   try {
     const { filePath, offset = 0, limit = 8000 } = args;
     const content = await fs.readFile(filePath, "utf-8");

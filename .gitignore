@@ -1,11 +1,19 @@
-node_modules/
-dist/
-build/
-*.log
+# system
+.DS_Store
 .env
 .env.local
 .env.*.local
-.DS_Store
+
+# build
+node_modules/
+dist/
+build/
 *.tgz
+*.log
 .cache/
+
+# IDE
+AGENTS.md
 CLAUDE.md
+.claude/
+.vscode/

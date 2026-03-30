@@ -1,12 +1,12 @@
 import OpenAI from "openai";
 import fs from "fs/promises";
 
-interface WriteFileArgs {
+interface WriteArgs {
   filePath: string;
   content: string;
 }
 
-export const writeFileSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
+export const writeSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
   type: "function",
   function: {
     name: "write_file",
@@ -28,7 +28,7 @@ export const writeFileSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
   },
 };
 
-export const writeFileFunc = async (args: WriteFileArgs): Promise<string> => {
+export const writeFunc = async (args: WriteArgs): Promise<string> => {
   try {
     await fs.writeFile(args.filePath, args.content, "utf-8");
     return `Successfully wrote ${args.content.length} characters to ${args.filePath}`;

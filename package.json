@@ -12,7 +12,8 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
-    "openai": "^6.32.0"
+    "openai": "^6.32.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
