@@ -36,17 +36,19 @@ Schema:
   "subTasks": string[],
 }
 - Return ONLY JSON
-- No markdown
-- No explanation
+- No Markdown
+- No Explanation
 - Must be valid JSON
 - No Command
+- No Script or Code Block
+- 不要输出编码，只做计划
 
 **Available Tools:**
 ${readOnlyTools.map((t) => `- ${t.type}: ${t.type}`).join("\n")}
 
 Important Notes:
 - ONLY use the tools listed above
-- Do NOT write, edit, or modify file during planning
+- DO NOT create, write, edit, modify or delete file during planning
 `,
     },
   ];

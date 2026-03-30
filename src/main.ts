@@ -3,14 +3,10 @@ import { ChatMessage } from "./type";
 import { createPlan } from "./plan";
 import { agentLoop } from "./core";
 
-async function getSystemMessage(planText?: string): Promise<ChatMessage[]> {
+function getSystemMessage(): ChatMessage[] {
   const memory = loadMemory();
   let systemPrompt = `You are a powerful code assistant. First, figure out what kind of project & system this is. Last, Be concise and helpful.`;
-  
-  if (planText) {
-    systemPrompt += `\n\nTask Steps:\n${planText}`;
-  }
-  
+
   if (memory) {
     systemPrompt += `\n\nPrevious context:\n${memory}`;
   }
@@ -28,9 +24,7 @@ async function main() {
   const args = process.argv.slice(2);
 
   const hasPlanParam = args.includes("--plan");
-  const taskArgs = args.filter(
-    (arg) => arg !== "--plan",
-  );
+  const taskArgs = args.filter((arg) => arg !== "--plan");
   const task: string =
     taskArgs.length > 0
       ? taskArgs.join(" ")
@@ -39,16 +33,23 @@ async function main() {
   console.log("=== Any-Agent-Nano ===");
   console.log(`User: ${task}\n`);
 
-  let systemMessages: ChatMessage[];
+  let systemMessages: ChatMessage[] = await getSystemMessage();
   if (hasPlanParam) {
     const tasks = await createPlan(task);
-    systemMessages = await getSystemMessage(tasks.join("\n"));
-  } else {
-    systemMessages = await getSystemMessage();
-  }
+    const allResult: string[] = [];
+    for (let i = 0; i < tasks.length; i++) {
+      const subtask = tasks[i];
+      console.log(`\n[Executing Subtasks] [Task ${i + 1}] ${subtask}`);
+      const { result } = await agentLoop(subtask, systemMessages);
+      allResult.push(result);
+    }
 
-  const { result } = await agentLoop(task, systemMessages);
-  saveMemory(task, result);
+    const finalResult = allResult.join("\n");
+    saveMemory(task, finalResult);
+  } else {
+    const { result } = await agentLoop(task, systemMessages);
+    saveMemory(task, result);
+  }
 }
 
 main().catch(console.error);

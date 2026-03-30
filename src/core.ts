@@ -32,7 +32,9 @@ export async function agentLoop(
         messages,
       };
     } else {
-      messages.push(...(await toolCall(msg.tool_calls)));
+      const accessToolKit =
+        params?.tools?.map((t) => (t as any)?.function?.name) || undefined;
+      messages.push(...(await toolCall(msg.tool_calls, accessToolKit)));
     }
   }
   return {

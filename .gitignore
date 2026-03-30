@@ -15,5 +15,7 @@ build/
 # IDE
 AGENTS.md
 CLAUDE.md
+memory.md
+SOUL.md
 .claude/
 .vscode/

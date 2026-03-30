@@ -1,7 +1,15 @@
+/**
+ * Todo List
+ * - 基于RAG的向量记忆检索,扩充记忆容量
+ * - 记忆检索工具, Agent 自己检索记忆
+ * - 记忆压缩/记忆蒸馏,自动压缩旧记忆，丢弃细节和过时的信息，保留核心内容和重要事件
+ * - 分层记忆，分层为 工作记忆 -> 短期记忆 -> 长期记忆,拥有不同的信息密度和保存时间
+ */
+
 import fs from "fs";
 import path from "path";
 
-const MEMORY_FILE = path.join(__dirname, "memory.md");
+const MEMORY_FILE = path.join(__dirname, "..", "memory.md");
 
 /**
  * 保存记忆到 memory.md 文件
@@ -21,7 +29,7 @@ export function saveMemory(task: string, result: string): void {
 
 /**
  * 通过滑动窗口方式加载 memory.md 文件
- * @param windowSize 窗口大小（字符数），默认 4000
+ * @param windowSize 窗口大小（字符数），默认 1000
  * @returns 记忆内容字符串
  */
 export function loadMemory(windowSize: number = 1000): string {

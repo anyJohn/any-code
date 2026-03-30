@@ -1,13 +1,15 @@
-import OpenAI from "openai";
 import { executeBashSchema, executeBashFunc } from "./executeBash";
 import { readSchema, readFunc } from "./read";
 import { editSchema, editFunc } from "./edit";
 import { writeSchema, writeFunc } from "./write";
 import { exploreSchema, exploreFunc } from "./explore";
-import { ChatCompletionMessageToolCall } from "openai/resources/index";
+import {
+  ChatCompletionMessageToolCall,
+  ChatCompletionTool,
+} from "openai/resources/index";
 import { ChatMessage } from "../type";
 
-export const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+export const tools: ChatCompletionTool[] = [
   executeBashSchema,
   readSchema,
   editSchema,
@@ -15,10 +17,7 @@ export const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   exploreSchema,
 ];
 
-export const readOnlyTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
-  readSchema,
-  exploreSchema,
-];
+export const readOnlyTools: ChatCompletionTool[] = [readSchema, exploreSchema];
 
 export const toolsMap: { [k: string]: (args: any) => Promise<string> } = {
   execute_bash: executeBashFunc,
@@ -30,22 +29,27 @@ export const toolsMap: { [k: string]: (args: any) => Promise<string> } = {
 
 export async function toolCall(
   tooCalls: ChatCompletionMessageToolCall[],
+  accessToolKit?: string[],
 ): Promise<ChatMessage[]> {
   const result: ChatMessage[] = [];
   for (const toolCall of tooCalls) {
     if (toolCall.type === "function") {
       const funcName: string = toolCall.function.name;
       const args = JSON.parse(toolCall.function.arguments || "{}");
-      console.log(`\n[Tool Call] ${funcName}:`, args);
+      console.log(`\n[Tool Call] ${funcName}`);
       let toolOutput = "";
-      if (typeof toolsMap[funcName] === "function") {
-        toolOutput = await toolsMap[funcName](args);
-        console.log(`[Tool Call] Success.`);
+      if (accessToolKit && !accessToolKit.includes(funcName)) {
+        toolOutput = `[Error] ${funcName} is not a valid tool. You can only use the following tools: ${accessToolKit.join(", ")}`;
       } else {
-        toolOutput = `[Error] ${toolOutput}`;
-        console.log(`[Error] ${toolOutput}`);
+        if (typeof toolsMap[funcName] === "function") {
+          toolOutput = await toolsMap[funcName](args);
+          console.log(`[Tool Call] Success.`);
+        } else {
+          toolOutput = `[Error] ${toolOutput}`;
+          console.log(`[Error] ${toolOutput}`);
+        }
       }
-      
+
       result.push({
         role: "tool",
         tool_call_id: toolCall.id,
