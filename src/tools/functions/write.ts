@@ -1,33 +1,9 @@
-import OpenAI from "openai";
 import fs from "fs/promises";
-import { ToolName } from ".";
 
 interface WriteArgs {
   filePath: string;
   content: string;
 }
-
-export const writeSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
-  type: "function",
-  function: {
-    name: ToolName.Write,
-    description: "Write content to a file",
-    parameters: {
-      type: "object",
-      properties: {
-        filePath: {
-          type: "string",
-          description: "The path to the file to write",
-        },
-        content: {
-          type: "string",
-          description: "The content to write to the file",
-        },
-      },
-      required: ["filePath", "content"],
-    },
-  },
-};
 
 export const writeFunc = async (args: WriteArgs): Promise<string> => {
   try {

@@ -5,7 +5,8 @@ import {
 import { ChatMessage } from "./type";
 import { Config } from "./config";
 import OpenAI from "openai";
-import { tools } from "./tools";
+import { ToolKit } from "./tools";
+
 /**
  * 调用 LLM
  * @param messages
@@ -29,7 +30,7 @@ export async function callLLM(
   const payload: ChatCompletionCreateParamsNonStreaming = {
     model,
     messages,
-    tools,
+    tools: ToolKit.readOnlyTools, // 默认只读权限
     ...params,
   };
   const resp = await client.chat.completions.create(payload);

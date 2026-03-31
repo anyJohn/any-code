@@ -1,33 +1,12 @@
-import OpenAI from "openai";
-import { createPlan } from "../plan";
-import { agentLoop } from "../core";
-import { executeTools, ToolName } from ".";
-import { subtaskPrompt } from "../prompt";
-import { ChatMessage } from "../type";
+import { createPlan } from "../../plan";
+import { agentLoop } from "../../core";
+import { subtaskPrompt } from "../../prompt";
+import { ChatMessage } from "../../type";
+import { ToolKit } from "..";
 
 interface PlanArgs {
   task: string;
 }
-
-export const planSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
-  type: "function",
-  function: {
-    name: ToolName.Plan,
-    description:
-      "Essential tool for complex tasks! Break down complicated task into 3-5 simple, actionable steps with clear objectives, then execute each step sequentially to ensure successful completion.",
-    parameters: {
-      type: "object",
-      properties: {
-        task: {
-          type: "string",
-          description:
-            "The complex task to create a plan for (e.g., 'Build a todo app', 'Implement user authentication')",
-        },
-      },
-      required: ["task"],
-    },
-  },
-};
 
 export const planFunc = async (args: PlanArgs): Promise<string> => {
   const { task } = args;
@@ -52,7 +31,7 @@ export const planFunc = async (args: PlanArgs): Promise<string> => {
       subtaskSystemMessages,
       undefined,
       {
-        tools: executeTools,
+        tools: ToolKit.executeTools,
       },
     );
     taskResults.push(res);

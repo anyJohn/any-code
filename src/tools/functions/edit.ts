@@ -1,38 +1,10 @@
-import OpenAI from "openai";
 import fs from "fs/promises";
-import { ToolName } from ".";
 
 interface EditFileArgs {
   filePath: string;
   oldString: string;
   newString: string;
 }
-
-export const editSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
-  type: "function",
-  function: {
-    name: ToolName.Edit,
-    description: "Edit a file by replacing an exact old_string with new_string",
-    parameters: {
-      type: "object",
-      properties: {
-        filePath: {
-          type: "string",
-          description: "The path to the file to edit",
-        },
-        oldString: {
-          type: "string",
-          description: "The exact string to replace in the file",
-        },
-        newString: {
-          type: "string",
-          description: "The new string to replace with",
-        },
-      },
-      required: ["filePath", "oldString", "newString"],
-    },
-  },
-};
 
 export const editFunc = async (args: EditFileArgs): Promise<string> => {
   try {

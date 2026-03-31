@@ -2,8 +2,9 @@ import { loadMemory, saveMemory } from "./memory";
 import { ChatMessage } from "./type";
 import { agentLoop } from "./core";
 import { systemPrompt } from "./prompt";
+import { ToolKit } from "./tools";
 
-export function getSystemMessage(): ChatMessage[] {
+function getSystemMessage(): ChatMessage[] {
   const memory = loadMemory();
   let sysPrompt = systemPrompt;
 
@@ -18,7 +19,6 @@ export function getSystemMessage(): ChatMessage[] {
     },
   ];
 }
-
 async function main() {
   const args = process.argv.slice(2);
   const task: string =
@@ -27,7 +27,9 @@ async function main() {
 
   console.log("=== Any-Agent-Nano ===");
   console.log(`User: ${task}\n`);
-  const { result } = await agentLoop(task, systemMessages);
+  const { result } = await agentLoop(task, systemMessages, undefined, {
+    tools: ToolKit.allTools,
+  });
   saveMemory(task, result);
 }
 

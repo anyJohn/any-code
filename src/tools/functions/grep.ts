@@ -1,8 +1,6 @@
-import OpenAI from "openai";
 import fs from "fs/promises";
 import path from "path";
 import { glob } from "glob";
-import { ToolName } from ".";
 
 interface GrepArgs {
   pattern: string;
@@ -12,45 +10,6 @@ interface GrepArgs {
   multiline?: boolean;
   case_insensitive?: boolean;
 }
-
-export const grepSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
-  type: "function",
-  function: {
-    name: ToolName.Grep,
-    description: "Search for patterns in files using regular expressions",
-    parameters: {
-      type: "object",
-      properties: {
-        pattern: {
-          type: "string",
-          description: "The regular expression pattern to search for",
-        },
-        path: {
-          type: "string",
-          description: "The directory or file to search in (default: current working directory)",
-        },
-        glob: {
-          type: "string",
-          description: "Glob pattern to filter files (e.g., **/*.ts, *.js)",
-        },
-        output_mode: {
-          type: "string",
-          enum: ["files_with_matches", "content", "count"],
-          description: "Output format: files_with_matches (list of files), content (show matching lines), count (show match counts)",
-        },
-        multiline: {
-          type: "boolean",
-          description: "Enable multiline matching",
-        },
-        case_insensitive: {
-          type: "boolean",
-          description: "Case-insensitive search",
-        },
-      },
-      required: ["pattern"],
-    },
-  },
-};
 
 async function* walkDir(dir: string): AsyncGenerator<string> {
   const entries = await fs.readdir(dir, { withFileTypes: true });

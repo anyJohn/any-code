@@ -1,6 +1,6 @@
 import { agentLoop } from "./core";
+import { ToolKit } from "./tools";
 import { ChatMessage } from "./type";
-import { readOnlyTools } from "./tools";
 import z from "zod";
 
 const schema = z.object({
@@ -10,7 +10,7 @@ export async function createPlan(task: string): Promise<string[]> {
   console.log("[Planning] Start Planning...");
   const msg: ChatMessage[] = getPlanMessage(task);
   const { result } = await agentLoop(`[Task]: ${task}`, msg, undefined, {
-    tools: readOnlyTools,
+    tools: ToolKit.readOnlyTools,
   });
   try {
     const json = JSON.parse(result);
@@ -46,7 +46,7 @@ Schema:
 - 不要输出编码，只做计划
 
 **Available Tools:**
-${readOnlyTools.map((t) => `- ${t.type}: ${t.type}`).join("\n")}
+${ToolKit.readOnlyTools.map((t) => `- ${t.type}: ${t.type}`).join("\n")}
 
 Important Notes:
 - ONLY use the tools listed above

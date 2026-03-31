@@ -1,7 +1,5 @@
-import OpenAI from "openai";
 import fs from "fs/promises";
 import path from "path";
-import { ToolName } from ".";
 
 interface ExploreArgs {
   directoryPath?: string;
@@ -32,7 +30,7 @@ async function exploreDirectory(
   dirPath: string,
   currentDepth: number,
   maxDepth: number,
-  ignorePatterns: string[]
+  ignorePatterns: string[],
 ): Promise<DirectoryNode> {
   const name = path.basename(dirPath);
   const node: DirectoryNode = {
@@ -66,7 +64,7 @@ async function exploreDirectory(
           fullPath,
           currentDepth + 1,
           maxDepth,
-          ignorePatterns
+          ignorePatterns,
         );
         node.children!.push(childNode);
       } else {
@@ -84,45 +82,29 @@ async function exploreDirectory(
   return node;
 }
 
-function formatTree(node: DirectoryNode, indent: string = "", isLast: boolean = true): string {
-  const prefix = indent === "" ? "" : indent.slice(0, -2) + (isLast ? "└─ " : "├─ ");
-  let result = prefix + node.name + (node.type === "directory" ? "/" : "") + "\n";
+function formatTree(
+  node: DirectoryNode,
+  indent: string = "",
+  isLast: boolean = true,
+): string {
+  const prefix =
+    indent === "" ? "" : indent.slice(0, -2) + (isLast ? "└─ " : "├─ ");
+  let result =
+    prefix + node.name + (node.type === "directory" ? "/" : "") + "\n";
 
   if (node.children && node.children.length > 0) {
     const newIndent = indent + (isLast ? "   " : "│  ");
     for (let i = 0; i < node.children.length; i++) {
-      result += formatTree(node.children[i], newIndent, i === node.children.length - 1);
+      result += formatTree(
+        node.children[i],
+        newIndent,
+        i === node.children.length - 1,
+      );
     }
   }
 
   return result;
 }
-
-export const exploreSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
-  type: "function",
-  function: {
-    name: ToolName.Explore,
-    description: "Explore the directory structure with tree view",
-    parameters: {
-      type: "object",
-      properties: {
-        directoryPath: {
-          type: "string",
-          description: "The root directory to explore (default: current working directory)",
-        },
-        maxDepth: {
-          type: "number",
-          description: "Maximum depth to explore (default: 3)",
-        },
-        ignorePatterns: {
-          type: "array",
-          items: { type: "string" },
-          description: "List of directory/file names to ignore (overrides default)",
-        },
-      },
-    },
-  },
-};
 
 export const exploreFunc = async (args: ExploreArgs): Promise<string> => {
   try {
@@ -133,7 +115,12 @@ export const exploreFunc = async (args: ExploreArgs): Promise<string> => {
     } = args;
 
     const absolutePath = path.resolve(directoryPath);
-    const rootNode = await exploreDirectory(absolutePath, 0, maxDepth, ignorePatterns);
+    const rootNode = await exploreDirectory(
+      absolutePath,
+      0,
+      maxDepth,
+      ignorePatterns,
+    );
 
     let output = `Directory Structure: ${absolutePath}\n`;
     output += `Max Depth: ${maxDepth}\n`;

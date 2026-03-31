@@ -1,38 +1,10 @@
-import OpenAI from "openai";
 import fs from "fs/promises";
-import { ToolName } from ".";
 
 interface ReadArgs {
   filePath: string;
   offset?: number;
   limit?: number;
 }
-
-export const readSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
-  type: "function",
-  function: {
-    name: ToolName.Read,
-    description: "Read the content of a file with pagination support",
-    parameters: {
-      type: "object",
-      properties: {
-        filePath: {
-          type: "string",
-          description: "The path to the file to read",
-        },
-        offset: {
-          type: "number",
-          description: "Starting character position (default: 0)",
-        },
-        limit: {
-          type: "number",
-          description: "Maximum number of characters to read (default: 8000)",
-        },
-      },
-      required: ["filePath"],
-    },
-  },
-};
 
 export const readFunc = async (args: ReadArgs): Promise<string> => {
   try {
