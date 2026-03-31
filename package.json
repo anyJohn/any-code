@@ -12,6 +12,7 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
+    "glob": "^13.0.6",
     "openai": "^6.32.0",
     "zod": "^4.3.6"
   },
