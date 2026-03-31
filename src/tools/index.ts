@@ -37,7 +37,6 @@ export const tools: ChatCompletionTool[] = [
 export const readOnlyTools: ChatCompletionTool[] = [
   readSchema,
   exploreSchema,
-  planSchema,
   globSchema,
   grepSchema,
 ];
