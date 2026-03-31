@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import fs from "fs/promises";
+import { ToolName } from ".";
 
 interface EditFileArgs {
   filePath: string;
@@ -10,7 +11,7 @@ interface EditFileArgs {
 export const editSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
   type: "function",
   function: {
-    name: "edit_file",
+    name: ToolName.Edit,
     description: "Edit a file by replacing an exact old_string with new_string",
     parameters: {
       type: "object",
@@ -49,6 +50,7 @@ export const editFunc = async (args: EditFileArgs): Promise<string> => {
     }
 
     const newContent = content.replace(oldString, newString);
+    console.log(`[Tool Call] Editing file: ${filePath}`);
     await fs.writeFile(filePath, newContent, "utf-8");
 
     return `Successfully edited file.\n--- Removed:\n${oldString}\n--- Added:\n${newString}`;

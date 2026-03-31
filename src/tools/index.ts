@@ -52,14 +52,14 @@ export const executeTools: ChatCompletionTool[] = [
 ];
 
 export const toolsMap: { [k: string]: (args: any) => Promise<string> } = {
-  execute_bash: executeBashFunc,
-  read_file: readFunc,
-  edit_file: editFunc,
-  write_file: writeFunc,
-  explore_directory: exploreFunc,
-  plan: planFunc,
-  glob: globFunc,
-  grep: grepFunc,
+  [ToolName.Bash]: executeBashFunc,
+  [ToolName.Read]: readFunc,
+  [ToolName.Edit]: editFunc,
+  [ToolName.Write]: writeFunc,
+  [ToolName.Explore]: exploreFunc,
+  [ToolName.Plan]: planFunc,
+  [ToolName.Glob]: globFunc,
+  [ToolName.Grep]: grepFunc,
 };
 
 export async function toolCall(
@@ -78,7 +78,6 @@ export async function toolCall(
       ];
     }
     const funcName: string = toolCall.function.name;
-    console.log(`\n[Tool Call] ${funcName}`);
     if (accessToolKit && !accessToolKit.includes(funcName)) {
       return [
         {

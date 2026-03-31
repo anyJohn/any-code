@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import fs from "fs/promises";
 import path from "path";
 import { glob } from "glob";
+import { ToolName } from ".";
 
 interface GrepArgs {
   pattern: string;
@@ -15,7 +16,7 @@ interface GrepArgs {
 export const grepSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
   type: "function",
   function: {
-    name: "grep",
+    name: ToolName.Grep,
     description: "Search for patterns in files using regular expressions",
     parameters: {
       type: "object",
@@ -91,7 +92,7 @@ export const grepFunc = async (args: GrepArgs): Promise<string> => {
       multiline = false,
       case_insensitive = false,
     } = args;
-
+    console.log(`[Tool Call] Grep pattern: ${pattern}`);
     let flags = "g";
     if (multiline) flags += "m";
     if (case_insensitive) flags += "i";

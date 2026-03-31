@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import fs from "fs/promises";
+import { ToolName } from ".";
 
 interface ReadArgs {
   filePath: string;
@@ -10,7 +11,7 @@ interface ReadArgs {
 export const readSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
   type: "function",
   function: {
-    name: "read_file",
+    name: ToolName.Read,
     description: "Read the content of a file with pagination support",
     parameters: {
       type: "object",
@@ -35,6 +36,9 @@ export const readSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
 
 export const readFunc = async (args: ReadArgs): Promise<string> => {
   try {
+    console.log(
+      `[Tool Call] Reading file: ${args.filePath}, Offset: ${args.offset || 0}, Limit: ${args.limit || 8000}`,
+    );
     const { filePath, offset = 0, limit = 8000 } = args;
     const content = await fs.readFile(filePath, "utf-8");
     const totalLength = content.length;

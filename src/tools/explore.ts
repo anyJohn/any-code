@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import fs from "fs/promises";
 import path from "path";
+import { ToolName } from ".";
 
 interface ExploreArgs {
   directoryPath?: string;
@@ -47,7 +48,7 @@ async function exploreDirectory(
 
   try {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
-
+    console.log(`[Tool Call] Exploring: ${dirPath}`);
     for (const entry of entries) {
       const shouldIgnore = ignorePatterns.some((pattern) => {
         if (pattern.startsWith("*")) {
@@ -100,7 +101,7 @@ function formatTree(node: DirectoryNode, indent: string = "", isLast: boolean = 
 export const exploreSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
   type: "function",
   function: {
-    name: "explore_directory",
+    name: ToolName.Explore,
     description: "Explore the directory structure with tree view",
     parameters: {
       type: "object",

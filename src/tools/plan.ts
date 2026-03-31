@@ -1,8 +1,9 @@
 import OpenAI from "openai";
 import { createPlan } from "../plan";
 import { agentLoop } from "../core";
-import { getSystemMessage } from "../main";
-import { executeTools } from ".";
+import { executeTools, ToolName } from ".";
+import { subtaskPrompt } from "../prompt";
+import { ChatMessage } from "../type";
 
 interface PlanArgs {
   task: string;
@@ -11,14 +12,16 @@ interface PlanArgs {
 export const planSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
   type: "function",
   function: {
-    name: "plan",
-    description: "Essential tool for complex tasks! Break down complicated task into 3-5 simple, actionable steps with clear objectives, then execute each step sequentially to ensure successful completion.",
+    name: ToolName.Plan,
+    description:
+      "Essential tool for complex tasks! Break down complicated task into 3-5 simple, actionable steps with clear objectives, then execute each step sequentially to ensure successful completion.",
     parameters: {
       type: "object",
       properties: {
         task: {
           type: "string",
-          description: "The complex task to create a plan for (e.g., 'Build a todo app', 'Implement user authentication')",
+          description:
+            "The complex task to create a plan for (e.g., 'Build a todo app', 'Implement user authentication')",
         },
       },
       required: ["task"],
@@ -28,11 +31,17 @@ export const planSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
 
 export const planFunc = async (args: PlanArgs): Promise<string> => {
   const { task } = args;
+  console.log(`[Tool Call] Planning for task: ${task}`);
   const tasks = await createPlan(task);
   const taskResults = [];
 
   // 为 subtask 创建专用的系统消息（不包含 plan 工具提示）
-  const subtaskSystemMessages = getSystemMessage(true);
+  const subtaskSystemMessages: ChatMessage[] = [
+    {
+      role: "system",
+      content: subtaskPrompt,
+    },
+  ];
 
   for (let i = 0; i < tasks.length; i++) {
     const t = tasks[i];
@@ -44,7 +53,7 @@ export const planFunc = async (args: PlanArgs): Promise<string> => {
       undefined,
       {
         tools: executeTools,
-      }
+      },
     );
     taskResults.push(res);
   }

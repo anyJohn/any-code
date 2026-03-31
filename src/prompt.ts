@@ -5,7 +5,7 @@ For SIMPLE tasks, you can execute them directly.
 Last, Be concise and helpful.
 `;
 
-export const SubtaskPrompt = `
+export const subtaskPrompt = `
 You are a powerful code assistant executing a specific subtask as part of a larger plan.
 Your goal is to complete THIS SPECIFIC SUBTASK directly using the available tools.
 DO NOT use any planning tools - the plan has already been created for you.

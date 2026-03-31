@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { glob } from "glob";
+import { ToolName } from ".";
 
 interface GlobArgs {
   pattern: string;
@@ -9,7 +10,7 @@ interface GlobArgs {
 export const globSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
   type: "function",
   function: {
-    name: "glob",
+    name: ToolName.Glob,
     description: "Find files matching a glob pattern (like **/*.ts, src/**/*.json, etc.)",
     parameters: {
       type: "object",
@@ -30,6 +31,7 @@ export const globSchema: OpenAI.Chat.Completions.ChatCompletionTool = {
 
 export const globFunc = async (args: GlobArgs): Promise<string> => {
   try {
+    console.log(`[Tool Call] Glob pattern: ${args.pattern}, Path: ${args.path || process.cwd()}`);
     const { pattern, path } = args;
     const options = path ? { cwd: path } : undefined;
     const files = await glob(pattern, options);

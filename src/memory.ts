@@ -9,7 +9,7 @@
 import fs from "fs";
 import path from "path";
 
-const MEMORY_FILE = path.join(__dirname, "..", "memory.md");
+const MEMORY_FILE = path.join(__dirname, "..", "/.agent", "memory.md");
 
 /**
  * 保存记忆到 memory.md 文件
