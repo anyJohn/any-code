@@ -1,6 +1,6 @@
 import { ChatCompletionMessageToolCall } from "openai/resources/index";
 import { ChatMessage } from "../type";
-import { ToolsMap } from "./";
+import { ToolsMap } from "./functions";
 
 export async function toolCall(
   tooCalls: ChatCompletionMessageToolCall[],
@@ -18,6 +18,7 @@ export async function toolCall(
       ];
     }
     const funcName: string = toolCall.function.name;
+
     if (accessToolKit && !accessToolKit.includes(funcName)) {
       return [
         {

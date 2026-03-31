@@ -1,5 +1,4 @@
 import { toolCall } from "./toolCall";
-import { ToolsMap } from "./functions";
 import {
   globSchema,
   grepSchema,
@@ -34,4 +33,4 @@ const ToolKit = {
   ],
 };
 
-export { toolCall, ToolKit, ToolsMap };
+export { toolCall, ToolKit };
