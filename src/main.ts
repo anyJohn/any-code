@@ -1,18 +1,21 @@
 import { loadMemory, saveMemory } from "./memory";
 import { ChatMessage } from "./type";
 import { agentLoop } from "./core";
-import { systemPrompt } from "./prompt";
+import { systemPrompt, SubtaskPrompt } from "./prompt";
 
-export function getSystemMessage(): ChatMessage[] {
+export function getSystemMessage(isSubtask: boolean = false): ChatMessage[] {
   const memory = loadMemory();
-  let sysPrompt = systemPrompt;
-  if (memory) {
-    sysPrompt += `\n\nPrevious context:\n${memory}\n\n`;
+  let sysPrompt = isSubtask ? SubtaskPrompt : systemPrompt;
+  let finalPrompt = sysPrompt;
+
+  if (memory && !isSubtask) {
+    finalPrompt += `\n\nPrevious context:\n${memory}\n\n`;
   }
+
   return [
     {
       role: "system",
-      content: systemPrompt,
+      content: finalPrompt,
     },
   ];
 }
