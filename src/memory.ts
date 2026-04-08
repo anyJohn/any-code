@@ -48,5 +48,5 @@ export function loadMemory(windowSize: number = 1000): string {
   const headerMatch = content.lastIndexOf("## ", startIndex);
   const finalStartIndex = headerMatch !== -1 ? headerMatch : startIndex;
 
-  return content.slice(finalStartIndex);
+  return `\n# Previous context\n${content.slice(finalStartIndex)}\n\n`;
 }

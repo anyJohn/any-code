@@ -2,6 +2,7 @@ import { agentLoop } from "./core";
 import { ToolKit } from "./tools";
 import { ChatMessage } from "./type";
 import z from "zod";
+import { planPrompt } from "./prompt";
 
 const schema = z.object({
   subTasks: z.array(z.string()),
@@ -32,26 +33,7 @@ function getPlanMessage(task: string): ChatMessage[] {
   return [
     {
       role: "system",
-      content: `Break down the task into 3-5 simple, readable, actionable steps. Return a JSON array of strings.
-Schema:
-{
-  "subTasks": string[],
-}
-- Return ONLY JSON
-- No Markdown
-- No Explanation
-- Must be valid JSON
-- No Command
-- No Script or Code Block
-- 不要输出编码，只做计划
-
-**Available Tools:**
-${ToolKit.readOnlyTools.map((t) => `- ${t.type}: ${t.type}`).join("\n")}
-
-Important Notes:
-- ONLY use the tools listed above
-- DO NOT create, write, edit, modify or delete file during planning
-`,
+      content: planPrompt,
     },
   ];
 }

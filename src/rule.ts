@@ -34,5 +34,5 @@ export function loadRule(): string {
     return fs.readFileSync(filePath, "utf-8");
   });
 
-  return contents.join("\n\n");
+  return `\n# Rule\n${contents.join("\n\n")}\n\n`;
 }

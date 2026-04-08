@@ -3,6 +3,7 @@ import { agentLoop } from "../../core";
 import { subtaskPrompt } from "../../prompt";
 import { ChatMessage } from "../../type";
 import { ToolKit } from "..";
+import { loadMcpTools } from "../../mcp";
 
 interface PlanArgs {
   task: string;
@@ -25,13 +26,13 @@ export const planFunc = async (args: PlanArgs): Promise<string> => {
   for (let i = 0; i < tasks.length; i++) {
     const t = tasks[i];
     console.log(`\n[Executing Subtask ${i + 1}/${tasks.length}]: ${t}`);
-
+    const mcpTools = loadMcpTools();
     const res = await agentLoop(
       `[Subtask ${i + 1} of ${tasks.length}]: ${t}`,
       subtaskSystemMessages,
       undefined,
       {
-        tools: ToolKit.executeTools,
+        tools: [...ToolKit.executeTools, ...mcpTools],
       },
     );
     taskResults.push(res);

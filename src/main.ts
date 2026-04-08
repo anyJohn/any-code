@@ -3,15 +3,24 @@ import { ChatMessage } from "./type";
 import { agentLoop } from "./core";
 import { systemPrompt } from "./prompt";
 import { ToolKit } from "./tools";
+import { loadRule } from "./rule";
+import { loadSkills } from "./skill";
+import { loadMcpTools } from "./mcp";
 
 function getSystemMessage(): ChatMessage[] {
   const memory = loadMemory();
+  const rule = loadRule();
+  const skills = loadSkills();
   let sysPrompt = systemPrompt;
-
   if (memory) {
-    sysPrompt += `\n\nPrevious context:\n${memory}\n\n`;
+    sysPrompt += memory;
   }
-
+  if (skills) {
+    sysPrompt += skills;
+  }
+  if (rule) {
+    sysPrompt += rule;
+  }
   return [
     {
       role: "system",
@@ -27,8 +36,9 @@ async function main() {
 
   console.log("=== Any-Agent-Nano ===");
   console.log(`User: ${task}\n`);
+  const mcpTools = loadMcpTools();
   const { result } = await agentLoop(task, systemMessages, undefined, {
-    tools: ToolKit.allTools,
+    tools: [...ToolKit.allTools, ...mcpTools],
   });
   saveMemory(task, result);
 }
