@@ -1,0 +1,19 @@
+{
+  "name": "@any-code/domain",
+  "version": "1.0.0",
+  "description": "A Simple Code Agent",
+  "license": "MIT",
+  "author": "AnyJohn",
+  "type": "commonjs",
+  "main": "main.ts",
+  "scripts": {
+    "dev": "ts-node src/main.ts",
+    "build": "node esbuild.config.js",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "glob": "^13.0.6",
+    "openai": "^6.32.0",
+    "zod": "^4.3.6"
+  }
+}
