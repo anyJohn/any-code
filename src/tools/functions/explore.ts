@@ -1,5 +1,8 @@
 import fs from "fs/promises";
 import path from "path";
+import { EventStream, EventType } from "../../eventStream";
+
+const eventStream = EventStream.getInstance();
 
 interface ExploreArgs {
   directoryPath?: string;
@@ -46,13 +49,13 @@ async function exploreDirectory(
 
   try {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
-    console.log(`[Tool Call] Exploring: ${dirPath}`);
     for (const entry of entries) {
       const shouldIgnore = ignorePatterns.some((pattern) => {
         if (pattern.startsWith("*")) {
           return entry.name.endsWith(pattern.slice(1));
         }
         return entry.name === pattern;
+;
       });
 
       if (shouldIgnore) continue;
@@ -113,6 +116,8 @@ export const exploreFunc = async (args: ExploreArgs): Promise<string> => {
       maxDepth = 3,
       ignorePatterns = DEFAULT_IGNORE_PATTERNS,
     } = args;
+
+    eventStream.submit({ type: EventType.TOOL, message: `Exploring directory`, data: { path: directoryPath, maxDepth } });
 
     const absolutePath = path.resolve(directoryPath);
     const rootNode = await exploreDirectory(

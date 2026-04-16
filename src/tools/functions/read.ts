@@ -1,4 +1,7 @@
 import fs from "fs/promises";
+import { EventStream, EventType } from "../../eventStream";
+
+const eventStream = EventStream.getInstance();
 
 interface ReadArgs {
   filePath: string;
@@ -8,9 +11,7 @@ interface ReadArgs {
 
 export const readFunc = async (args: ReadArgs): Promise<string> => {
   try {
-    console.log(
-      `[Tool Call] Reading file: ${args.filePath}, Offset: ${args.offset || 0}, Limit: ${args.limit || 8000}`,
-    );
+    eventStream.submit({ type: EventType.TOOL, message: `Reading file`, data: { filePath: args.filePath, offset: args.offset || 0, limit: args.limit || 8000 } });
     const { filePath, offset = 0, limit = 8000 } = args;
     const content = await fs.readFile(filePath, "utf-8");
     const totalLength = content.length;

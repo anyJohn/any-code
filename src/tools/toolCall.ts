@@ -1,6 +1,9 @@
 import { ChatCompletionMessageToolCall } from "openai/resources/index";
 import { ChatMessage } from "../type";
 import { ToolsMap } from "./functions";
+import { EventStream, EventType } from "../eventStream";
+
+const eventStream = EventStream.getInstance();
 
 export async function toolCall(
   tooCalls: ChatCompletionMessageToolCall[],
@@ -40,7 +43,7 @@ export async function toolCall(
     }
     const args = JSON.parse(toolCall.function.arguments || "{}");
     const toolOutput = await ToolsMap[funcName](args);
-    console.log(`[Tool Call] Success.`);
+    eventStream.submit({ type: EventType.TOOL, message: `Tool call success: ${funcName}`, data: { name: funcName, args } });
     result.push({
       role: "tool",
       tool_call_id: toolCall.id,

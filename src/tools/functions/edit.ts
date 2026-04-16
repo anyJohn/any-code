@@ -1,4 +1,7 @@
 import fs from "fs/promises";
+import { EventStream, EventType } from "../../eventStream";
+
+const eventStream = EventStream.getInstance();
 
 interface EditFileArgs {
   filePath: string;
@@ -22,7 +25,7 @@ export const editFunc = async (args: EditFileArgs): Promise<string> => {
     }
 
     const newContent = content.replace(oldString, newString);
-    console.log(`[Tool Call] Editing file: ${filePath}`);
+    eventStream.submit({ type: EventType.TOOL, message: `Editing file`, data: { filePath } });
     await fs.writeFile(filePath, newContent, "utf-8");
 
     return `Successfully edited file.\n--- Removed:\n${oldString}\n--- Added:\n${newString}`;

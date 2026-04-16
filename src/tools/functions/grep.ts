@@ -1,6 +1,9 @@
 import fs from "fs/promises";
 import path from "path";
 import { glob } from "glob";
+import { EventStream, EventType } from "../../eventStream";
+
+const eventStream = EventStream.getInstance();
 
 interface GrepArgs {
   pattern: string;
@@ -51,7 +54,7 @@ export const grepFunc = async (args: GrepArgs): Promise<string> => {
       multiline = false,
       case_insensitive = false,
     } = args;
-    console.log(`[Tool Call] Grep pattern: ${pattern}`);
+    eventStream.submit({ type: EventType.TOOL, message: `Grep search`, data: { pattern, path: searchPath } });
     let flags = "g";
     if (multiline) flags += "m";
     if (case_insensitive) flags += "i";

@@ -3,12 +3,15 @@ import { ToolKit } from "./tools";
 import { ChatMessage } from "./type";
 import z from "zod";
 import { planPrompt } from "./prompt";
+import { EventStream, EventType } from "./eventStream";
+
+const eventStream = EventStream.getInstance();
 
 const schema = z.object({
   subTasks: z.array(z.string()),
 });
 export async function createPlan(task: string): Promise<string[]> {
-  console.log("[Planning] Start Planning...");
+  eventStream.submit({ type: EventType.PLANNING, message: "Start planning" });
   const msg: ChatMessage[] = getPlanMessage(task);
   const { result } = await agentLoop(`[Task]: ${task}`, msg, undefined, {
     tools: ToolKit.readOnlyTools,
@@ -16,15 +19,10 @@ export async function createPlan(task: string): Promise<string[]> {
   try {
     const json = JSON.parse(result);
     const subTasks: string[] = schema.parse(json)?.subTasks;
-    console.log(
-      "[Plan] Plan Created:\n",
-      subTasks.map((t, i) => `${i + 1}. ${t}`).join("\n"),
-    );
+    eventStream.submit({ type: EventType.PLANNING, message: `Plan created with ${subTasks.length} subtasks` });
     return subTasks;
   } catch (e) {
-    console.log(
-      "[Plan] Failed to create plan. Let's just use the original task as the plan.",
-    );
+    eventStream.submit({ type: EventType.PLANNING, message: "Failed to create plan, using original task as plan" });
     return [task];
   }
 }

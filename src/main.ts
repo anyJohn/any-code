@@ -6,6 +6,10 @@ import { ToolKit } from "./tools";
 import { loadRule } from "./rule";
 import { loadSkills } from "./skill";
 import { loadMcpTools } from "./mcp";
+import { EventStream, EventType } from "./eventStream";
+
+// 初始化事件流单例
+const eventStream = EventStream.getInstance();
 
 function getSystemMessage(): ChatMessage[] {
   const memory = loadMemory();
@@ -34,8 +38,8 @@ async function main() {
     args.length > 0 ? args.join(" ") : "List files in current directory";
   const systemMessages: ChatMessage[] = getSystemMessage();
 
-  console.log("=== Any-Agent-Nano ===");
-  console.log(`User: ${task}\n`);
+  eventStream.submit({ type: EventType.SYSTEM, message: "=== Any-Agent-Nano ===" });
+  eventStream.submit({ type: EventType.USER, message: task });
   const mcpTools = loadMcpTools();
   const { result } = await agentLoop(task, systemMessages, undefined, {
     tools: [...ToolKit.allTools, ...mcpTools],
@@ -43,6 +47,6 @@ async function main() {
   saveMemory(task, result);
 }
 
-main().catch(console.error);
+main().catch((error) => eventStream.submit({ type: EventType.ERROR, message: `Main function error: ${error.message}`, data: error }));
 
 export default main;

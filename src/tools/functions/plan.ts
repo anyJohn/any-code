@@ -4,6 +4,9 @@ import { subtaskPrompt } from "../../prompt";
 import { ChatMessage } from "../../type";
 import { ToolKit } from "..";
 import { loadMcpTools } from "../../mcp";
+import { EventStream, EventType } from "../../eventStream";
+
+const eventStream = EventStream.getInstance();
 
 interface PlanArgs {
   task: string;
@@ -11,7 +14,7 @@ interface PlanArgs {
 
 export const planFunc = async (args: PlanArgs): Promise<string> => {
   const { task } = args;
-  console.log(`[Tool Call] Planning for task: ${task}`);
+  eventStream.submit({ type: EventType.PLANNING, message: `Creating plan for task`, data: { task } });
   const tasks = await createPlan(task);
   const taskResults = [];
 
@@ -25,7 +28,7 @@ export const planFunc = async (args: PlanArgs): Promise<string> => {
 
   for (let i = 0; i < tasks.length; i++) {
     const t = tasks[i];
-    console.log(`\n[Executing Subtask ${i + 1}/${tasks.length}]: ${t}`);
+    eventStream.submit({ type: EventType.PLANNING, message: `Executing subtask ${i + 1}/${tasks.length}`, data: { subtask: t } });
     const mcpTools = loadMcpTools();
     const res = await agentLoop(
       `[Subtask ${i + 1} of ${tasks.length}]: ${t}`,
@@ -41,6 +44,6 @@ export const planFunc = async (args: PlanArgs): Promise<string> => {
   const res = `[Plan Execution Results]\n${taskResults
     .map((r, i) => `Task ${i + 1}: ${r.result}`)
     .join("\n")}`;
-  console.log(res);
+  eventStream.submit({ type: EventType.PLANNING, message: `Plan execution completed`, data: { totalTasks: tasks.length } });
   return res;
 };
