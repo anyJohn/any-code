@@ -1,11 +1,11 @@
 export enum EventType {
-  SYSTEM = "SYSTEM",
-  USER = "USER",
-  TOOL = "TOOL",
-  ITERATION = "ITERATION",
-  ASSISTANT = "ASSISTANT",
-  PLANNING = "PLANNING",
-  ERROR = "ERROR",
+  SYSTEM = "System",
+  USER = "User",
+  TOOL = "Tool",
+  ITERATION = "Iteration",
+  ASSISTANT = "Assistant",
+  PLANNING = "Planning",
+  ERROR = "Error",
 }
 
 interface AgentEvent {
