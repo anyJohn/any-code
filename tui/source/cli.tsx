@@ -1,29 +1,43 @@
-#!/usr/bin/env node
-import React from 'react';
-import {render} from 'ink';
-import meow from 'meow';
-import App from './app.js';
+import React from "react";
+import { render } from "ink";
+import meow from "meow";
+import App from "./components/App";
 
 const cli = meow(
 	`
-	Usage
-	  $ tui
+  Usage
+    $ tui
 
-	Options
-		--name  Your name
+  Options
+    --api-key     OpenAI API key
+    --base-url    API base URL
+    --model       Model name
 
-	Examples
-	  $ tui --name=Jane
-	  Hello, Jane
+  Examples
+    $ tui
+    $ tui --model=gpt-4
+    $ tui --api-key=sk-xxx --base-url=https://api.openai.com/v1
 `,
 	{
 		importMeta: import.meta,
 		flags: {
-			name: {
-				type: 'string',
+			apiKey: {
+				type: "string",
+			},
+			baseUrl: {
+				type: "string",
+			},
+			model: {
+				type: "string",
 			},
 		},
-	},
+	}
 );
 
-render(<App name={cli.flags.name} />);
+render(
+	<App
+		apiKey={cli.flags.apiKey}
+		baseUrl={cli.flags.baseUrl}
+		model={cli.flags.model}
+	/>
+);
