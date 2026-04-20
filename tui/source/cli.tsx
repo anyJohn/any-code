@@ -4,7 +4,7 @@ import meow from "meow";
 import App from "./components/App";
 
 const cli = meow(
-	`
+    `
   Usage
     $ tui
 
@@ -18,26 +18,26 @@ const cli = meow(
     $ tui --model=gpt-4
     $ tui --api-key=sk-xxx --base-url=https://api.openai.com/v1
 `,
-	{
-		importMeta: import.meta,
-		flags: {
-			apiKey: {
-				type: "string",
-			},
-			baseUrl: {
-				type: "string",
-			},
-			model: {
-				type: "string",
-			},
-		},
-	}
+    {
+        importMeta: import.meta,
+        flags: {
+            apiKey: {
+                type: "string",
+            },
+            baseUrl: {
+                type: "string",
+            },
+            model: {
+                type: "string",
+            },
+        },
+    }
 );
 
 render(
-	<App
-		apiKey={cli.flags.apiKey}
-		baseUrl={cli.flags.baseUrl}
-		model={cli.flags.model}
-	/>
+    <App
+        apiKey={cli.flags.apiKey}
+        baseUrl={cli.flags.baseUrl}
+        model={cli.flags.model}
+    />
 );

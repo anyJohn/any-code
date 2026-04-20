@@ -9,14 +9,14 @@ import { grepFunc } from "./grep";
 import { ToolName } from "../toolName.enum";
 
 const ToolsMap: { [k: string]: (args: any) => Promise<string> } = {
-  [ToolName.Bash]: executeBashFunc,
-  [ToolName.Read]: readFunc,
-  [ToolName.Edit]: editFunc,
-  [ToolName.Write]: writeFunc,
-  [ToolName.Explore]: exploreFunc,
-  [ToolName.Plan]: planFunc,
-  [ToolName.Glob]: globFunc,
-  [ToolName.Grep]: grepFunc,
+    [ToolName.Bash]: executeBashFunc,
+    [ToolName.Read]: readFunc,
+    [ToolName.Edit]: editFunc,
+    [ToolName.Write]: writeFunc,
+    [ToolName.Explore]: exploreFunc,
+    [ToolName.Plan]: planFunc,
+    [ToolName.Glob]: globFunc,
+    [ToolName.Grep]: grepFunc,
 };
 
 export { ToolsMap };

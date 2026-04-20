@@ -1,15 +1,15 @@
 # AnyCode
 
-一个轻量级的 Typescript语言 AI Agent 代码助手。
+一个轻量级的 Typescript 语言 AI Agent 代码助手。
 
 Keep It Sample, 希望简单的设计，实现高效的 Code Agent
 
 ## 功能特性
 
-- 🤖 AI 驱动：使用 OpenAI 兼容的 API
-- 💻 系统交互：支持执行 bash 命令
-- 🔄 循环推理：可以多次调用工具解决问题
-- 📦 轻量级设计：简洁的代码结构，易于理解和扩展
+-   🤖 AI 驱动：使用 OpenAI 兼容的 API
+-   💻 系统交互：支持执行 bash 命令
+-   🔄 循环推理：可以多次调用工具解决问题
+-   📦 轻量级设计：简洁的代码结构，易于理解和扩展
 
 ## 快速开始
 
@@ -35,9 +35,9 @@ npm run build
 
 你可以通过以下环境变量配置 Agent：
 
-- `OPENAI_API_KEY`: API 密钥
-- `OPENAI_BASE_URL`: API 基础 URL
-- `OPENAI_MODEL`: 使用的模型名称
+-   `OPENAI_API_KEY`: API 密钥
+-   `OPENAI_BASE_URL`: API 基础 URL
+-   `OPENAI_MODEL`: 使用的模型名称
 
 ## 使用示例
 

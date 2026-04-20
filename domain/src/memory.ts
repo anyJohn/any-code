@@ -17,14 +17,14 @@ const MEMORY_FILE = path.join(__dirname, "..", "/.agent", "memory.md");
  * @param result 执行结果
  */
 export function saveMemory(task: string, result: string): void {
-  const timestamp = new Date().toISOString();
-  const entry = `## ${timestamp}\n\n**Task:** ${task}\n\n**Result:**\n${result}\n\n---\n\n`;
+    const timestamp = new Date().toISOString();
+    const entry = `## ${timestamp}\n\n**Task:** ${task}\n\n**Result:**\n${result}\n\n---\n\n`;
 
-  if (fs.existsSync(MEMORY_FILE)) {
-    fs.appendFileSync(MEMORY_FILE, entry, "utf-8");
-  } else {
-    fs.writeFileSync(MEMORY_FILE, "# Agent Memory\n\n" + entry, "utf-8");
-  }
+    if (fs.existsSync(MEMORY_FILE)) {
+        fs.appendFileSync(MEMORY_FILE, entry, "utf-8");
+    } else {
+        fs.writeFileSync(MEMORY_FILE, "# Agent Memory\n\n" + entry, "utf-8");
+    }
 }
 
 /**
@@ -33,20 +33,20 @@ export function saveMemory(task: string, result: string): void {
  * @returns 记忆内容字符串
  */
 export function loadMemory(windowSize: number = 1000): string {
-  if (!fs.existsSync(MEMORY_FILE)) {
-    return "";
-  }
+    if (!fs.existsSync(MEMORY_FILE)) {
+        return "";
+    }
 
-  const content = fs.readFileSync(MEMORY_FILE, "utf-8");
-  if (content.length <= windowSize) {
-    return content;
-  }
+    const content = fs.readFileSync(MEMORY_FILE, "utf-8");
+    if (content.length <= windowSize) {
+        return content;
+    }
 
-  // 从末尾截取指定大小的内容
-  const startIndex = content.length - windowSize;
-  // 尝试从最近的标题开始，避免截断中间的内容
-  const headerMatch = content.lastIndexOf("## ", startIndex);
-  const finalStartIndex = headerMatch !== -1 ? headerMatch : startIndex;
+    // 从末尾截取指定大小的内容
+    const startIndex = content.length - windowSize;
+    // 尝试从最近的标题开始，避免截断中间的内容
+    const headerMatch = content.lastIndexOf("## ", startIndex);
+    const finalStartIndex = headerMatch !== -1 ? headerMatch : startIndex;
 
-  return `\n# Previous context\n${content.slice(finalStartIndex)}\n\n`;
+    return `\n# Previous context\n${content.slice(finalStartIndex)}\n\n`;
 }

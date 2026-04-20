@@ -1,28 +1,28 @@
 {
-	"name": "@any-code/tui",
-	"version": "0.0.0",
-	"license": "MIT",
-	"bin": {
-		"anycode": "dist/cli.js"
-	},
-	"type": "module",
-	"scripts": {
-		"build": "node esbuild.config.cjs",
-		"dev": "tsx source/cli.tsx",
-		"dev:watch": "node esbuild.config.cjs --watch",
-		"start": "node dist/cli.js",
-		"test": "prettier --check --ignore-path=.prettierignore source"
-	},
-	"files": [
-		"dist"
-	],
-	"dependencies": {
-		"@types/figlet": "^1.7.0",
-		"figlet": "^1.11.0",
-		"ink": "^7.0.1",
-		"ink-text-input": "^6.0.0",
-		"meow": "^11.0.0",
-		"react": "^19.2.5",
-		"scroll-into-view-if-needed": "^3.1.0"
-	}
+    "name": "@any-code/tui",
+    "version": "0.0.0",
+    "license": "MIT",
+    "bin": {
+        "anycode": "dist/cli.js"
+    },
+    "type": "module",
+    "scripts": {
+        "build": "node esbuild.config.cjs",
+        "dev": "tsx source/cli.tsx",
+        "dev:watch": "node esbuild.config.cjs --watch",
+        "start": "node dist/cli.js",
+        "test": "prettier --check --ignore-path=.prettierignore source"
+    },
+    "files": [
+        "dist"
+    ],
+    "dependencies": {
+        "@types/figlet": "^1.7.0",
+        "figlet": "^1.11.0",
+        "ink": "^7.0.1",
+        "ink-text-input": "^6.0.0",
+        "meow": "^11.0.0",
+        "react": "^19.2.5",
+        "scroll-into-view-if-needed": "^3.1.0"
+    }
 }

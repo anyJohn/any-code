@@ -13,35 +13,42 @@ const eventStream = EventStream.getInstance();
  * @returns
  */
 export async function agentLoop(
-  task: string,
-  messages: ChatMessage[],
-  maxIterations = 30,
-  params?: Partial<ChatCompletionCreateParamsNonStreaming>,
+    task: string,
+    messages: ChatMessage[],
+    maxIterations = 30,
+    params?: Partial<ChatCompletionCreateParamsNonStreaming>
 ): Promise<AgentLoopResult> {
-  messages.push({
-    role: "user",
-    content: task,
-  });
-  for (let i = 0; i < maxIterations; i++) {
-    eventStream.submit({ type: EventType.ITERATION, message: `Iteration ${i + 1}/${maxIterations}` });
-    const msg = await callLLM(messages, params);
-    messages.push(msg);
-    if (msg.content) {
-      eventStream.submit({ type: EventType.ASSISTANT, message: msg.content });
+    messages.push({
+        role: "user",
+        content: task,
+    });
+    for (let i = 0; i < maxIterations; i++) {
+        eventStream.submit({
+            type: EventType.ITERATION,
+            message: `Iteration ${i + 1}/${maxIterations}`,
+        });
+        const msg = await callLLM(messages, params);
+        messages.push(msg);
+        if (msg.content) {
+            eventStream.submit({
+                type: EventType.ASSISTANT,
+                message: msg.content,
+            });
+        }
+        if (!msg?.tool_calls) {
+            return {
+                result: msg.content || "",
+                messages,
+            };
+        } else {
+            const accessToolKit =
+                params?.tools?.map((t) => (t as any)?.function?.name) ||
+                undefined;
+            messages.push(...(await toolCall(msg.tool_calls, accessToolKit)));
+        }
     }
-    if (!msg?.tool_calls) {
-      return {
-        result: msg.content || "",
+    return {
+        result: "Max iterations reached",
         messages,
-      };
-    } else {
-      const accessToolKit =
-        params?.tools?.map((t) => (t as any)?.function?.name) || undefined;
-      messages.push(...(await toolCall(msg.tool_calls, accessToolKit)));
-    }
-  }
-  return {
-    result: "Max iterations reached",
-    messages,
-  };
+    };
 }

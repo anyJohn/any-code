@@ -1,28 +1,28 @@
 {
-  "compilerOptions": {
-    /* 基础 */
-    "target": "esnext",
-    "module": "commonjs",
-    "rootDir": "./src",
-    "outDir": "./dist",
+    "compilerOptions": {
+        /* 基础 */
+        "target": "esnext",
+        "module": "commonjs",
+        "rootDir": "./src",
+        "outDir": "./dist",
 
-    /* 严格模式（建议开启） */
-    "strict": true,
+        /* 严格模式（建议开启） */
+        "strict": true,
 
-    /* Node 环境 */
-    "esModuleInterop": true,
-    "resolveJsonModule": true,
+        /* Node 环境 */
+        "esModuleInterop": true,
+        "resolveJsonModule": true,
 
-    /* 调试体验 */
-    "sourceMap": true,
+        /* 调试体验 */
+        "sourceMap": true,
 
-    /* 输出控制 */
-    "removeComments": true,
-    "skipLibCheck": true,
+        /* 输出控制 */
+        "removeComments": true,
+        "skipLibCheck": true,
 
-    /* 类型 */
-    "types": ["node"]
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules"]
+        /* 类型 */
+        "types": ["node"]
+    },
+    "include": ["src/**/*"],
+    "exclude": ["node_modules"]
 }
