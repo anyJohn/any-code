@@ -1,29 +1,12 @@
-export enum EventType {
-    SYSTEM = "System",
-    USER = "User",
-    TOOL = "Tool",
-    ITERATION = "Iteration",
-    ASSISTANT = "Assistant",
-    PLANNING = "Planning",
-    ERROR = "Error",
-}
-
-interface AgentEvent {
-    timestamp: number;
-    type: EventType;
-    message: string;
-    data?: any;
-}
-
-interface AgentEventPayload {
-    type: EventType;
-    message: string;
-    data?: any;
-}
+import { BehaviorSubject, Subject } from "rxjs";
+import { AgentEvent, AgentEventPayload, EventType } from "./type";
 
 export class EventStream {
+    history$: BehaviorSubject<AgentEvent[]> = new BehaviorSubject<AgentEvent[]>(
+        []
+    );
+    event$: Subject<AgentEvent> = new Subject<AgentEvent>();
     private static instance: EventStream;
-    Queue: AgentEvent[] = [];
 
     private constructor() {}
 
@@ -38,21 +21,18 @@ export class EventStream {
     // 通用事件提交
     submit(event: AgentEventPayload) {
         const timestamp = new Date().getTime();
-        this.Queue.push({ timestamp, ...event });
-        const formattedMessage = `[${new Date(timestamp).toISOString()}][${
-            event.type
-        }]: ${event.message}`;
-        console.log(formattedMessage);
-        return formattedMessage;
+        const agentEvent: AgentEvent = { timestamp, ...event };
+        this.event$.next(agentEvent);
+        this.history$.next([...this.history$.getValue(), agentEvent]);
     }
 
     // 清空事件队列
     clear() {
-        this.Queue = [];
+        this.history$.next([]);
     }
 
     // 获取事件历史
     getHistory(): AgentEvent[] {
-        return this.Queue;
+        return this.history$.getValue();
     }
 }

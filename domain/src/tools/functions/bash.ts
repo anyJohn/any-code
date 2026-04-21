@@ -1,6 +1,7 @@
 import { promisify } from "util";
 import { exec } from "child_process";
-import { EventStream, EventType } from "../../eventStream";
+import { EventStream } from "../../eventStream";
+import { EventType } from "../../type";
 
 const eventStream = EventStream.getInstance();
 

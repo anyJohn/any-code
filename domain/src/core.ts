@@ -2,7 +2,8 @@ import { ChatCompletionCreateParamsNonStreaming } from "openai/resources/index";
 import { callLLM } from "./llm";
 import { toolCall } from "./tools";
 import { AgentLoopResult, ChatMessage } from "./type";
-import { EventStream, EventType } from "./eventStream";
+import { EventStream } from "./eventStream";
+import { EventType } from "./type";
 
 const eventStream = EventStream.getInstance();
 

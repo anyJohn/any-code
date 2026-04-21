@@ -3,7 +3,8 @@ import { ToolKit } from "./tools";
 import { ChatMessage } from "./type";
 import z from "zod";
 import { planPrompt } from "./prompt";
-import { EventStream, EventType } from "./eventStream";
+import { EventStream } from "./eventStream";
+import { EventType } from "./type";
 
 const eventStream = EventStream.getInstance();
 

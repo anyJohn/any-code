@@ -4,7 +4,8 @@ import { subtaskPrompt } from "../../prompt";
 import { ChatMessage } from "../../type";
 import { ToolKit } from "..";
 import { loadMcpTools } from "../../mcp";
-import { EventStream, EventType } from "../../eventStream";
+import { EventStream } from "../../eventStream";
+import { EventType } from "../../type";
 
 const eventStream = EventStream.getInstance();
 
