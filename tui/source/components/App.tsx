@@ -1,9 +1,10 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import { Box, useApp } from "ink";
 import Logo from "./Logo";
 import MessageList from "./MessageList";
 import InputBox from "./InputBox";
 import { Message, MessageType } from "../types";
+import { AnyAgent, EventType } from "@any-code/domain";
 
 interface AppProps {
     apiKey?: string;
@@ -11,50 +12,137 @@ interface AppProps {
     model?: string;
 }
 
-export default function App({ apiKey, baseUrl, model }: AppProps) {
+let messageIdCounter = 0;
+
+export default function App(_props: AppProps) {
     const { exit } = useApp();
     const [messages, setMessages] = React.useState<Message[]>([]);
     const [initialized, setInitialized] = React.useState(false);
     const [isProcessing, setIsProcessing] = React.useState(false);
+    const agentRef = useRef<AnyAgent | null>(null);
+    const subscriptionsRef = useRef<Array<{ unsubscribe: () => void }>>([]);
+    const currentTaskRef = useRef<string>("");
+    // Map domain EventType to TUI MessageType
+    const mapEventType = useCallback((eventType: EventType): MessageType => {
+        const eventTypeMap: Record<EventType, MessageType> = {
+            [EventType.SYSTEM]: MessageType.SYSTEM,
+            [EventType.USER]: MessageType.USER,
+            [EventType.TOOL]: MessageType.TOOL,
+            [EventType.ITERATION]: MessageType.ITERATION,
+            [EventType.ASSISTANT]: MessageType.ASSISTANT,
+            [EventType.PLANNING]: MessageType.PLANNING,
+            [EventType.ERROR]: MessageType.ERROR,
+        };
+        return eventTypeMap[eventType] || MessageType.SYSTEM;
+    }, []);
+
+    const addMessage = useCallback(
+        (type: MessageType, content: string, data?: any) => {
+            messageIdCounter += 1;
+            const newMessage: Message = {
+                id: `msg-${messageIdCounter}`,
+                type,
+                content,
+                timestamp: Date.now(),
+            };
+            setMessages((prev) => [...prev, newMessage]);
+
+            // If there's data, add it as a separate message
+            if (data !== undefined && data !== null) {
+                const dataContent =
+                    typeof data === "string"
+                        ? data
+                        : JSON.stringify(data, null, 2);
+                messageIdCounter += 1;
+                const dataMessage: Message = {
+                    id: `msg-${messageIdCounter}`,
+                    type: MessageType.SYSTEM,
+                    content: dataContent,
+                    timestamp: Date.now(),
+                };
+                setMessages((prev) => [...prev, dataMessage]);
+            }
+        },
+        []
+    );
 
     useEffect(() => {
         if (!initialized) {
+            // Initialize agent
+            const agent = new AnyAgent();
+            agentRef.current = agent;
+
+            // Subscribe to agent's event stream
+            const eventSubscription = agent.eventStream$.subscribe({
+                next: (event) => {
+                    addMessage(
+                        mapEventType(event.type),
+                        event.message,
+                        event.data
+                    );
+                },
+                error: (errEvent) => {
+                    addMessage(
+                        mapEventType(errEvent.type),
+                        errEvent.message,
+                        errEvent.data
+                    );
+                },
+            });
+
+            subscriptionsRef.current.push(eventSubscription);
+
+            // Subscribe to pending tasks to track completion
+            const taskSubscription = agent.pendingTasks$.subscribe((tasks) => {
+                setIsProcessing(tasks.length > 0);
+                if (tasks.length > 0) {
+                    currentTaskRef.current = tasks[0];
+                }
+            });
+            subscriptionsRef.current.push(taskSubscription);
+
+            const now = Date.now();
             const welcomeMessages: Message[] = [
                 {
-                    id: "1",
+                    id: "msg-1",
                     type: MessageType.SYSTEM,
                     content:
                         "AnyCode is ready to assist you with your coding tasks.",
-                    timestamp: Date.now(),
+                    timestamp: now,
                 },
                 {
-                    id: "2",
+                    id: "msg-2",
                     type: MessageType.SYSTEM,
                     content:
                         "Type your message and press Enter to send. Press Esc or Ctrl+C to exit.",
-                    timestamp: Date.now() + 1,
+                    timestamp: now + 1,
                 },
             ];
             setMessages(welcomeMessages);
+            setIsProcessing(false);
+            messageIdCounter = 2;
             setInitialized(true);
+
+            // Cleanup function
+            return () => {
+                subscriptionsRef.current.forEach((sub) => sub.unsubscribe());
+                subscriptionsRef.current = [];
+                agent.stop();
+            };
         }
     }, [initialized]);
 
-    const addMessage = (type: MessageType, content: string) => {
-        const newMessage: Message = {
-            id: Date.now().toString(),
-            type,
-            content,
-            timestamp: Date.now(),
-        };
-        setMessages((prev) => [...prev, newMessage]);
-    };
-
     const handleCancel = () => {
-        addMessage(MessageType.SYSTEM, "Task cancelled by user.");
+        addMessage(MessageType.SYSTEM, "Stopping agent...");
+        if (agentRef.current) {
+            agentRef.current.stop();
+        }
         setTimeout(() => {
-            exit();
-        }, 500);
+            addMessage(MessageType.SYSTEM, "Goodbye!");
+            setTimeout(() => {
+                exit();
+            }, 500);
+        }, 300);
     };
 
     const handleSubmit = async (value: string) => {
@@ -66,38 +154,37 @@ export default function App({ apiKey, baseUrl, model }: AppProps) {
             return;
         }
 
-        addMessage(MessageType.USER, value);
-        setIsProcessing(true);
-
-        addMessage(MessageType.SYSTEM, "Sending message to Agent...");
-
-        try {
-            // TODO: 这里需要调用 domain 包的 agent 函数
-            // 目前是模拟实现
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-
+        if (!agentRef.current) {
             addMessage(
-                MessageType.ASSISTANT,
-                "This is a placeholder response. In the full implementation, this would call the domain agent."
+                MessageType.ERROR,
+                "Agent not initialized. Please try again."
             );
+            return;
+        }
+
+        // Add user message
+        addMessage(MessageType.USER, value);
+
+        // Submit task to agent
+        try {
+            agentRef.current.submit(value);
         } catch (error) {
             addMessage(
                 MessageType.ERROR,
-                `Error: ${
+                `Error submitting task: ${
                     error instanceof Error ? error.message : "Unknown error"
                 }`
             );
-        } finally {
-            setIsProcessing(false);
         }
     };
 
     return (
         <Box flexDirection="column" height="100%">
-            <Box flexGrow={1} flexDirection="column" paddingX={1}>
-                <Logo />
+            <Logo />
+            <Box flexGrow={1} paddingX={1}>
                 <MessageList messages={messages} />
             </Box>
+            <Box>{currentTaskRef.current}</Box>
             <InputBox
                 onSubmit={handleSubmit}
                 onCancel={handleCancel}

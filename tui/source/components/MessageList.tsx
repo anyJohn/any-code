@@ -1,6 +1,5 @@
 import React, { useMemo } from "react";
 import { Box, Text, Static } from "ink";
-import scrollIntoView from "scroll-into-view-if-needed";
 import { Message, MessageType } from "../types";
 
 interface MessageListProps {
