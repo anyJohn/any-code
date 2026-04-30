@@ -1,6 +1,12 @@
 import fs from "fs";
 import { ChatCompletionTool } from "openai/resources/index";
 import path from "path";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 const MCP_CONFIG = path.join(__dirname, "..", "/.agent/mcp.json");
 
 /**

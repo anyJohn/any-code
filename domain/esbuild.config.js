@@ -1,20 +1,23 @@
-const esbuild = require("esbuild");
-const fs = require("fs");
+import esbuild from "esbuild";
+import fs from "fs";
+import { createRequire } from "module";
 
+const require = createRequire(import.meta.url);
 const isWatch = process.argv.includes("--watch");
 
 const buildOptions = {
-    entryPoints: ["src/main.ts"],
+    entryPoints: ["src/index.ts"],
     outdir: "dist",
     bundle: true,
     platform: "node",
-    format: "cjs",
+    format: "esm",
     target: "node18",
-    minify: true,
+    minify: false,
     sourcemap: false,
     logLevel: "info",
     external: Object.keys(require("./package.json").dependencies || {}),
     treeShaking: true,
+    outExtension: { ".js": ".mjs" },
 };
 
 async function build() {

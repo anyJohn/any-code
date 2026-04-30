@@ -2,10 +2,13 @@
     "compilerOptions": {
         /* 基础 */
         "target": "esnext",
-        "module": "commonjs",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "allowImportingTsExtensions": true,
+        "noEmit": true,
         "rootDir": "./src",
         "outDir": "./dist",
-
+        "isolatedModules": true,
         /* 严格模式（建议开启） */
         "strict": true,
 

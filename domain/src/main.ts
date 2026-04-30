@@ -1,6 +1,7 @@
 import { loadMemory, saveMemory } from "./memory";
 import {
     AgentStatus,
+    AgentEvent,
     ChatMessage,
     EventType,
     InteractionRequest,
@@ -29,7 +30,7 @@ class AnyAgent {
     status$: BehaviorSubject<AgentStatus> = new BehaviorSubject<AgentStatus>(
         AgentStatus.IDLE
     );
-    event$: Observable<Event> = new Observable();
+    event$: Observable<AgentEvent> = new Observable();
     pendingTasks$ = new BehaviorSubject<string[]>([]);
     interaction$ = new Subject<InteractionRequest>();
 
@@ -58,34 +59,37 @@ class AnyAgent {
     }
 
     private initProcessor() {
-        this.task$.pipe(
-            tap((task) => {
-                const currentTasks = this.pendingTasks$.getValue();
-                this.pendingTasks$.next([...currentTasks, task]);
-            }),
-            concatMap((task: string) => {
-                this.eventStream.submit({
-                    type: EventType.SYSTEM,
-                    message: `Starting Task: ${task}`,
-                });
-                return from(this.executeTask(task)).pipe(
-                    takeUntil(this.stop$),
-                    catchError((err) => {
-                        this.eventStream.submit({
-                            type: EventType.ERROR,
-                            message: `Error executing task: ${task}`,
-                            data: err,
-                        });
-                        return of(null);
-                    }),
-                    finalize(() => {
-                        const [completed, ...remaining] =
-                            this.pendingTasks$.getValue();
-                        this.pendingTasks$.next(remaining);
-                    })
-                );
-            })
-        );
+        this.task$
+            .pipe(
+                tap((task) => {
+                    const currentTasks = this.pendingTasks$.getValue();
+                    this.pendingTasks$.next([...currentTasks, task]);
+                }),
+                concatMap((task: string) => {
+                    this.eventStream.submit({
+                        type: EventType.SYSTEM,
+                        message: `Starting Task: ${task}`,
+                    });
+                    return from(this.executeTask(task)).pipe(
+                        takeUntil(this.stop$),
+                        catchError((err) => {
+                            console.error("Error processing task:", err);
+                            this.eventStream.submit({
+                                type: EventType.ERROR,
+                                message: `Error executing task: ${task}`,
+                                data: err,
+                            });
+                            return of(null);
+                        }),
+                        finalize(() => {
+                            const [, ...remaining] =
+                                this.pendingTasks$.getValue();
+                            this.pendingTasks$.next(remaining);
+                        })
+                    );
+                })
+            )
+            .subscribe();
     }
 
     private async executeTask(task: string) {
@@ -120,4 +124,5 @@ class AnyAgent {
     }
 }
 
-export default AnyAgent;
+export { AnyAgent };
+export * from "./type";
