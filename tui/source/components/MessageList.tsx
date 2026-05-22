@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
-import { Box, Text, Static } from "ink";
+import React from "react";
+import { Box, Text } from "ink";
 import { Message, MessageType } from "../types";
 
 interface MessageListProps {
@@ -35,50 +35,52 @@ function formatTimestamp(timestamp: number): string {
     return `${hours}:${minutes}:${seconds}`;
 }
 
-function truncateContent(content: string, maxLength: number = 80): string {
-    if (content.length <= maxLength) {
-        return content;
-    }
-    return content.substring(0, maxLength - 3) + "...";
+interface MessageItemProps {
+    message: Message;
+    showTimestamp?: boolean;
+}
+
+export function MessageItem({
+    message,
+    showTimestamp = true,
+}: MessageItemProps) {
+    const color = TYPE_COLORS[message.type];
+    const icon = TYPE_ICONS[message.type];
+    const timestamp = showTimestamp ? formatTimestamp(message.timestamp) : "";
+
+    return (
+        <Box flexDirection="column" marginBottom={1}>
+            <Box>
+                {showTimestamp && (
+                    <Text color="#9CA3AF" dimColor>
+                        [{timestamp}]
+                    </Text>
+                )}
+                <Text color={color} bold>
+                    {" "}
+                    {icon} {message.type}
+                </Text>
+            </Box>
+            <Box paddingLeft={showTimestamp ? 12 : 0}>
+                <Text>{message.content}</Text>
+            </Box>
+        </Box>
+    );
 }
 
 export default function MessageList({
     messages,
     showTimestamp = true,
 }: MessageListProps) {
-    const renderedMessages = useMemo(() => {
-        return messages.map((message) => {
-            const color = TYPE_COLORS[message.type];
-            const icon = TYPE_ICONS[message.type];
-            const timestamp = showTimestamp
-                ? formatTimestamp(message.timestamp)
-                : "";
-            const content = truncateContent(message.content);
-
-            return (
-                <Box key={message.id} flexDirection="column" marginBottom={1}>
-                    <Box>
-                        {showTimestamp && (
-                            <Text color="#9CA3AF" dimColor>
-                                [{timestamp}]
-                            </Text>
-                        )}
-                        <Text color={color} bold>
-                            {" "}
-                            {icon} {message.type}
-                        </Text>
-                    </Box>
-                    <Box paddingLeft={showTimestamp ? 12 : 0}>
-                        <Text>{content}</Text>
-                    </Box>
-                </Box>
-            );
-        });
-    }, [messages, showTimestamp]);
-
     return (
-        <Box flexGrow={1} flexDirection="column">
-            <Static items={renderedMessages}>{(item) => item}</Static>
-        </Box>
+        <>
+            {messages.map((message) => (
+                <MessageItem
+                    key={message.id}
+                    message={message}
+                    showTimestamp={showTimestamp}
+                />
+            ))}
+        </>
     );
 }

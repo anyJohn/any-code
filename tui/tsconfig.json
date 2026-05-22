@@ -13,7 +13,7 @@
         "skipLibCheck": true,
         "jsx": "react",
         "types": ["node"],
-        "lib": ["DOM", "DOM.Iterable", "ESNext"]
+        "lib": ["ESNext"]
     },
     "include": ["source/**/*"],
     "exclude": ["node_modules"]

@@ -1,7 +1,7 @@
 import React from "react";
 import { render } from "ink";
 import meow from "meow";
-import App from "./components/App";
+import App from "./components/App.js";
 
 const cli = meow(
     `

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useCallback } from "react";
-import { Box, useApp } from "ink";
+import { Box, Text, useApp, Static } from "ink";
 import Logo from "./Logo";
-import MessageList from "./MessageList";
+import { MessageItem } from "./MessageList";
 import InputBox from "./InputBox";
 import { Message, MessageType } from "../types";
 import { AnyAgent, EventType } from "@any-code/domain";
@@ -14,14 +14,19 @@ interface AppProps {
 
 let messageIdCounter = 0;
 
-export default function App(_props: AppProps) {
+export default function App(props: AppProps) {
     const { exit } = useApp();
     const [messages, setMessages] = React.useState<Message[]>([]);
-    const [initialized, setInitialized] = React.useState(false);
     const [isProcessing, setIsProcessing] = React.useState(false);
     const agentRef = useRef<AnyAgent | null>(null);
     const subscriptionsRef = useRef<Array<{ unsubscribe: () => void }>>([]);
     const currentTaskRef = useRef<string>("");
+    const initializedRef = useRef(false);
+
+    // Apply CLI config overrides to env vars before agent init
+    if (props.apiKey) process.env.OPENAI_API_KEY = props.apiKey;
+    if (props.baseUrl) process.env.OPENAI_BASE_URL = props.baseUrl;
+    if (props.model) process.env.OPENAI_MODEL = props.model;
     // Map domain EventType to TUI MessageType
     const mapEventType = useCallback((eventType: EventType): MessageType => {
         const eventTypeMap: Record<EventType, MessageType> = {
@@ -67,70 +72,46 @@ export default function App(_props: AppProps) {
     );
 
     useEffect(() => {
-        if (!initialized) {
-            // Initialize agent
-            const agent = new AnyAgent();
-            agentRef.current = agent;
+        if (initializedRef.current) return;
+        initializedRef.current = true;
 
-            // Subscribe to agent's event stream
-            const eventSubscription = agent.eventStream$.subscribe({
-                next: (event) => {
-                    addMessage(
-                        mapEventType(event.type),
-                        event.message,
-                        event.data
-                    );
-                },
-                error: (errEvent) => {
-                    addMessage(
-                        mapEventType(errEvent.type),
-                        errEvent.message,
-                        errEvent.data
-                    );
-                },
-            });
+        // Initialize agent
+        const agent = new AnyAgent();
+        agentRef.current = agent;
 
-            subscriptionsRef.current.push(eventSubscription);
+        // Subscribe to agent's event stream
+        const eventSubscription = agent.eventStream$.subscribe({
+            next: (event) => {
+                addMessage(mapEventType(event.type), event.message, event.data);
+            },
+            error: (errEvent) => {
+                addMessage(
+                    mapEventType(errEvent.type),
+                    errEvent.message,
+                    errEvent.data
+                );
+            },
+        });
 
-            // Subscribe to pending tasks to track completion
-            const taskSubscription = agent.pendingTasks$.subscribe((tasks) => {
-                setIsProcessing(tasks.length > 0);
-                if (tasks.length > 0) {
-                    currentTaskRef.current = tasks[0];
-                }
-            });
-            subscriptionsRef.current.push(taskSubscription);
+        subscriptionsRef.current.push(eventSubscription);
 
-            const now = Date.now();
-            const welcomeMessages: Message[] = [
-                {
-                    id: "msg-1",
-                    type: MessageType.SYSTEM,
-                    content:
-                        "AnyCode is ready to assist you with your coding tasks.",
-                    timestamp: now,
-                },
-                {
-                    id: "msg-2",
-                    type: MessageType.SYSTEM,
-                    content:
-                        "Type your message and press Enter to send. Press Esc or Ctrl+C to exit.",
-                    timestamp: now + 1,
-                },
-            ];
-            setMessages(welcomeMessages);
-            setIsProcessing(false);
-            messageIdCounter = 2;
-            setInitialized(true);
+        // Subscribe to pending tasks to track completion
+        const taskSubscription = agent.pendingTasks$.subscribe((tasks) => {
+            setIsProcessing(tasks.length > 0);
+            currentTaskRef.current =
+                tasks.length > 0 ? "✻ Current Task: " + tasks[0] : "";
+        });
+        subscriptionsRef.current.push(taskSubscription);
+        setIsProcessing(false);
+        messageIdCounter = 2;
 
-            // Cleanup function
-            return () => {
-                subscriptionsRef.current.forEach((sub) => sub.unsubscribe());
-                subscriptionsRef.current = [];
-                agent.stop();
-            };
-        }
-    }, [initialized]);
+        // Cleanup on unmount only
+        return () => {
+            subscriptionsRef.current.forEach((sub) => sub.unsubscribe());
+            subscriptionsRef.current = [];
+            agent.stop();
+        };
+    }, []);
 
     const handleCancel = () => {
         addMessage(MessageType.SYSTEM, "Stopping agent...");
@@ -180,11 +161,19 @@ export default function App(_props: AppProps) {
 
     return (
         <Box flexDirection="column" height="100%">
-            <Logo />
-            <Box flexGrow={1} paddingX={1}>
-                <MessageList messages={messages} />
+            <Static
+                items={[
+                    <Logo key="logo" />,
+                    ...messages.map((m) => (
+                        <MessageItem key={m.id} message={m} />
+                    )),
+                ]}
+            >
+                {(item) => item}
+            </Static>
+            <Box>
+                <Text>{currentTaskRef.current}</Text>
             </Box>
-            <Box>{currentTaskRef.current}</Box>
             <InputBox
                 onSubmit={handleSubmit}
                 onCancel={handleCancel}
