@@ -17,12 +17,15 @@ export async function agentLoop(
     task: string,
     messages: ChatMessage[],
     maxIterations = 30,
-    params?: Partial<ChatCompletionCreateParamsNonStreaming>
+    params?: Partial<ChatCompletionCreateParamsNonStreaming>,
+    onMessage?: (msg: ChatMessage) => void | Promise<void>
 ): Promise<AgentLoopResult> {
-    messages.push({
+    const userMsg: ChatMessage = {
         role: "user",
         content: task,
-    });
+    };
+    messages.push(userMsg);
+    await onMessage?.(userMsg);
     for (let i = 0; i < maxIterations; i++) {
         eventStream.submit({
             type: EventType.ITERATION,
@@ -30,6 +33,7 @@ export async function agentLoop(
         });
         const msg = await callLLM(messages, params);
         messages.push(msg);
+        await onMessage?.(msg);
         if (msg.content) {
             eventStream.submit({
                 type: EventType.ASSISTANT,
@@ -45,7 +49,11 @@ export async function agentLoop(
             const accessToolKit =
                 params?.tools?.map((t) => (t as any)?.function?.name) ||
                 undefined;
-            messages.push(...(await toolCall(msg.tool_calls, accessToolKit)));
+            const toolResults = await toolCall(msg.tool_calls, accessToolKit);
+            messages.push(...toolResults);
+            for (const tr of toolResults) {
+                await onMessage?.(tr);
+            }
         }
     }
     return {

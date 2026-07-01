@@ -10,6 +10,7 @@ interface AppProps {
     apiKey?: string;
     baseUrl?: string;
     model?: string;
+    sessionId?: string;
 }
 
 let messageIdCounter = 0;
@@ -75,41 +76,52 @@ export default function App(props: AppProps) {
         if (initializedRef.current) return;
         initializedRef.current = true;
 
-        // Initialize agent
-        const agent = new AnyAgent();
-        agentRef.current = agent;
+        let cancelled = false;
+        AnyAgent.create({ sessionId: props.sessionId }).then((agent) => {
+            if (cancelled) {
+                agent.stop();
+                return;
+            }
+            agentRef.current = agent;
 
-        // Subscribe to agent's event stream
-        const eventSubscription = agent.eventStream$.subscribe({
-            next: (event) => {
-                addMessage(mapEventType(event.type), event.message, event.data);
-            },
-            error: (errEvent) => {
-                addMessage(
-                    mapEventType(errEvent.type),
-                    errEvent.message,
-                    errEvent.data
-                );
-            },
+            // Subscribe to agent's event stream
+            const eventSubscription = agent.eventStream$.subscribe({
+                next: (event) => {
+                    addMessage(
+                        mapEventType(event.type),
+                        event.message,
+                        event.data
+                    );
+                },
+                error: (errEvent) => {
+                    addMessage(
+                        mapEventType(errEvent.type),
+                        errEvent.message,
+                        errEvent.data
+                    );
+                },
+            });
+            subscriptionsRef.current.push(eventSubscription);
+
+            // Subscribe to pending tasks to track completion
+            const taskSubscription = agent.pendingTasks$.subscribe((tasks) => {
+                setIsProcessing(tasks.length > 0);
+                currentTaskRef.current =
+                    tasks.length > 0 ? "✻ Current Task: " + tasks[0] : "";
+            });
+            subscriptionsRef.current.push(taskSubscription);
+            setIsProcessing(false);
+            messageIdCounter = 2;
         });
-
-        subscriptionsRef.current.push(eventSubscription);
-
-        // Subscribe to pending tasks to track completion
-        const taskSubscription = agent.pendingTasks$.subscribe((tasks) => {
-            setIsProcessing(tasks.length > 0);
-            currentTaskRef.current =
-                tasks.length > 0 ? "✻ Current Task: " + tasks[0] : "";
-        });
-        subscriptionsRef.current.push(taskSubscription);
-        setIsProcessing(false);
-        messageIdCounter = 2;
 
         // Cleanup on unmount only
         return () => {
+            cancelled = true;
             subscriptionsRef.current.forEach((sub) => sub.unsubscribe());
             subscriptionsRef.current = [];
-            agent.stop();
+            if (agentRef.current) {
+                agentRef.current.stop();
+            }
         };
     }, []);
 

@@ -13,6 +13,7 @@ import { loadRule } from "./rule";
 import { loadSkills } from "./skill";
 import { loadMcpTools } from "./mcp";
 import { EventStream } from "./eventStream";
+import { SessionService, Session, SessionKey, projectKeyOf } from "./session";
 import {
     BehaviorSubject,
     catchError,
@@ -26,6 +27,11 @@ import {
     tap,
 } from "rxjs";
 
+interface AnyAgentOptions {
+    sessionId?: string;
+    service?: SessionService;
+}
+
 class AnyAgent {
     status$: BehaviorSubject<AgentStatus> = new BehaviorSubject<AgentStatus>(
         AgentStatus.IDLE
@@ -37,9 +43,43 @@ class AnyAgent {
     private eventStream = EventStream.getInstance();
     private stop$ = new Subject<void>();
     private task$ = new Subject<string>();
+    private service: SessionService;
+    private projectKey: string;
+    private session!: Session;
+    private sessionKey!: SessionKey;
 
-    constructor() {
+    private constructor(opts: AnyAgentOptions = {}) {
+        this.service = opts.service ?? new SessionService();
+        this.projectKey = projectKeyOf(process.cwd());
         this.initProcessor();
+    }
+
+    /** 异步工厂：构造 + 加载/新建 session。调用方必须 await 后再 submit。 */
+    static async create(opts: AnyAgentOptions = {}): Promise<AnyAgent> {
+        const agent = new AnyAgent(opts);
+        await agent.initSession(opts.sessionId);
+        return agent;
+    }
+
+    private async initSession(sessionId?: string) {
+        let session: Session | null = null;
+        if (sessionId) {
+            session = await this.service.resume(this.projectKey, sessionId);
+            if (!session) {
+                this.eventStream.submit({
+                    type: EventType.SYSTEM,
+                    message: `Session ${sessionId} not found, creating a new one.`,
+                });
+            }
+        }
+        if (!session) {
+            session = await this.service.create(this.projectKey);
+        }
+        this.session = session;
+        this.sessionKey = {
+            projectKey: this.projectKey,
+            sessionId: session.id,
+        };
     }
 
     get eventHistory$() {
@@ -93,11 +133,30 @@ class AnyAgent {
     }
 
     private async executeTask(task: string) {
-        const systemMessages: ChatMessage[] = this.getSystemMessage();
+        // 重建 system prompt 放 messages[0]（不入盘，每次保持最新）
+        const sys = this.getSystemMessage();
+        if (this.session.messages[0]?.role === "system") {
+            this.session.messages[0] = sys[0];
+        } else {
+            this.session.messages.unshift(sys[0]);
+        }
+
+        // 首条任务自动设标题
+        if (this.session.title === "New Session" && task) {
+            this.session.title = task.slice(0, 40);
+            await this.service.setTitle(this.sessionKey, this.session.title);
+        }
+
         const mcpTools = loadMcpTools();
-        const { result } = await agentLoop(task, systemMessages, undefined, {
-            tools: [...ToolKit.allTools, ...mcpTools],
-        });
+        const onMessage = (msg: ChatMessage) =>
+            this.service.appendMessage(this.sessionKey, msg);
+        const { result } = await agentLoop(
+            task,
+            this.session.messages,
+            30,
+            { tools: [...ToolKit.allTools, ...mcpTools] },
+            onMessage
+        );
         saveMemory(task, result);
     }
 

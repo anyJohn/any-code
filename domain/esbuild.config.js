@@ -6,7 +6,7 @@ const require = createRequire(import.meta.url);
 const isWatch = process.argv.includes("--watch");
 
 const buildOptions = {
-    entryPoints: ["src/index.ts"],
+    entryPoints: ["src/index.ts", "src/cliExample.ts"],
     outdir: "dist",
     bundle: true,
     platform: "node",

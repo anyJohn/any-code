@@ -14,9 +14,9 @@
         }
     },
     "scripts": {
-        "dev": "tsx src/cli.ts",
+        "dev": "tsx src/cliExample.ts",
         "build": "node esbuild.config.js",
-        "start": "node dist/cli.mjs"
+        "start": "node dist/cliExample.mjs"
     },
     "dependencies": {
         "dotenv": "^17.4.2",
