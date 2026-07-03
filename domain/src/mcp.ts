@@ -1,13 +1,13 @@
 import fs from "fs";
 import { ChatCompletionTool } from "openai/resources/index";
 import path from "path";
-import { fileURLToPath } from "url";
-import { dirname } from "path";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const MCP_CONFIG = path.join(__dirname, "..", "/.agent/mcp.json");
+/**
+ * MCP 配置相对用户项目根目录（cwd）解析，与 config.ts 的 .env 加载逻辑一致。
+ * 之前用 import.meta.url 推导 __dirname 会指向 domain 包目录，导致
+ * `<repo>/.agent/mcp.json` 永远读不到。
+ */
+const MCP_CONFIG = path.join(process.cwd(), ".agent", "mcp.json");
 
 /**
  * 确保MCP配置文件存在

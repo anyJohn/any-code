@@ -37,6 +37,9 @@ async function searchFile(
         const matches: { line: number; content: string }[] = [];
 
         lines.forEach((line, index) => {
+            // 带 /g 标志的 regex.test 是有状态的：每次匹配后会更新 lastIndex，
+            // 下次 test 会从旧 lastIndex 处开始搜索，导致跨行漏匹配。每次重置。
+            regex.lastIndex = 0;
             if (regex.test(line)) {
                 matches.push({ line: index + 1, content: line });
             }

@@ -8,6 +8,7 @@ import {
     metaEntry,
     messageToEntry,
     titleMetaEntry,
+    touchMetaEntry,
 } from "./session";
 import { LocalSessionStore, SessionStore } from "./sessionStore";
 
@@ -58,10 +59,10 @@ export class SessionService {
         return this.store.remove({ projectKey, sessionId });
     }
 
-    /** 追加一条消息；system message 不入盘 */
+    /** 追加一条消息；system message 不入盘。同时写 touch meta 刷新 updatedAt，保证 list/continueRecent 按最后活动时间排序 */
     async appendMessage(key: SessionKey, msg: ChatMessage): Promise<void> {
         if (msg.role === "system") return;
-        await this.store.append(key, [messageToEntry(msg)]);
+        await this.store.append(key, [messageToEntry(msg), touchMetaEntry()]);
     }
 
     /** 更新标题：追加一条新 meta（entriesToSession 取末条 meta 为准） */

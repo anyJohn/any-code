@@ -21,7 +21,9 @@ export interface SessionKey {
 
 /** JSONL 的一行：meta 记录标题/时间，message 记录一条对话消息 */
 export type SessionEntry =
-    | { kind: "meta"; title: string; updatedAt: number }
+    // title 可选：appendMessage 每次追加的 touch meta 只刷 updatedAt 不带 title，
+    // 读取时从最近一条带 title 的 meta 沿用标题
+    | { kind: "meta"; title?: string; updatedAt: number }
     | { kind: "message"; message: ChatMessage };
 
 /** list() 返回的轻量元数据，不含 messages 数组 */
@@ -61,6 +63,11 @@ export function titleMetaEntry(title: string): SessionEntry {
     return { kind: "meta", title, updatedAt: Date.now() };
 }
 
+/** touch meta：仅刷新 updatedAt，不携带 title（沿用最近一条带 title 的 meta） */
+export function touchMetaEntry(): SessionEntry {
+    return { kind: "meta", updatedAt: Date.now() };
+}
+
 export function messageToEntry(msg: ChatMessage): SessionEntry {
     return { kind: "message", message: msg };
 }
@@ -73,15 +80,38 @@ function isMessage(e: SessionEntry): e is MessageEntry {
     return e.kind === "message";
 }
 
-/** 从落盘条目重建 Session：createdAt 取首条 meta，updatedAt/title 取末条 meta */
+/**
+ * 从 meta 条目提炼 title/createdAt/updatedAt。
+ * - createdAt：首条 meta 的 updatedAt（create 时写入）
+ * - updatedAt：末条 meta 的 updatedAt（touch meta 持续刷新）
+ * - title：从末尾往前找最近一条带 title 的 meta；都没有则用默认标题
+ */
+function summarizeMetas(metas: MetaEntry[]): {
+    title: string;
+    createdAt: number;
+    updatedAt: number;
+} {
+    if (metas.length === 0) {
+        const now = Date.now();
+        return { title: DEFAULT_TITLE, createdAt: now, updatedAt: now };
+    }
+    const createdAt = metas[0].updatedAt;
+    const updatedAt = metas[metas.length - 1].updatedAt;
+    let title: string | undefined;
+    for (let i = metas.length - 1; i >= 0; i--) {
+        if (metas[i].title != null) {
+            title = metas[i].title;
+            break;
+        }
+    }
+    return { title: title ?? DEFAULT_TITLE, createdAt, updatedAt };
+}
+
+/** 从落盘条目重建 Session */
 export function entriesToSession(id: string, entries: SessionEntry[]): Session {
     const metas = entries.filter(isMeta);
     const messages = entries.filter(isMessage).map((e) => e.message);
-    const createdAt = metas.length > 0 ? metas[0].updatedAt : Date.now();
-    const updatedAt =
-        metas.length > 0 ? metas[metas.length - 1].updatedAt : createdAt;
-    const title =
-        metas.length > 0 ? metas[metas.length - 1].title : DEFAULT_TITLE;
+    const { title, createdAt, updatedAt } = summarizeMetas(metas);
     return { id, title, messages, createdAt, updatedAt };
 }
 
@@ -92,10 +122,6 @@ export function metaOf(
 ): SessionMeta | null {
     const metas = entries.filter(isMeta);
     if (metas.length === 0) return null;
-    return {
-        id,
-        title: metas[metas.length - 1].title,
-        createdAt: metas[0].updatedAt,
-        updatedAt: metas[metas.length - 1].updatedAt,
-    };
+    const { title, createdAt, updatedAt } = summarizeMetas(metas);
+    return { id, title, createdAt, updatedAt };
 }

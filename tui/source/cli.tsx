@@ -85,14 +85,28 @@ async function main() {
         }
     }
 
-    render(
-        <App
-            apiKey={cli.flags.apiKey}
-            baseUrl={cli.flags.baseUrl}
-            model={cli.flags.model}
-            sessionId={sessionId}
-        />
-    );
+    // 切换 session 时必须 unmount 旧 Ink 实例 + 清屏 + 重新 render：
+    // Ink 的 fullStaticOutput 在同一实例内是 append-only，<Static> 已写入终端 scrollback
+    // 的旧 session 消息，Ink 自身无法清除（unmount 只清 live region）。必须显式发
+    // clearTerminal 转义码擦屏幕+scrollback，再重建实例，新 session 对话才干净显示。
+    let inkInstance: { unmount: () => void } | undefined;
+    const startApp = (sid?: string) => {
+        if (inkInstance) {
+            inkInstance.unmount();
+            // \x1B[2J 擦屏幕 / \x1B[3J 擦 scrollback / \x1B[H 光标归位
+            process.stdout.write("\x1B[2J\x1B[3J\x1B[H");
+        }
+        inkInstance = render(
+            <App
+                apiKey={cli.flags.apiKey}
+                baseUrl={cli.flags.baseUrl}
+                model={cli.flags.model}
+                sessionId={sid}
+                onSwitchSession={startApp}
+            />
+        );
+    };
+    startApp(sessionId);
 }
 
 main();

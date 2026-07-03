@@ -34,5 +34,15 @@ export async function callLLM(
         ...params,
     };
     const resp = await client.chat.completions.create(payload);
-    return resp.choices[0]?.message;
+    const message = resp.choices[0]?.message;
+    // choices 可能为空（provider 错误/限流返回空数组），此时不能返回 undefined，
+    // 否则 core.ts 里 msg.content 会抛 TypeError 且类型契约失真
+    if (!message) {
+        throw new Error(
+            `LLM returned no choices (model=${model}, finish_reason=${
+                resp.choices[0]?.finish_reason ?? "n/a"
+            })`
+        );
+    }
+    return message;
 }

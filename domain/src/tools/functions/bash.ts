@@ -9,22 +9,41 @@ interface ExecuteBashArgs {
     command: string;
 }
 
+/** exec 默认 maxBuffer 1MB、无超时。长命令/挂起命令（tail -f、等待 stdin）会永久阻塞 agentLoop */
+const execAsync = promisify(exec);
+const BASH_TIMEOUT_MS = 120_000;
+const BASH_MAX_BUFFER = 10 * 1024 * 1024;
+
 export const executeBashFunc = async (
     args: ExecuteBashArgs
 ): Promise<string> => {
-    const execAsync = promisify(exec);
     try {
         eventStream.submit({
             type: EventType.TOOL,
             message: `Executing bash command`,
             data: { command: args.command },
         });
-        const { stdout, stderr } = await execAsync(args.command);
+        const { stdout, stderr } = await execAsync(args.command, {
+            timeout: BASH_TIMEOUT_MS,
+            maxBuffer: BASH_MAX_BUFFER,
+        });
         return stdout + stderr;
     } catch (error) {
-        if (error instanceof Error) {
-            return `Error: ${error.message}`;
+        // 非零退出码（grep 无匹配、ls 目标不存在等）也会走这里，
+        // exec 抛出的 error 携带 stdout/stderr/code —— 不能丢弃，否则 agent 看不到有用输出
+        const e = error as {
+            stdout?: string;
+            stderr?: string;
+            code?: number | string;
+            message?: string;
+            signal?: string;
+        };
+        const out = `${e.stdout ?? ""}${e.stderr ?? ""}`.trim();
+        if (out) {
+            return e.signal === "SIGTERM"
+                ? `[Timed out after ${BASH_TIMEOUT_MS}ms]\n${out}`
+                : out;
         }
-        return `Error: ${String(error)}`;
+        return `Error: ${e.message ?? String(error)}`;
     }
 };

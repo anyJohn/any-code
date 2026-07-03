@@ -13,36 +13,47 @@ export async function toolCall(
     const result: ChatMessage[] = [];
     for (const toolCall of tooCalls) {
         if (toolCall.type !== "function") {
-            return [
-                {
-                    role: "tool",
-                    tool_call_id: toolCall.id,
-                    content: `[Error] Unsupported tool call type: ${toolCall.type}`,
-                },
-            ];
+            // 用 continue 而非 return：一个异常 tool call 不应丢弃批次内其它结果
+            result.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                content: `[Error] Unsupported tool call type: ${toolCall.type}`,
+            });
+            continue;
         }
         const funcName: string = toolCall.function.name;
 
         if (accessToolKit && !accessToolKit.includes(funcName)) {
-            return [
-                {
-                    role: "tool",
-                    tool_call_id: toolCall.id,
-                    content: `[Error] Access denied for tool: ${funcName}`,
-                },
-            ];
+            result.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                content: `[Error] Access denied for tool: ${funcName}`,
+            });
+            continue;
         }
 
         if (typeof ToolsMap[funcName] !== "function") {
-            return [
-                {
-                    role: "tool",
-                    tool_call_id: toolCall.id,
-                    content: `[Error] Function not found: ${funcName}`,
-                },
-            ];
+            result.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                content: `[Error] Function not found: ${funcName}`,
+            });
+            continue;
         }
-        const args = JSON.parse(toolCall.function.arguments || "{}");
+
+        // LLM 可能返回非法 JSON 参数，parse 失败时回传错误让模型自纠，而不是整个 agentLoop 崩掉
+        let args: Record<string, unknown>;
+        try {
+            args = JSON.parse(toolCall.function.arguments || "{}");
+        } catch {
+            result.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                content: `[Error] Invalid JSON arguments for tool ${funcName}: ${toolCall.function.arguments}`,
+            });
+            continue;
+        }
+
         const toolOutput = await ToolsMap[funcName](args);
         eventStream.submit({
             type: EventType.TOOL,

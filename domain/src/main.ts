@@ -42,11 +42,13 @@ class AnyAgent {
 
     private eventStream = EventStream.getInstance();
     private stop$ = new Subject<void>();
+    private destroy$ = new Subject<void>();
     private task$ = new Subject<string>();
     private service: SessionService;
     private projectKey: string;
-    private session!: Session;
-    private sessionKey!: SessionKey;
+    // session 延迟到首条用户消息时才创建，避免每次启动 TUI 都落盘一个空 session
+    private session: Session | null = null;
+    private sessionKey: SessionKey | null = null;
 
     private constructor(opts: AnyAgentOptions = {}) {
         this.service = opts.service ?? new SessionService();
@@ -54,7 +56,7 @@ class AnyAgent {
         this.initProcessor();
     }
 
-    /** 异步工厂：构造 + 加载/新建 session。调用方必须 await 后再 submit。 */
+    /** 异步工厂：构造 +（若给定 sessionId）恢复历史 session。无 sessionId 时不创建，等首条消息。 */
     static async create(opts: AnyAgentOptions = {}): Promise<AnyAgent> {
         const agent = new AnyAgent(opts);
         await agent.initSession(opts.sessionId);
@@ -62,19 +64,27 @@ class AnyAgent {
     }
 
     private async initSession(sessionId?: string) {
-        let session: Session | null = null;
-        if (sessionId) {
-            session = await this.service.resume(this.projectKey, sessionId);
-            if (!session) {
-                this.eventStream.submit({
-                    type: EventType.SYSTEM,
-                    message: `Session ${sessionId} not found, creating a new one.`,
-                });
-            }
+        if (!sessionId) return;
+        const session = await this.service.resume(this.projectKey, sessionId);
+        if (session) {
+            this.session = session;
+            this.sessionKey = {
+                projectKey: this.projectKey,
+                sessionId: session.id,
+            };
+        } else {
+            this.eventStream.submit({
+                type: EventType.SYSTEM,
+                message: `Session ${sessionId} not found. Send a message to start a new one.`,
+            });
         }
-        if (!session) {
-            session = await this.service.create(this.projectKey);
-        }
+    }
+
+    /** 首条消息时按需创建 session 并以任务文本设标题 */
+    private async ensureSession(firstTask: string): Promise<void> {
+        if (this.session && this.sessionKey) return;
+        const title = firstTask.trim().slice(0, 40) || "New Session";
+        const session = await this.service.create(this.projectKey, title);
         this.session = session;
         this.sessionKey = {
             projectKey: this.projectKey,
@@ -90,8 +100,34 @@ class AnyAgent {
         return this.eventStream.event$;
     }
 
+    getSession(): Session | null {
+        return this.session;
+    }
+
+    getService(): SessionService {
+        return this.service;
+    }
+
+    getProjectKey(): string {
+        return this.projectKey;
+    }
+
     stop() {
         this.stop$.next();
+    }
+
+    /**
+     * 彻底销毁 agent：中断当前任务 + 解绑 task$ 订阅 + complete stop$。
+     * TUI 切换 session 时调用，避免旧 agent 的 rxjs 订阅泄漏、阻止被 GC。
+     */
+    destroy() {
+        // 先中断当前任务（触发内层 takeUntil(stop$) + finalize），再拆外层管线
+        this.stop$.next();
+        this.stop$.complete();
+        this.destroy$.next();
+        this.destroy$.complete();
+        // EventStream 是全局单例，history$ 会无限累积事件，切换 session 时清空释放内存
+        this.eventStream.clear();
     }
 
     submit(task: string) {
@@ -127,32 +163,38 @@ class AnyAgent {
                             this.pendingTasks$.next(remaining);
                         })
                     );
-                })
+                }),
+                takeUntil(this.destroy$)
             )
             .subscribe();
     }
 
     private async executeTask(task: string) {
+        // 首条消息时创建 session（延迟创建，避免空 session 落盘）
+        await this.ensureSession(task);
+        const session = this.session!;
+        const sessionKey = this.sessionKey!;
+
         // 重建 system prompt 放 messages[0]（不入盘，每次保持最新）
         const sys = this.getSystemMessage();
-        if (this.session.messages[0]?.role === "system") {
-            this.session.messages[0] = sys[0];
+        if (session.messages[0]?.role === "system") {
+            session.messages[0] = sys[0];
         } else {
-            this.session.messages.unshift(sys[0]);
+            session.messages.unshift(sys[0]);
         }
 
-        // 首条任务自动设标题
-        if (this.session.title === "New Session" && task) {
-            this.session.title = task.slice(0, 40);
-            await this.service.setTitle(this.sessionKey, this.session.title);
+        // 兼容历史空 session：首条任务自动设标题
+        if (session.title === "New Session" && task) {
+            session.title = task.slice(0, 40);
+            await this.service.setTitle(sessionKey, session.title);
         }
 
         const mcpTools = loadMcpTools();
         const onMessage = (msg: ChatMessage) =>
-            this.service.appendMessage(this.sessionKey, msg);
+            this.service.appendMessage(sessionKey, msg);
         const { result } = await agentLoop(
             task,
-            this.session.messages,
+            session.messages,
             30,
             { tools: [...ToolKit.allTools, ...mcpTools] },
             onMessage

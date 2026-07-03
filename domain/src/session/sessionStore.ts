@@ -59,10 +59,16 @@ export class LocalSessionStore implements SessionStore {
     async load(key: SessionKey): Promise<SessionEntry[] | null> {
         try {
             const content = await fs.readFile(fileOf(key), "utf-8");
-            return content
-                .split("\n")
-                .filter(Boolean)
-                .map((line) => JSON.parse(line) as SessionEntry);
+            const entries: SessionEntry[] = [];
+            for (const line of content.split("\n")) {
+                if (!line) continue;
+                try {
+                    entries.push(JSON.parse(line) as SessionEntry);
+                } catch {
+                    // 跳过单行损坏，不丢弃整条 session
+                }
+            }
+            return entries;
         } catch {
             return null;
         }
