@@ -11,12 +11,18 @@ build/
 *.tgz
 *.log
 .cache/
+docs/
+test/
 
 # IDE
+.vscode/
+
+# Agent
+skills-lock.json
 AGENTS.md
 CLAUDE.md
 memory.md
 SOUL.md
-.claude/
-.vscode/
-.agent/
+.claude*/
+.agent*/
+.anycode/
