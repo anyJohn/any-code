@@ -4,6 +4,7 @@ import { toolCall } from "./tools";
 import { AgentLoopResult, ChatMessage } from "./type";
 import { EventStream } from "./eventStream";
 import { EventType } from "./type";
+import type { Workspace } from "./workspace";
 
 const eventStream = EventStream.getInstance();
 
@@ -18,8 +19,14 @@ export async function agentLoop(
     messages: ChatMessage[],
     maxIterations = 30,
     params?: Partial<ChatCompletionCreateParamsNonStreaming>,
-    onMessage?: (msg: ChatMessage) => void | Promise<void>
+    onMessage?: (msg: ChatMessage) => void | Promise<void>,
+    workspace?: Workspace
 ): Promise<AgentLoopResult> {
+    if (!workspace) {
+        // agentLoop 必须在 workspace 上下文里跑（工具要 cwd/resolvePath）。
+        // 设计上 main.ts / plan.ts 总会传；此处守卫防止误用。
+        throw new Error("agentLoop: workspace is required");
+    }
     const userMsg: ChatMessage = {
         role: "user",
         content: task,
@@ -49,7 +56,11 @@ export async function agentLoop(
             const accessToolKit =
                 params?.tools?.map((t) => (t as any)?.function?.name) ||
                 undefined;
-            const toolResults = await toolCall(msg.tool_calls, accessToolKit);
+            const toolResults = await toolCall(
+                msg.tool_calls,
+                accessToolKit,
+                workspace
+            );
             messages.push(...toolResults);
             for (const tr of toolResults) {
                 await onMessage?.(tr);

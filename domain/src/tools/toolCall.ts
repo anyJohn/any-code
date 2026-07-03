@@ -3,12 +3,14 @@ import { ChatMessage } from "../type";
 import { ToolsMap } from "./functions";
 import { EventStream } from "../eventStream";
 import { EventType } from "../type";
+import type { Workspace } from "../workspace";
 
 const eventStream = EventStream.getInstance();
 
 export async function toolCall(
     tooCalls: ChatCompletionMessageToolCall[],
-    accessToolKit?: string[]
+    accessToolKit: string[] | undefined,
+    workspace: Workspace
 ): Promise<ChatMessage[]> {
     const result: ChatMessage[] = [];
     for (const toolCall of tooCalls) {
@@ -54,7 +56,7 @@ export async function toolCall(
             continue;
         }
 
-        const toolOutput = await ToolsMap[funcName](args);
+        const toolOutput = await ToolsMap[funcName](args, workspace);
         eventStream.submit({
             type: EventType.TOOL,
             message: `Tool call success: ${funcName}`,

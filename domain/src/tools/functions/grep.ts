@@ -3,6 +3,8 @@ import path from "path";
 import { glob } from "glob";
 import { EventStream } from "../../eventStream";
 import { EventType } from "../../type";
+import type { Workspace } from "../../workspace";
+import { resolvePath } from "../../workspace";
 
 const eventStream = EventStream.getInstance();
 
@@ -51,16 +53,22 @@ async function searchFile(
     }
 }
 
-export const grepFunc = async (args: GrepArgs): Promise<string> => {
+export const grepFunc = async (
+    args: GrepArgs,
+    workspace: Workspace
+): Promise<string> => {
     try {
         const {
             pattern,
-            path: searchPath = process.cwd(),
             glob: globPattern,
             output_mode = "content",
             multiline = false,
             case_insensitive = false,
         } = args;
+        // 默认在工作区根搜；用户给路径则经 resolvePath 锚定（防越界读 workspace 外）
+        const searchPath = args.path
+            ? resolvePath(workspace, args.path)
+            : workspace.rootPath;
         eventStream.submit({
             type: EventType.TOOL,
             message: `Grep search`,

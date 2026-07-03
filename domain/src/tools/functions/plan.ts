@@ -6,6 +6,7 @@ import { ToolKit } from "..";
 import { loadMcpTools } from "../../mcp";
 import { EventStream } from "../../eventStream";
 import { EventType } from "../../type";
+import type { Workspace } from "../../workspace";
 
 const eventStream = EventStream.getInstance();
 
@@ -13,14 +14,17 @@ interface PlanArgs {
     task: string;
 }
 
-export const planFunc = async (args: PlanArgs): Promise<string> => {
+export const planFunc = async (
+    args: PlanArgs,
+    workspace: Workspace
+): Promise<string> => {
     const { task } = args;
     eventStream.submit({
         type: EventType.PLANNING,
         message: `Creating plan for task`,
         data: { task },
     });
-    const tasks = await createPlan(task);
+    const tasks = await createPlan(task, workspace);
     const taskResults = [];
 
     // 为 subtask 创建专用的系统消息（不包含 plan 工具提示）
@@ -38,14 +42,16 @@ export const planFunc = async (args: PlanArgs): Promise<string> => {
             message: `Executing subtask ${i + 1}/${tasks.length}`,
             data: { subtask: t },
         });
-        const mcpTools = loadMcpTools();
+        const mcpTools = loadMcpTools(workspace);
         const res = await agentLoop(
             `[Subtask ${i + 1} of ${tasks.length}]: ${t}`,
             subtaskSystemMessages,
             undefined,
             {
                 tools: [...ToolKit.executeTools, ...mcpTools],
-            }
+            },
+            undefined,
+            workspace
         );
         taskResults.push(res);
     }

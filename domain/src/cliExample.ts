@@ -12,7 +12,7 @@ if (process.argv.length < 3) {
 
 const task = process.argv.slice(2).join(" ");
 
-const agent = await AnyAgent.create();
+const agent = await AnyAgent.create({ rootPath: process.cwd() });
 
 agent.eventStream$.subscribe((event) => {
     switch (event.type) {

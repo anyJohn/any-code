@@ -14,6 +14,7 @@ import { loadSkills } from "./skill";
 import { loadMcpTools } from "./mcp";
 import { EventStream } from "./eventStream";
 import { SessionService, Session, SessionKey, projectKeyOf } from "./session";
+import { createWorkspace, Workspace } from "./workspace";
 import {
     BehaviorSubject,
     catchError,
@@ -28,6 +29,8 @@ import {
 } from "rxjs";
 
 interface AnyAgentOptions {
+    /** 工作区根目录。Agent 的 bash cwd / 文件解析 / 配置加载都以此为锚。 */
+    rootPath: string;
     sessionId?: string;
     service?: SessionService;
 }
@@ -45,19 +48,21 @@ class AnyAgent {
     private destroy$ = new Subject<void>();
     private task$ = new Subject<string>();
     private service: SessionService;
+    private workspace: Workspace;
     private projectKey: string;
-    // session 延迟到首条用户消息时才创建，避免每次启动 TUI 都落盘一个空 session
+    // session 延迟到首条用户消息时才创建，避免每次启动都落盘一个空 session
     private session: Session | null = null;
     private sessionKey: SessionKey | null = null;
 
-    private constructor(opts: AnyAgentOptions = {}) {
+    private constructor(opts: AnyAgentOptions) {
         this.service = opts.service ?? new SessionService();
-        this.projectKey = projectKeyOf(process.cwd());
+        this.workspace = createWorkspace(opts.rootPath);
+        this.projectKey = projectKeyOf(this.workspace.rootPath);
         this.initProcessor();
     }
 
     /** 异步工厂：构造 +（若给定 sessionId）恢复历史 session。无 sessionId 时不创建，等首条消息。 */
-    static async create(opts: AnyAgentOptions = {}): Promise<AnyAgent> {
+    static async create(opts: AnyAgentOptions): Promise<AnyAgent> {
         const agent = new AnyAgent(opts);
         await agent.initSession(opts.sessionId);
         return agent;
@@ -112,13 +117,17 @@ class AnyAgent {
         return this.projectKey;
     }
 
+    getWorkspace(): Workspace {
+        return this.workspace;
+    }
+
     stop() {
         this.stop$.next();
     }
 
     /**
      * 彻底销毁 agent：中断当前任务 + 解绑 task$ 订阅 + complete stop$。
-     * TUI 切换 session 时调用，避免旧 agent 的 rxjs 订阅泄漏、阻止被 GC。
+     * 切换 session / 工作区时调用，避免旧 agent 的 rxjs 订阅泄漏、阻止被 GC。
      */
     destroy() {
         // 先中断当前任务（触发内层 takeUntil(stop$) + finalize），再拆外层管线
@@ -126,7 +135,7 @@ class AnyAgent {
         this.stop$.complete();
         this.destroy$.next();
         this.destroy$.complete();
-        // EventStream 是全局单例，history$ 会无限累积事件，切换 session 时清空释放内存
+        // EventStream 是全局单例，history$ 会无限累积事件，切换时清空释放内存
         this.eventStream.clear();
     }
 
@@ -176,7 +185,7 @@ class AnyAgent {
         const sessionKey = this.sessionKey!;
 
         // 重建 system prompt 放 messages[0]（不入盘，每次保持最新）
-        const sys = this.getSystemMessage();
+        const sys = this.getSystemMessage(this.workspace);
         if (session.messages[0]?.role === "system") {
             session.messages[0] = sys[0];
         } else {
@@ -189,7 +198,7 @@ class AnyAgent {
             await this.service.setTitle(sessionKey, session.title);
         }
 
-        const mcpTools = loadMcpTools();
+        const mcpTools = loadMcpTools(this.workspace);
         const onMessage = (msg: ChatMessage) =>
             this.service.appendMessage(sessionKey, msg);
         const { result } = await agentLoop(
@@ -197,16 +206,22 @@ class AnyAgent {
             session.messages,
             30,
             { tools: [...ToolKit.allTools, ...mcpTools] },
-            onMessage
+            onMessage,
+            this.workspace
         );
-        saveMemory(task, result);
+        saveMemory(task, result, this.workspace);
     }
 
-    private getSystemMessage(): ChatMessage[] {
-        const memory = loadMemory();
-        const rule = loadRule();
-        const skills = loadSkills();
-        let sysPrompt = systemPrompt;
+    private getSystemMessage(workspace: Workspace): ChatMessage[] {
+        const memory = loadMemory(workspace);
+        const rule = loadRule(workspace);
+        const skills = loadSkills(workspace);
+        // 告知 LLM 工作根目录，让它能把工具输出里的绝对路径对应到相对路径
+        // （Jest/webpack 报错含绝对路径，否则 LLM 认知断裂）。见 docs/workspace设计.md。
+        let sysPrompt =
+            systemPrompt +
+            `\n\n# Workspace\n你的工作根目录是 ${workspace.rootPath}。` +
+            `分析工具输出中的绝对路径时，将其与该根目录对应。`;
         if (memory) {
             sysPrompt += memory;
         }

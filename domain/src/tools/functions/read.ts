@@ -1,6 +1,8 @@
 import fs from "fs/promises";
 import { EventStream } from "../../eventStream";
 import { EventType } from "../../type";
+import type { Workspace } from "../../workspace";
+import { resolvePath } from "../../workspace";
 
 const eventStream = EventStream.getInstance();
 
@@ -10,7 +12,10 @@ interface ReadArgs {
     limit?: number;
 }
 
-export const readFunc = async (args: ReadArgs): Promise<string> => {
+export const readFunc = async (
+    args: ReadArgs,
+    workspace: Workspace
+): Promise<string> => {
     try {
         eventStream.submit({
             type: EventType.TOOL,
@@ -21,7 +26,8 @@ export const readFunc = async (args: ReadArgs): Promise<string> => {
                 limit: args.limit || 8000,
             },
         });
-        const { filePath, offset = 0, limit = 8000 } = args;
+        const { offset = 0, limit = 8000 } = args;
+        const filePath = resolvePath(workspace, args.filePath);
         const content = await fs.readFile(filePath, "utf-8");
         const totalLength = content.length;
         const start = Math.max(0, offset);

@@ -1,6 +1,8 @@
 import fs from "fs/promises";
 import { EventStream } from "../../eventStream";
 import { EventType } from "../../type";
+import type { Workspace } from "../../workspace";
+import { resolvePath } from "../../workspace";
 
 const eventStream = EventStream.getInstance();
 
@@ -10,9 +12,13 @@ interface EditFileArgs {
     newString: string;
 }
 
-export const editFunc = async (args: EditFileArgs): Promise<string> => {
+export const editFunc = async (
+    args: EditFileArgs,
+    workspace: Workspace
+): Promise<string> => {
     try {
-        const { filePath, oldString, newString } = args;
+        const { oldString, newString } = args;
+        const filePath = resolvePath(workspace, args.filePath);
         const content = await fs.readFile(filePath, "utf-8");
 
         if (!content.includes(oldString)) {

@@ -2,6 +2,8 @@ import fs from "fs/promises";
 import path from "path";
 import { EventStream } from "../../eventStream";
 import { EventType } from "../../type";
+import type { Workspace } from "../../workspace";
+import { resolvePath } from "../../workspace";
 
 const eventStream = EventStream.getInstance();
 
@@ -109,13 +111,17 @@ function formatTree(
     return result;
 }
 
-export const exploreFunc = async (args: ExploreArgs): Promise<string> => {
+export const exploreFunc = async (
+    args: ExploreArgs,
+    workspace: Workspace
+): Promise<string> => {
     try {
-        const {
-            directoryPath = process.cwd(),
-            maxDepth = 3,
-            ignorePatterns = DEFAULT_IGNORE_PATTERNS,
-        } = args;
+        const { maxDepth = 3 } = args;
+        const directoryPath = args.directoryPath
+            ? resolvePath(workspace, args.directoryPath)
+            : workspace.rootPath;
+        // 用户未显式传 ignorePatterns 时，用 workspace 的（含 node_modules/.git 等）
+        const ignorePatterns = args.ignorePatterns ?? workspace.ignoredPatterns;
 
         eventStream.submit({
             type: EventType.TOOL,

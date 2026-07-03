@@ -2,6 +2,7 @@ import { promisify } from "util";
 import { exec } from "child_process";
 import { EventStream } from "../../eventStream";
 import { EventType } from "../../type";
+import type { Workspace } from "../../workspace";
 
 const eventStream = EventStream.getInstance();
 
@@ -15,15 +16,19 @@ const BASH_TIMEOUT_MS = 120_000;
 const BASH_MAX_BUFFER = 10 * 1024 * 1024;
 
 export const executeBashFunc = async (
-    args: ExecuteBashArgs
+    args: ExecuteBashArgs,
+    workspace: Workspace
 ): Promise<string> => {
     try {
         eventStream.submit({
             type: EventType.TOOL,
             message: `Executing bash command`,
-            data: { command: args.command },
+            data: { command: args.command, cwd: workspace.rootPath },
         });
+        // cwd 锚定到 workspace 根：agent 说"跑测试"天然落在项目里。
+        // 这是上下文锚定，不是安全隔离——bash 能力极大，安全交给将来的 Permission。
         const { stdout, stderr } = await execAsync(args.command, {
+            cwd: workspace.rootPath,
             timeout: BASH_TIMEOUT_MS,
             maxBuffer: BASH_MAX_BUFFER,
         });

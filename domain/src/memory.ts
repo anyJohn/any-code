@@ -8,41 +8,41 @@
 
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
-import { dirname } from "path";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const MEMORY_FILE = path.join(__dirname, "..", "/.agent", "memory.md");
+import type { Workspace } from "./workspace";
+import { workspaceConfigDir } from "./workspace";
 
 /**
- * 保存记忆到 memory.md 文件
- * @param task 用户输入
- * @param result 执行结果
+ * 保存记忆到 <workspace>/.anycode/memory.md
  */
-export function saveMemory(task: string, result: string): void {
+export function saveMemory(
+    task: string,
+    result: string,
+    workspace: Workspace
+): void {
+    const dir = workspaceConfigDir(workspace);
+    const file = path.join(dir, "memory.md");
     const timestamp = new Date().toISOString();
     const entry = `## ${timestamp}\n\n**Task:** ${task}\n\n**Result:**\n${result}\n\n---\n\n`;
 
-    if (fs.existsSync(MEMORY_FILE)) {
-        fs.appendFileSync(MEMORY_FILE, entry, "utf-8");
+    fs.mkdirSync(dir, { recursive: true });
+    if (fs.existsSync(file)) {
+        fs.appendFileSync(file, entry, "utf-8");
     } else {
-        fs.writeFileSync(MEMORY_FILE, "# Agent Memory\n\n" + entry, "utf-8");
+        fs.writeFileSync(file, "# Agent Memory\n\n" + entry, "utf-8");
     }
 }
 
 /**
- * 通过滑动窗口方式加载 memory.md 文件
+ * 通过滑动窗口方式加载 <workspace>/.anycode/memory.md
  * @param windowSize 窗口大小（字符数），默认 1000
- * @returns 记忆内容字符串
  */
-export function loadMemory(windowSize: number = 1000): string {
-    if (!fs.existsSync(MEMORY_FILE)) {
+export function loadMemory(workspace: Workspace, windowSize = 1000): string {
+    const file = path.join(workspaceConfigDir(workspace), "memory.md");
+    if (!fs.existsSync(file)) {
         return "";
     }
 
-    const content = fs.readFileSync(MEMORY_FILE, "utf-8");
+    const content = fs.readFileSync(file, "utf-8");
     if (content.length <= windowSize) {
         return content;
     }
