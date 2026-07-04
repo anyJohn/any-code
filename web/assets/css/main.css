@@ -3,6 +3,8 @@
 
 @import "tailwindcss";
 
+@plugin "@tailwindcss/typography";
+
 @import "tw-animate-css";
 
 @import "shadcn-vue/tailwind.css";

@@ -9,7 +9,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChevronRight, MessageSquare, Folder } from "@lucide/vue";
 
-const { selected, workspaces, refresh, select } = useWorkspaceState();
+const { selected, workspaces, refresh, select, activeSessionId, setActiveSession } =
+    useWorkspaceState();
 
 // 每个工作区的 sessions 缓存（按 projectKey）
 const sessionsMap = ref<Record<string, SessionMeta[]>>({});
@@ -17,7 +18,21 @@ const openKeys = ref<Record<string, boolean>>({});
 
 onMounted(() => {
     refresh();
+    // 首屏若已有选中工作区（chat 页深链直达），自动展开+加载其 sessions
+    if (selected.value) expand(selected.value);
 });
+
+// 选中工作区变化时自动展开 + 加载 sessions（chat 页加载 / 点 workspace 都会触发）
+watch(selected, (w) => {
+    if (w) expand(w);
+});
+
+async function expand(w: WorkspaceMeta) {
+    openKeys.value[w.projectKey] = true;
+    if (!sessionsMap.value[w.projectKey]) {
+        await loadSessions(w);
+    }
+}
 
 async function loadSessions(w: WorkspaceMeta) {
     sessionsMap.value[w.projectKey] =
@@ -37,6 +52,7 @@ async function newChat(w: WorkspaceMeta) {
         method: "POST",
         body: { workspacePath: w.rootPath },
     });
+    setActiveSession(null); // 新对话尚无 session，首条消息后才落盘
     await navigateTo(`/chat/${id}`);
 }
 
@@ -45,6 +61,7 @@ async function resume(w: WorkspaceMeta, sessionId: string) {
         method: "POST",
         body: { workspacePath: w.rootPath, sessionId },
     });
+    setActiveSession(sessionId); // 乐观高亮该会话
     await navigateTo(`/chat/${id}`);
 }
 </script>
@@ -88,6 +105,7 @@ async function resume(w: WorkspaceMeta, sessionId: string) {
                             v-for="s in sessionsMap[w.projectKey] || []"
                             :key="s.id"
                             class="flex items-center gap-1.5 px-2 py-1 rounded text-xs hover:bg-accent text-left truncate"
+                            :class="{ 'bg-accent text-foreground': activeSessionId === s.id }"
                             @click.stop="resume(w, s.id)"
                         >
                             <MessageSquare class="size-3 shrink-0 text-muted-foreground" />
