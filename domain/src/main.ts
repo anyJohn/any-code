@@ -210,6 +210,11 @@ class AnyAgent {
             this.workspace
         );
         saveMemory(task, result, this.workspace);
+        // 任务完成信号：前端据此解除 pending（Error 时由 catchError 发 ERROR，前端也解除）
+        this.eventStream.submit({
+            type: EventType.DONE,
+            message: `Task completed: ${task}`,
+        });
     }
 
     private getSystemMessage(workspace: Workspace): ChatMessage[] {

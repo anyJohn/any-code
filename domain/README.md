@@ -97,8 +97,9 @@ agent.submit("列出当前目录的所有文件");
 │       ├── schema.ts    # 工具 schema 定义
 │       ├── toolName.enum.ts  # 工具名称枚举
 │       └── functions/   # 工具实现（bash、read、write 等）
-├── .agent/              # 运行时数据
+├── .anycode/            # 运行时数据（per-workspace）
 │   ├── memory.md        # 会话记忆
+│   ├── mcp.json         # MCP 工具配置
 │   ├── rules/           # 规则目录（*.md 文件）
 │   └── skills/          # 技能目录（*.md 文件）
 ├── dist/                 # 编译输出目录
@@ -114,7 +115,7 @@ agent.submit("列出当前目录的所有文件");
 4. **推理循环**：agentLoop() 处理 LLM 交互和工具调用（最多 30 次迭代）
 5. **工具执行**：通过 toolCall.ts 执行工具（支持 bash、read、write、explore 等）
 6. **事件流**：所有事件通过 rxjs 响应式流发布
-7. **记忆保存**：自动保存会话记忆到 .agent/memory.md
+7. **记忆保存**：自动保存会话记忆到 <workspace>/.anycode/memory.md
 
 ## 许可证
 
