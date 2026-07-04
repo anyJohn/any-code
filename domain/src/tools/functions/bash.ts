@@ -1,6 +1,5 @@
 import { promisify } from "util";
 import { exec } from "child_process";
-import { EventType } from "../../type";
 import type { ToolContext } from "../../context";
 
 interface ExecuteBashArgs {
@@ -16,13 +15,8 @@ export const executeBashFunc = async (
     args: ExecuteBashArgs,
     ctx: ToolContext
 ): Promise<string> => {
-    const { workspace, eventStream } = ctx;
+    const { workspace } = ctx;
     try {
-        eventStream.submit({
-            type: EventType.TOOL,
-            message: `Executing bash command`,
-            data: { command: args.command, cwd: workspace.rootPath },
-        });
         // cwd 锚定到 workspace 根：agent 说"跑测试"天然落在项目里。
         // 这是上下文锚定，不是安全隔离——bash 能力极大，安全交给将来的 Permission。
         const { stdout, stderr } = await execAsync(args.command, {

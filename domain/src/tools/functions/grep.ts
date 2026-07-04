@@ -1,7 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
 import { glob } from "glob";
-import { EventType } from "../../type";
 import type { ToolContext } from "../../context";
 import { resolvePath } from "../../workspace";
 
@@ -54,7 +53,7 @@ export const grepFunc = async (
     args: GrepArgs,
     ctx: ToolContext
 ): Promise<string> => {
-    const { workspace, eventStream } = ctx;
+    const { workspace } = ctx;
     try {
         const {
             pattern,
@@ -67,11 +66,6 @@ export const grepFunc = async (
         const searchPath = args.path
             ? resolvePath(workspace, args.path)
             : workspace.rootPath;
-        eventStream.submit({
-            type: EventType.TOOL,
-            message: `Grep search`,
-            data: { pattern, path: searchPath },
-        });
         let flags = "g";
         if (multiline) flags += "m";
         if (case_insensitive) flags += "i";

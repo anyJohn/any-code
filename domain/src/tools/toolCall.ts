@@ -11,7 +11,8 @@ import type { Tool } from "./index";
 export async function toolCall(
     tooCalls: ChatCompletionMessageToolCall[],
     ctx: ToolContext,
-    tools: Tool[]
+    tools: Tool[],
+    turnId?: string
 ): Promise<ChatMessage[]> {
     const result: ChatMessage[] = [];
     for (const toolCall of tooCalls) {
@@ -54,10 +55,13 @@ export async function toolCall(
         }
 
         const toolOutput = await tool.handler(args, ctx);
+        // 一次工具调用的完整画像：name + args + result 都进事件流。
+        // 这是未来权限/黑白名单/bypass 的天然拦截点——在此处做策略决策即可。
         ctx.eventStream.submit({
             type: EventType.TOOL,
-            message: `Tool call success: ${funcName}`,
-            data: { name: funcName, args },
+            message: funcName,
+            data: { name: funcName, args, result: toolOutput },
+            turnId,
         });
         result.push({
             role: "tool",

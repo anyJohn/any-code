@@ -1,4 +1,5 @@
 import { ChatCompletionCreateParamsNonStreaming } from "openai/resources/index";
+import { randomUUID } from "node:crypto";
 import { callLLM } from "./llm";
 import { toolCall } from "./tools/toolCall";
 import { AgentLoopResult, ChatMessage } from "./type";
@@ -27,9 +28,13 @@ export async function agentLoop(
     messages.push(userMsg);
     await onMessage?.(userMsg);
     for (let i = 0; i < maxIter; i++) {
+        // 同一回合的 ITERATION/ASSISTANT/TOOL 事件共用 turnId,
+        // 前端据此把 "assistant 文本 + 紧随的工具调用" 组成块状展示。
+        const turnId = randomUUID();
         ctx.eventStream.submit({
             type: EventType.ITERATION,
             message: `Iteration ${i + 1}/${maxIter}`,
+            turnId,
         });
         const msg = await callLLM(messages, {
             ...params,
@@ -41,6 +46,7 @@ export async function agentLoop(
             ctx.eventStream.submit({
                 type: EventType.ASSISTANT,
                 message: msg.content,
+                turnId,
             });
         }
         if (!msg?.tool_calls) {
@@ -49,7 +55,7 @@ export async function agentLoop(
                 messages,
             };
         } else {
-            const toolResults = await toolCall(msg.tool_calls, ctx, tools);
+            const toolResults = await toolCall(msg.tool_calls, ctx, tools, turnId);
             messages.push(...toolResults);
             for (const tr of toolResults) {
                 await onMessage?.(tr);

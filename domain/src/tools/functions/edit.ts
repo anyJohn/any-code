@@ -1,5 +1,4 @@
 import fs from "fs/promises";
-import { EventType } from "../../type";
 import type { ToolContext } from "../../context";
 import { resolvePath } from "../../workspace";
 
@@ -13,7 +12,7 @@ export const editFunc = async (
     args: EditFileArgs,
     ctx: ToolContext
 ): Promise<string> => {
-    const { workspace, eventStream } = ctx;
+    const { workspace } = ctx;
     try {
         const { oldString, newString } = args;
         const filePath = resolvePath(workspace, args.filePath);
@@ -37,11 +36,6 @@ export const editFunc = async (
         }
 
         const newContent = content.replace(oldString, newString);
-        eventStream.submit({
-            type: EventType.TOOL,
-            message: `Editing file`,
-            data: { filePath },
-        });
         await fs.writeFile(filePath, newContent, "utf-8");
 
         return `Successfully edited file.\n--- Removed:\n${oldString}\n--- Added:\n${newString}`;

@@ -1,6 +1,5 @@
 import fs from "fs/promises";
 import path from "path";
-import { EventType } from "../../type";
 import type { ToolContext } from "../../context";
 import { resolvePath } from "../../workspace";
 
@@ -112,7 +111,7 @@ export const exploreFunc = async (
     args: ExploreArgs,
     ctx: ToolContext
 ): Promise<string> => {
-    const { workspace, eventStream } = ctx;
+    const { workspace } = ctx;
     try {
         const { maxDepth = 3 } = args;
         const directoryPath = args.directoryPath
@@ -120,12 +119,6 @@ export const exploreFunc = async (
             : workspace.rootPath;
         // 用户未显式传 ignorePatterns 时，用 workspace 的（含 node_modules/.git 等）
         const ignorePatterns = args.ignorePatterns ?? workspace.ignoredPatterns;
-
-        eventStream.submit({
-            type: EventType.TOOL,
-            message: `Exploring directory`,
-            data: { path: directoryPath, maxDepth },
-        });
 
         const absolutePath = path.resolve(directoryPath);
         const rootNode = await exploreDirectory(

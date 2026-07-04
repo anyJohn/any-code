@@ -1,5 +1,4 @@
 import fs from "fs/promises";
-import { EventType } from "../../type";
 import type { ToolContext } from "../../context";
 import { resolvePath } from "../../workspace";
 
@@ -13,17 +12,8 @@ export const readFunc = async (
     args: ReadArgs,
     ctx: ToolContext
 ): Promise<string> => {
-    const { workspace, eventStream } = ctx;
+    const { workspace } = ctx;
     try {
-        eventStream.submit({
-            type: EventType.TOOL,
-            message: `Reading file`,
-            data: {
-                filePath: args.filePath,
-                offset: args.offset || 0,
-                limit: args.limit || 8000,
-            },
-        });
         const { offset = 0, limit = 8000 } = args;
         const filePath = resolvePath(workspace, args.filePath);
         const content = await fs.readFile(filePath, "utf-8");

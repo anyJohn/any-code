@@ -1,5 +1,4 @@
 import { glob } from "glob";
-import { EventType } from "../../type";
 import type { ToolContext } from "../../context";
 import { resolvePath } from "../../workspace";
 
@@ -12,16 +11,11 @@ export const globFunc = async (
     args: GlobArgs,
     ctx: ToolContext
 ): Promise<string> => {
-    const { workspace, eventStream } = ctx;
+    const { workspace } = ctx;
     try {
         const cwd = args.path
             ? resolvePath(workspace, args.path)
             : workspace.rootPath;
-        eventStream.submit({
-            type: EventType.TOOL,
-            message: `Glob search`,
-            data: { pattern: args.pattern, path: cwd },
-        });
         const files = await glob(args.pattern, { cwd });
 
         if (files.length === 0) {
