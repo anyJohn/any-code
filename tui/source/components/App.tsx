@@ -111,7 +111,10 @@ export default function App(props: AppProps) {
 
     const initAgent = useCallback(
         async (sessionId?: string) => {
-            const agent = await AnyAgent.create({ sessionId });
+            const agent = await AnyAgent.create({
+                rootPath: process.cwd(),
+                sessionId,
+            });
             agentRef.current = agent;
             serviceRef.current = agent.getService();
             pkRef.current = agent.getProjectKey();

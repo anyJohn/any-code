@@ -4,6 +4,7 @@
     "scripts": {
         "dev:tui": "pnpm --filter @any-code/tui dev",
         "dev:domain": "pnpm --filter @any-code/domain dev",
+        "dev:web": "pnpm --filter @any-code/web dev",
         "build": "pnpm -r build",
         "test": "pnpm -r test"
     },
