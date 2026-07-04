@@ -15,7 +15,8 @@ import { ToolKit } from "./tools";
  */
 export async function callLLM(
     messages: ChatMessage[],
-    params?: Partial<ChatCompletionCreateParamsNonStreaming>
+    params?: Partial<ChatCompletionCreateParamsNonStreaming>,
+    signal?: AbortSignal
 ): Promise<ChatCompletionMessage> {
     const config = new Config();
     const { apiKey, baseURL, model } = config;
@@ -33,7 +34,9 @@ export async function callLLM(
         tools: ToolKit.readOnlyTools.map((t) => t.schema), // 默认只读权限（schema）
         ...params,
     };
-    const resp = await client.chat.completions.create(payload);
+    // signal 透传给底层 fetch：stop() 时 abort，正在进行的 LLM 调用会抛 AbortError，
+    // agentLoop 捕获后视为中断返回，不再继续推理。
+    const resp = await client.chat.completions.create(payload, { signal });
     const message = resp.choices[0]?.message;
     // choices 可能为空（provider 错误/限流返回空数组），此时不能返回 undefined，
     // 否则 core.ts 里 msg.content 会抛 TypeError 且类型契约失真

@@ -56,6 +56,7 @@ export function AgentTool(def: AgentDefinition): Tool {
             const subCtx = {
                 workspace: ctx.workspace,
                 eventStream: tagged,
+                signal: ctx.signal,
             };
             const messages: ChatMessage[] = [
                 { role: "system", content: def.instruction },

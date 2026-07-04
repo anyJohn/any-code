@@ -28,6 +28,10 @@ export async function agentLoop(
     messages.push(userMsg);
     await onMessage?.(userMsg);
     for (let i = 0; i < maxIter; i++) {
+        // 迭代边界先查中断：stop() 已 abort 的话直接返回，不再发起 LLM 调用
+        if (ctx.signal.aborted) {
+            return { result: "[stopped]", messages };
+        }
         // 同一回合的 ITERATION/ASSISTANT/TOOL 事件共用 turnId,
         // 前端据此把 "assistant 文本 + 紧随的工具调用" 组成块状展示。
         const turnId = randomUUID();
@@ -36,10 +40,23 @@ export async function agentLoop(
             message: `Iteration ${i + 1}/${maxIter}`,
             turnId,
         });
-        const msg = await callLLM(messages, {
-            ...params,
-            tools: tools.map((t) => t.schema),
-        });
+        let msg;
+        try {
+            msg = await callLLM(
+                messages,
+                { ...params, tools: tools.map((t) => t.schema) },
+                ctx.signal
+            );
+        } catch (err) {
+            // LLM 调用被中断（stop 触发 abort）→ 安静返回，由 executeTask 发 STOPPED
+            if (ctx.signal.aborted) {
+                return { result: "[stopped]", messages };
+            }
+            throw err;
+        }
+        if (ctx.signal.aborted) {
+            return { result: "[stopped]", messages };
+        }
         messages.push(msg);
         await onMessage?.(msg);
         if (msg.content) {

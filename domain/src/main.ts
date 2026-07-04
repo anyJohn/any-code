@@ -56,6 +56,9 @@ class AnyAgent {
     private projectKey: string;
     private definition: AgentDefinition;
     private tools: Tool[];
+    /** 当前任务的取消控制器。stop() 调 abort()，正在进行的 LLM 调用会抛 AbortError，
+     * agentLoop 在迭代边界捕获后返回，executeTask 据 signal.aborted 发 STOPPED 而非 DONE。 */
+    private abortController: AbortController | null = null;
     // session 延迟到首条用户消息时才创建，避免每次启动都落盘一个空 session
     private session: Session | null = null;
     private sessionKey: SessionKey | null = null;
@@ -134,6 +137,9 @@ class AnyAgent {
     }
 
     stop() {
+        // 1) abort 当前 LLM 调用（真正中断推理，不只是断 rxjs 订阅）
+        this.abortController?.abort();
+        // 2) 断外层管线订阅（兼容旧路径 + finalize 清 pending）
         this.stop$.next();
     }
 
@@ -163,10 +169,6 @@ class AnyAgent {
                     this.pendingTasks$.next([...currentTasks, task]);
                 }),
                 concatMap((task: string) => {
-                    this.eventStream.submit({
-                        type: EventType.SYSTEM,
-                        message: `Starting Task: ${task}`,
-                    });
                     return from(this.executeTask(task)).pipe(
                         takeUntil(this.stop$),
                         catchError((err) => {
@@ -212,9 +214,13 @@ class AnyAgent {
 
         const onMessage = (msg: ChatMessage) =>
             this.service.appendMessage(sessionKey, msg);
+        // 每个任务一个独立的 AbortController，stop() abort 它
+        const abortController = new AbortController();
+        this.abortController = abortController;
         const ctx = {
             workspace: this.workspace,
             eventStream: this.eventStream,
+            signal: abortController.signal,
         };
         const { result } = await agentLoop(
             task,
@@ -226,11 +232,20 @@ class AnyAgent {
             this.tools
         );
         saveMemory(task, result, this.workspace);
-        // 任务完成信号：前端据此解除 pending（Error 时由 catchError 发 ERROR，前端也解除）
-        this.eventStream.submit({
-            type: EventType.DONE,
-            message: `Task completed: ${task}`,
-        });
+        this.abortController = null;
+        // 终态信号：被 stop 中断 → STOPPED（前端显示"已停止任务"）；否则 DONE。
+        // Error 由 catchError 发 ERROR，前端同样解除 pending。
+        if (abortController.signal.aborted) {
+            this.eventStream.submit({
+                type: EventType.STOPPED,
+                message: "已停止任务",
+            });
+        } else {
+            this.eventStream.submit({
+                type: EventType.DONE,
+                message: `任务完成`,
+            });
+        }
     }
 
     private getSystemMessage(workspace: Workspace): ChatMessage[] {

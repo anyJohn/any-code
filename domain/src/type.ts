@@ -16,6 +16,7 @@ export enum EventType {
     PLANNING = "Planning",
     ERROR = "Error",
     DONE = "Done",
+    STOPPED = "Stopped",
 }
 
 export interface AgentEvent {
