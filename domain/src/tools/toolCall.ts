@@ -1,16 +1,17 @@
 import { ChatCompletionMessageToolCall } from "openai/resources/index";
 import { ChatMessage } from "../type";
-import { ToolsMap } from "./functions";
-import { EventStream } from "../eventStream";
 import { EventType } from "../type";
-import type { Workspace } from "../workspace";
+import type { ToolContext } from "../context";
+import type { Tool } from "./index";
 
-const eventStream = EventStream.getInstance();
-
+/**
+ * 工具调用分发。在传入的 tools 列表里按名查 handler（不再有全局 ToolsMap）。
+ * tools 列表本身就是该 agent 的可用工具集——不在列表里 = 不可用。
+ */
 export async function toolCall(
     tooCalls: ChatCompletionMessageToolCall[],
-    accessToolKit: string[] | undefined,
-    workspace: Workspace
+    ctx: ToolContext,
+    tools: Tool[]
 ): Promise<ChatMessage[]> {
     const result: ChatMessage[] = [];
     for (const toolCall of tooCalls) {
@@ -25,16 +26,12 @@ export async function toolCall(
         }
         const funcName: string = toolCall.function.name;
 
-        if (accessToolKit && !accessToolKit.includes(funcName)) {
-            result.push({
-                role: "tool",
-                tool_call_id: toolCall.id,
-                content: `[Error] Access denied for tool: ${funcName}`,
-            });
-            continue;
-        }
-
-        if (typeof ToolsMap[funcName] !== "function") {
+        const tool = tools.find(
+            (t) =>
+                (t.schema as { function?: { name: string } }).function?.name ===
+                funcName
+        );
+        if (!tool) {
             result.push({
                 role: "tool",
                 tool_call_id: toolCall.id,
@@ -43,7 +40,7 @@ export async function toolCall(
             continue;
         }
 
-        // LLM 可能返回非法 JSON 参数，parse 失败时回传错误让模型自纠，而不是整个 agentLoop 崩掉
+        // LLM 可能返回非法 JSON 参数，parse 失败时回传错误让模型自纠
         let args: Record<string, unknown>;
         try {
             args = JSON.parse(toolCall.function.arguments || "{}");
@@ -56,8 +53,8 @@ export async function toolCall(
             continue;
         }
 
-        const toolOutput = await ToolsMap[funcName](args, workspace);
-        eventStream.submit({
+        const toolOutput = await tool.handler(args, ctx);
+        ctx.eventStream.submit({
             type: EventType.TOOL,
             message: `Tool call success: ${funcName}`,
             data: { name: funcName, args },

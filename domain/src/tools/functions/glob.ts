@@ -1,10 +1,7 @@
 import { glob } from "glob";
-import { EventStream } from "../../eventStream";
 import { EventType } from "../../type";
-import type { Workspace } from "../../workspace";
+import type { ToolContext } from "../../context";
 import { resolvePath } from "../../workspace";
-
-const eventStream = EventStream.getInstance();
 
 interface GlobArgs {
     pattern: string;
@@ -13,8 +10,9 @@ interface GlobArgs {
 
 export const globFunc = async (
     args: GlobArgs,
-    workspace: Workspace
+    ctx: ToolContext
 ): Promise<string> => {
+    const { workspace, eventStream } = ctx;
     try {
         const cwd = args.path
             ? resolvePath(workspace, args.path)

@@ -30,7 +30,7 @@ export async function callLLM(
     const payload: ChatCompletionCreateParamsNonStreaming = {
         model,
         messages,
-        tools: ToolKit.readOnlyTools, // 默认只读权限
+        tools: ToolKit.readOnlyTools.map((t) => t.schema), // 默认只读权限（schema）
         ...params,
     };
     const resp = await client.chat.completions.create(payload);

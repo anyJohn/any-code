@@ -141,26 +141,6 @@ const grepSchema: ChatCompletionTool = {
     },
 };
 
-const planSchema: ChatCompletionTool = {
-    type: "function",
-    function: {
-        name: ToolName.Plan,
-        description:
-            "Essential tool for complex tasks! Break down complicated task into 3-5 simple, actionable steps with clear objectives, then execute each step sequentially to ensure successful completion.",
-        parameters: {
-            type: "object",
-            properties: {
-                task: {
-                    type: "string",
-                    description:
-                        "The complex task to create a plan for (e.g., 'Build a todo app', 'Implement user authentication')",
-                },
-            },
-            required: ["task"],
-        },
-    },
-};
-
 const readSchema: ChatCompletionTool = {
     type: "function",
     function: {
@@ -213,7 +193,6 @@ const writeSchema: ChatCompletionTool = {
 export {
     globSchema,
     grepSchema,
-    planSchema,
     readSchema,
     writeSchema,
     editSchema,

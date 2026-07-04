@@ -1,10 +1,7 @@
 import fs from "fs/promises";
-import { EventStream } from "../../eventStream";
 import { EventType } from "../../type";
-import type { Workspace } from "../../workspace";
+import type { ToolContext } from "../../context";
 import { resolvePath } from "../../workspace";
-
-const eventStream = EventStream.getInstance();
 
 interface ReadArgs {
     filePath: string;
@@ -14,8 +11,9 @@ interface ReadArgs {
 
 export const readFunc = async (
     args: ReadArgs,
-    workspace: Workspace
+    ctx: ToolContext
 ): Promise<string> => {
+    const { workspace, eventStream } = ctx;
     try {
         eventStream.submit({
             type: EventType.TOOL,
@@ -34,11 +32,9 @@ export const readFunc = async (
         const end = Math.min(start + limit, totalLength);
         const slicedContent = content.slice(start, end);
 
-        // 获取行号信息
         const contentBeforeStart = content.slice(0, start);
         const lineNumber = (contentBeforeStart.match(/\n/g) || []).length + 1;
 
-        // 添加行号
         const lines = slicedContent.split("\n");
         const contentWithLineNumbers = lines
             .map((line, index) => `${lineNumber + index}\t${line}`)

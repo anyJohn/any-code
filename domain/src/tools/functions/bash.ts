@@ -1,10 +1,7 @@
 import { promisify } from "util";
 import { exec } from "child_process";
-import { EventStream } from "../../eventStream";
 import { EventType } from "../../type";
-import type { Workspace } from "../../workspace";
-
-const eventStream = EventStream.getInstance();
+import type { ToolContext } from "../../context";
 
 interface ExecuteBashArgs {
     command: string;
@@ -17,8 +14,9 @@ const BASH_MAX_BUFFER = 10 * 1024 * 1024;
 
 export const executeBashFunc = async (
     args: ExecuteBashArgs,
-    workspace: Workspace
+    ctx: ToolContext
 ): Promise<string> => {
+    const { workspace, eventStream } = ctx;
     try {
         eventStream.submit({
             type: EventType.TOOL,

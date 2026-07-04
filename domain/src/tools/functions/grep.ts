@@ -1,12 +1,9 @@
 import fs from "fs/promises";
 import path from "path";
 import { glob } from "glob";
-import { EventStream } from "../../eventStream";
 import { EventType } from "../../type";
-import type { Workspace } from "../../workspace";
+import type { ToolContext } from "../../context";
 import { resolvePath } from "../../workspace";
-
-const eventStream = EventStream.getInstance();
 
 interface GrepArgs {
     pattern: string;
@@ -55,8 +52,9 @@ async function searchFile(
 
 export const grepFunc = async (
     args: GrepArgs,
-    workspace: Workspace
+    ctx: ToolContext
 ): Promise<string> => {
+    const { workspace, eventStream } = ctx;
     try {
         const {
             pattern,

@@ -1,48 +1,44 @@
 import { ChatCompletionCreateParamsNonStreaming } from "openai/resources/index";
 import { callLLM } from "./llm";
-import { toolCall } from "./tools";
+import { toolCall } from "./tools/toolCall";
 import { AgentLoopResult, ChatMessage } from "./type";
-import { EventStream } from "./eventStream";
 import { EventType } from "./type";
-import type { Workspace } from "./workspace";
-
-const eventStream = EventStream.getInstance();
+import type { ToolContext } from "./context";
+import type { Tool } from "./tools";
 
 /**
- * 核心代码，实现AgentLoop，通过循环让大模型持续使用工具
- * @param task
- * @param maxIterations
- * @returns
+ * 核心代码，实现AgentLoop，通过循环让大模型持续使用工具。
+ * ctx 贯穿（eventStream + workspace）；tools 是该 agent 的工具集（schema + handler）。
  */
 export async function agentLoop(
     task: string,
     messages: ChatMessage[],
-    maxIterations = 30,
-    params?: Partial<ChatCompletionCreateParamsNonStreaming>,
-    onMessage?: (msg: ChatMessage) => void | Promise<void>,
-    workspace?: Workspace
+    maxIterations: number | undefined,
+    params: Partial<ChatCompletionCreateParamsNonStreaming> | undefined,
+    onMessage: ((msg: ChatMessage) => void | Promise<void>) | undefined,
+    ctx: ToolContext,
+    tools: Tool[]
 ): Promise<AgentLoopResult> {
-    if (!workspace) {
-        // agentLoop 必须在 workspace 上下文里跑（工具要 cwd/resolvePath）。
-        // 设计上 main.ts / plan.ts 总会传；此处守卫防止误用。
-        throw new Error("agentLoop: workspace is required");
-    }
+    const maxIter = maxIterations ?? 30;
     const userMsg: ChatMessage = {
         role: "user",
         content: task,
     };
     messages.push(userMsg);
     await onMessage?.(userMsg);
-    for (let i = 0; i < maxIterations; i++) {
-        eventStream.submit({
+    for (let i = 0; i < maxIter; i++) {
+        ctx.eventStream.submit({
             type: EventType.ITERATION,
-            message: `Iteration ${i + 1}/${maxIterations}`,
+            message: `Iteration ${i + 1}/${maxIter}`,
         });
-        const msg = await callLLM(messages, params);
+        const msg = await callLLM(messages, {
+            ...params,
+            tools: tools.map((t) => t.schema),
+        });
         messages.push(msg);
         await onMessage?.(msg);
         if (msg.content) {
-            eventStream.submit({
+            ctx.eventStream.submit({
                 type: EventType.ASSISTANT,
                 message: msg.content,
             });
@@ -53,14 +49,7 @@ export async function agentLoop(
                 messages,
             };
         } else {
-            const accessToolKit =
-                params?.tools?.map((t) => (t as any)?.function?.name) ||
-                undefined;
-            const toolResults = await toolCall(
-                msg.tool_calls,
-                accessToolKit,
-                workspace
-            );
+            const toolResults = await toolCall(msg.tool_calls, ctx, tools);
             messages.push(...toolResults);
             for (const tr of toolResults) {
                 await onMessage?.(tr);

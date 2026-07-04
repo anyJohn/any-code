@@ -7,14 +7,14 @@ import {
     InteractionRequest,
 } from "./type";
 import { agentLoop } from "./core";
-import { systemPrompt } from "./prompt";
-import { ToolKit } from "./tools";
 import { loadRule } from "./rule";
 import { loadSkills } from "./skill";
-import { loadMcpTools } from "./mcp";
 import { EventStream } from "./eventStream";
 import { SessionService, Session, SessionKey, projectKeyOf } from "./session";
 import { createWorkspace, Workspace } from "./workspace";
+import { mainAgent } from "./agent";
+import type { AgentDefinition } from "./agent";
+import type { Tool } from "./tools";
 import {
     BehaviorSubject,
     catchError,
@@ -33,6 +33,10 @@ interface AnyAgentOptions {
     rootPath: string;
     sessionId?: string;
     service?: SessionService;
+    /** agent 定义（instruction + tools）。默认 mainAgent。 */
+    definition?: AgentDefinition;
+    /** 额外工具（追加到 definition.tools 之后，如自定义 AgentTool）。 */
+    extraTools?: Tool[];
 }
 
 class AnyAgent {
@@ -43,13 +47,15 @@ class AnyAgent {
     pendingTasks$ = new BehaviorSubject<string[]>([]);
     interaction$ = new Subject<InteractionRequest>();
 
-    private eventStream = EventStream.getInstance();
+    private eventStream = new EventStream();
     private stop$ = new Subject<void>();
     private destroy$ = new Subject<void>();
     private task$ = new Subject<string>();
     private service: SessionService;
     private workspace: Workspace;
     private projectKey: string;
+    private definition: AgentDefinition;
+    private tools: Tool[];
     // session 延迟到首条用户消息时才创建，避免每次启动都落盘一个空 session
     private session: Session | null = null;
     private sessionKey: SessionKey | null = null;
@@ -58,6 +64,8 @@ class AnyAgent {
         this.service = opts.service ?? new SessionService();
         this.workspace = createWorkspace(opts.rootPath);
         this.projectKey = projectKeyOf(this.workspace.rootPath);
+        this.definition = opts.definition ?? mainAgent;
+        this.tools = [...this.definition.tools, ...(opts.extraTools ?? [])];
         this.initProcessor();
     }
 
@@ -121,6 +129,10 @@ class AnyAgent {
         return this.workspace;
     }
 
+    getTools(): Tool[] {
+        return this.tools;
+    }
+
     stop() {
         this.stop$.next();
     }
@@ -135,7 +147,7 @@ class AnyAgent {
         this.stop$.complete();
         this.destroy$.next();
         this.destroy$.complete();
-        // EventStream 是全局单例，history$ 会无限累积事件，切换时清空释放内存
+        // per-agent eventStream，切换时清空释放内存
         this.eventStream.clear();
     }
 
@@ -198,16 +210,20 @@ class AnyAgent {
             await this.service.setTitle(sessionKey, session.title);
         }
 
-        const mcpTools = loadMcpTools(this.workspace);
         const onMessage = (msg: ChatMessage) =>
             this.service.appendMessage(sessionKey, msg);
+        const ctx = {
+            workspace: this.workspace,
+            eventStream: this.eventStream,
+        };
         const { result } = await agentLoop(
             task,
             session.messages,
-            30,
-            { tools: [...ToolKit.allTools, ...mcpTools] },
+            this.definition.maxIterations,
+            {},
             onMessage,
-            this.workspace
+            ctx,
+            this.tools
         );
         saveMemory(task, result, this.workspace);
         // 任务完成信号：前端据此解除 pending（Error 时由 catchError 发 ERROR，前端也解除）
@@ -222,9 +238,9 @@ class AnyAgent {
         const rule = loadRule(workspace);
         const skills = loadSkills(workspace);
         // 告知 LLM 工作根目录，让它能把工具输出里的绝对路径对应到相对路径
-        // （Jest/webpack 报错含绝对路径，否则 LLM 认知断裂）。见 docs/workspace设计.md。
+        // （测试框架报错含绝对路径，否则 LLM 认知断裂）。见 docs/workspace设计.md。
         let sysPrompt =
-            systemPrompt +
+            this.definition.instruction +
             `\n\n# Workspace\n你的工作根目录是 ${workspace.rootPath}。` +
             `分析工具输出中的绝对路径时，将其与该根目录对应。`;
         if (memory) {

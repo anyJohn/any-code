@@ -1,10 +1,7 @@
 import fs from "fs/promises";
-import { EventStream } from "../../eventStream";
 import { EventType } from "../../type";
-import type { Workspace } from "../../workspace";
+import type { ToolContext } from "../../context";
 import { resolvePath } from "../../workspace";
-
-const eventStream = EventStream.getInstance();
 
 interface EditFileArgs {
     filePath: string;
@@ -14,8 +11,9 @@ interface EditFileArgs {
 
 export const editFunc = async (
     args: EditFileArgs,
-    workspace: Workspace
+    ctx: ToolContext
 ): Promise<string> => {
+    const { workspace, eventStream } = ctx;
     try {
         const { oldString, newString } = args;
         const filePath = resolvePath(workspace, args.filePath);

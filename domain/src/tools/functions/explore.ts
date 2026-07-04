@@ -1,11 +1,8 @@
 import fs from "fs/promises";
 import path from "path";
-import { EventStream } from "../../eventStream";
 import { EventType } from "../../type";
-import type { Workspace } from "../../workspace";
+import type { ToolContext } from "../../context";
 import { resolvePath } from "../../workspace";
-
-const eventStream = EventStream.getInstance();
 
 interface ExploreArgs {
     directoryPath?: string;
@@ -113,8 +110,9 @@ function formatTree(
 
 export const exploreFunc = async (
     args: ExploreArgs,
-    workspace: Workspace
+    ctx: ToolContext
 ): Promise<string> => {
+    const { workspace, eventStream } = ctx;
     try {
         const { maxDepth = 3 } = args;
         const directoryPath = args.directoryPath
