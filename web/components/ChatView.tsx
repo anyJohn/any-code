@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
     Collapsible,
     CollapsibleContent,
@@ -103,7 +104,13 @@ function TurnBlock({
                     {item.iteration.message}
                 </span>
             )}
-            {item.assistant && <MarkdownRenderer content={item.assistant.message} />}
+            {item.assistant && (
+                <div className="flex py-1">
+                    <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-muted px-3 py-2">
+                        <MarkdownRenderer content={item.assistant.message} />
+                    </div>
+                </div>
+            )}
             {item.tools.map((t) => (
                 <div key={t.id} className="ml-1">
                     <ToolRow
@@ -118,13 +125,31 @@ function TurnBlock({
 }
 
 export function ChatView({ agentId }: { agentId: string }) {
-    const { events, pending, submit, stop } = useAgent(agentId);
+    const { events, pending, historyLoading, submit, stop } = useAgent(agentId);
     const [draft, setDraft] = useState("");
     const [openTools, setOpenTools] = useState<Record<string, boolean>>({});
     const [openSubs, setOpenSubs] = useState<Record<string, boolean>>({});
     const scrollRef = useRef<HTMLDivElement>(null);
 
     const renderItems = useMemo(() => toRenderItems(events), [events]);
+
+    // pending 且本轮助手尚未回实质内容（Assistant 文本 / Tool 调用）→ 显示 typing。
+    // 注意 agent 在 LLM 调用前就发 Iteration 事件，所以只判 last is User 会亚毫秒不可见；
+    // 放宽为「上一条 User 之后无 Assistant/Tool 事件」= 仍在思考。
+    const showTyping = (() => {
+        if (!pending) return false;
+        let lastUser = -1;
+        for (let i = events.length - 1; i >= 0; i--) {
+            if (events[i].type === "User") {
+                lastUser = i;
+                break;
+            }
+        }
+        if (lastUser < 0) return false;
+        return events
+            .slice(lastUser + 1)
+            .every((e) => e.type !== "Assistant" && e.type !== "Tool");
+    })();
 
     const toggleTool = (id: string) =>
         setOpenTools((p) => ({ ...p, [id]: !p[id] }));
@@ -262,7 +287,32 @@ export function ChatView({ agentId }: { agentId: string }) {
                             </div>
                         );
                     })}
-                    {events.length === 0 && (
+                    {historyLoading && events.length === 0 && (
+                        <div className="flex flex-col gap-2 py-2">
+                            <Skeleton className="h-8 w-1/3" />
+                            <Skeleton className="h-20 w-2/3" />
+                            <Skeleton className="h-20 w-1/2" />
+                        </div>
+                    )}
+                    {showTyping && (
+                        <div className="flex py-1">
+                            <div className="rounded-2xl rounded-bl-sm bg-muted px-3 py-2.5 flex items-center gap-1">
+                                <span
+                                    className="size-1.5 rounded-full bg-muted-foreground/60 animate-bounce"
+                                    style={{ animationDelay: "0ms" }}
+                                />
+                                <span
+                                    className="size-1.5 rounded-full bg-muted-foreground/60 animate-bounce"
+                                    style={{ animationDelay: "150ms" }}
+                                />
+                                <span
+                                    className="size-1.5 rounded-full bg-muted-foreground/60 animate-bounce"
+                                    style={{ animationDelay: "300ms" }}
+                                />
+                            </div>
+                        </div>
+                    )}
+                    {!historyLoading && events.length === 0 && (
                         <p className="text-sm text-muted-foreground py-4 text-center">
                             发送一条消息开始对话
                         </p>

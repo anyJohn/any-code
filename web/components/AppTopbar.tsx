@@ -28,18 +28,23 @@ export function AppTopbar() {
     const { selected, workspaces } = useAppSelector(selectWorkspace);
     const dispatch = useAppDispatch();
     const [pickerOpen, setPickerOpen] = useState(false);
+    const [addError, setAddError] = useState("");
 
     useEffect(() => {
         dispatch(refreshWorkspaces());
     }, [dispatch]);
 
     const onPicked = async (path: string) => {
+        setAddError("");
         const meta = await apiJson<WorkspaceMeta>("/api/workspaces", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ path }),
         });
-        if (!meta) return; // 添加失败：不切换选中，交给下拉刷新
+        if (!meta) {
+            setAddError("添加工作区失败，请重试");
+            return;
+        }
         await dispatch(refreshWorkspaces());
         dispatch(setSelected(meta));
     };
@@ -90,10 +95,18 @@ export function AppTopbar() {
                     {selected.rootPath}
                 </span>
             )}
+            {addError && (
+                <span className="text-xs text-destructive truncate">
+                    {addError}
+                </span>
+            )}
 
             <DirectoryPicker
                 open={pickerOpen}
-                onOpenChange={setPickerOpen}
+                onOpenChange={(v) => {
+                    setPickerOpen(v);
+                    if (!v) setAddError("");
+                }}
                 onPicked={onPicked}
             />
         </div>

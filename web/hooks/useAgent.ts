@@ -16,6 +16,7 @@ import {
 export function useAgent(agentId: string) {
     const [events, setEvents] = useState<AgentEvent[]>([]);
     const [pending, setPending] = useState(false);
+    const [historyLoading, setHistoryLoading] = useState(true);
     const esRef = useRef<EventSource | null>(null);
     // 防止同一 agentId 的历史被重复加载：dev 下 React StrictMode 会双调用
     // effect，裸 append 会让两份历史（各含 hist-turn-0）叠加 → React key 撞车。
@@ -27,12 +28,17 @@ export function useAgent(agentId: string) {
         historyLoadedFor.current = agentId;
         try {
             const res = await fetch(`/api/agents/${agentId}/history`);
-            if (!res.ok) return;
+            if (!res.ok) {
+                setHistoryLoading(false);
+                return;
+            }
             const msgs = (await res.json()) as HistoryMessage[];
             // 首次加载直接替换（此时尚无实时事件），彻底避免重复
             setEvents(messagesToEvents(msgs));
+            setHistoryLoading(false);
         } catch {
             historyLoadedFor.current = null; // 失败可重试
+            setHistoryLoading(false);
             // 新建 agent（首条消息前 session 为 null）或历史为空，忽略
         }
     }, [agentId]);
@@ -104,5 +110,5 @@ export function useAgent(agentId: string) {
         fetch(`/api/agents/${agentId}/stop`, { method: "POST" });
     }, [agentId]);
 
-    return { events, pending, submit, stop };
+    return { events, pending, historyLoading, submit, stop };
 }

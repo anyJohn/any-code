@@ -96,6 +96,30 @@ describe("useAgent (TEST-005 TC-005.6/.7, B-004/B-011)", () => {
         expect(types).toContain("Assistant");
     });
 
+    it("historyLoading 初始 true，历史加载完转 false", async () => {
+        setup([]);
+        const { result } = renderHook(() => useAgent("a1"));
+        expect(result.current.historyLoading).toBe(true);
+        await act(() => Promise.resolve());
+        await act(() => Promise.resolve());
+        expect(result.current.historyLoading).toBe(false);
+    });
+
+    it("history 加载失败也解除 historyLoading", async () => {
+        // fetch /history 返回 !ok
+        const f = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+        f.mockImplementation(async (url: string) => {
+            if (typeof url === "string" && url.endsWith("/history")) {
+                return { ok: false, json: async () => [] };
+            }
+            return { ok: true, json: async () => ({ status: "accepted" }) } as any;
+        });
+        const { result } = renderHook(() => useAgent("a1"));
+        await act(() => Promise.resolve());
+        await act(() => Promise.resolve());
+        expect(result.current.historyLoading).toBe(false);
+    });
+
     it("卸载时关闭 EventSource", async () => {
         setup([]);
         const { unmount } = renderHook(() => useAgent("a1"));

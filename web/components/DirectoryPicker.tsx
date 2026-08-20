@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronUp, Folder, Check } from "lucide-react";
 import { apiJson } from "@/lib/api";
 
@@ -91,7 +92,11 @@ export function DirectoryPicker({
                     {error ? (
                         <div className="p-3 text-sm text-destructive">{error}</div>
                     ) : loading ? (
-                        <div className="p-3 text-sm text-muted-foreground">加载中…</div>
+                        <div className="p-2 flex flex-col gap-1">
+                            {Array.from({ length: 6 }).map((_, i) => (
+                                <Skeleton key={i} className="h-8 w-full rounded" />
+                            ))}
+                        </div>
                     ) : dirs.length === 0 ? (
                         <div className="p-3 text-sm text-muted-foreground">无子目录</div>
                     ) : (

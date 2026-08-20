@@ -11,6 +11,7 @@ import {
 } from "@/store/workspaceSlice";
 import type { WorkspaceMeta } from "@any-code/domain";
 import { ChatView } from "@/components/ChatView";
+import { Skeleton } from "@/components/ui/skeleton";
 import { apiJson } from "@/lib/api";
 
 interface AgentInfo {
@@ -72,8 +73,10 @@ export default function ChatPage() {
 
     if (info === null) {
         return (
-            <div className="h-full flex items-center justify-center">
-                <p className="text-sm text-muted-foreground">加载中…</p>
+            <div className="h-full w-full max-w-3xl mx-auto px-4 py-4 flex flex-col gap-2">
+                <Skeleton className="h-8 w-1/3" />
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-full" />
             </div>
         );
     }

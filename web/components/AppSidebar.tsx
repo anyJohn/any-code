@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAppDispatch, useAppSelector } from "@/hooks/useRedux";
 import {
     selectWorkspace,
@@ -16,22 +16,50 @@ import {
     CollapsibleContent,
 } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronRight, MessageSquare, Folder } from "lucide-react";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogFooter,
+    DialogTitle,
+    DialogClose,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ChevronRight, MessageSquare, Folder, Trash2, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiJson } from "@/lib/api";
+
+type SessionsStatus = "loading" | "ready" | "error";
 
 /**
  * AppSidebar —— 工作区 Collapsible + sessions。
  * 双重高亮：工作区行 selected.projectKey + 会话行 activeSessionId。
+ * 会话支持删除（弹窗二次确认）与重命名（inline 编辑）。
  */
 export function AppSidebar() {
     const { selected, workspaces, activeSessionId } =
         useAppSelector(selectWorkspace);
     const dispatch = useAppDispatch();
     const router = useRouter();
+    const pathname = usePathname();
 
     const [sessionsMap, setSessionsMap] = useState<Record<string, SessionMeta[]>>({});
+    const [sessionsStatus, setSessionsStatus] = useState<Record<string, SessionsStatus>>({});
     const [openKeys, setOpenKeys] = useState<Record<string, boolean>>({});
+    const [busy, setBusy] = useState(false); // newChat/resume 按钮态
+    const [sidebarErr, setSidebarErr] = useState("");
+    // 删除目标（弹窗受控）；重命名目标（inline 编辑受控）
+    const [deleteTarget, setDeleteTarget] = useState<{
+        w: WorkspaceMeta;
+        s: SessionMeta;
+    } | null>(null);
+    const [renameTarget, setRenameTarget] = useState<{
+        w: WorkspaceMeta;
+        s: SessionMeta;
+        value: string;
+    } | null>(null);
 
     useEffect(() => {
         dispatch(refreshWorkspaces());
@@ -49,13 +77,16 @@ export function AppSidebar() {
     }, [selected]);
 
     const loadSessions = async (w: WorkspaceMeta) => {
-        // apiJson 内部对 dev 冷编译 5xx 重试一次，失败返回 null（不抛未捕获异常）
+        setSessionsStatus((p) => ({ ...p, [w.projectKey]: "loading" }));
         const list = await apiJson<SessionMeta[]>(
             `/api/workspaces/${w.projectKey}/sessions`
         );
-        if (list) {
-            setSessionsMap((p) => ({ ...p, [w.projectKey]: list }));
+        if (list === null) {
+            setSessionsStatus((p) => ({ ...p, [w.projectKey]: "error" }));
+            return;
         }
+        setSessionsMap((p) => ({ ...p, [w.projectKey]: list }));
+        setSessionsStatus((p) => ({ ...p, [w.projectKey]: "ready" }));
     };
 
     const onToggle = (w: WorkspaceMeta) => {
@@ -66,17 +97,27 @@ export function AppSidebar() {
     };
 
     const newChat = async (w: WorkspaceMeta) => {
+        if (busy) return;
+        setBusy(true);
+        setSidebarErr("");
         const data = await apiJson<{ id: string }>("/api/agents", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ workspacePath: w.rootPath }),
         });
-        if (!data) return; // 创建失败时不跳转，避免落到无效路由
-        dispatch(setActiveSession(null)); // 新对话首条消息后才落盘
+        setBusy(false);
+        if (!data) {
+            setSidebarErr("创建对话失败，请重试");
+            return;
+        }
+        dispatch(setActiveSession(null));
         router.push(`/chat/${data.id}`);
     };
 
     const resume = async (w: WorkspaceMeta, sessionId: string) => {
+        if (busy) return;
+        setBusy(true);
+        setSidebarErr("");
         const data = await apiJson<{ id: string }>("/api/agents", {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -85,9 +126,72 @@ export function AppSidebar() {
                 sessionId,
             }),
         });
-        if (!data) return;
-        dispatch(setActiveSession(sessionId)); // 乐观高亮该会话
+        setBusy(false);
+        if (!data) {
+            setSidebarErr("打开对话失败，请重试");
+            return;
+        }
+        dispatch(setActiveSession(sessionId));
         router.push(`/chat/${data.id}`);
+    };
+
+    const confirmDelete = async () => {
+        const t = deleteTarget;
+        if (!t) return;
+        const r = await apiJson<{ status: string }>(
+            `/api/workspaces/${t.w.projectKey}/sessions/${t.s.id}`,
+            { method: "DELETE" }
+        );
+        setDeleteTarget(null);
+        if (!r) {
+            setSidebarErr("删除会话失败，请重试");
+            return;
+        }
+        // 本地 filter 掉（DEC AC-001）
+        setSessionsMap((p) => ({
+            ...p,
+            [t.w.projectKey]: (p[t.w.projectKey] ?? []).filter(
+                (s) => s.id !== t.s.id
+            ),
+        }));
+        // 删的是当前活动 session → 清 agent + 跳回列表（AC-003）
+        if (activeSessionId === t.s.id) {
+            const m = pathname?.match(/^\/chat\/(.+)$/);
+            if (m) {
+                await apiJson(`/api/agents/${m[1]}`, { method: "DELETE" });
+            }
+            dispatch(setActiveSession(null));
+            router.push("/");
+        }
+    };
+
+    const submitRename = async (t: NonNullable<typeof renameTarget>) => {
+        const title = t.value.trim();
+        if (!title || title === t.s.title) {
+            setRenameTarget(null);
+            return;
+        }
+        const r = await apiJson<{ status: string; title: string }>(
+            `/api/workspaces/${t.w.projectKey}/sessions/${t.s.id}`,
+            {
+                method: "PATCH",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ title }),
+            }
+        );
+        if (!r) {
+            setSidebarErr("重命名会话失败，请重试");
+            setRenameTarget(null);
+            return;
+        }
+        // 本地更新 title（AC-002）
+        setSessionsMap((p) => ({
+            ...p,
+            [t.w.projectKey]: (p[t.w.projectKey] ?? []).map((s) =>
+                s.id === t.s.id ? { ...s, title } : s
+            ),
+        }));
+        setRenameTarget(null);
     };
 
     return (
@@ -122,38 +226,121 @@ export function AppSidebar() {
                             <span className="truncate">{w.name}</span>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
-                            <div className="ml-4 my-1 flex flex-col gap-0.5 border-l border-border pl-2">
+                            <div className="ml-4 my-1 flex flex-col gap-1 border-l border-border pl-2">
                                 <button
-                                    className="flex items-center gap-1.5 px-2 py-1 rounded text-xs hover:bg-accent text-left"
+                                    className="flex items-center gap-1.5 px-2 py-1 rounded text-xs hover:bg-accent text-left disabled:opacity-50"
+                                    disabled={busy}
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         newChat(w);
                                     }}
                                 >
-                                    <MessageSquare className="size-3" /> 新建对话
+                                    <MessageSquare className="size-3" /> {busy ? "创建中…" : "新建对话"}
                                 </button>
-                                {(sessionsMap[w.projectKey] ?? []).map((s) => (
-                                    <button
-                                        key={s.id}
-                                        className={cn(
-                                            "flex items-center gap-1.5 px-2 py-1 rounded text-xs hover:bg-accent text-left truncate",
-                                            selected?.projectKey ===
-                                                w.projectKey &&
-                                                activeSessionId === s.id &&
-                                                "bg-accent text-foreground"
-                                        )}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            resume(w, s.id);
-                                        }}
-                                    >
-                                        <MessageSquare className="size-3 shrink-0 text-muted-foreground" />
-                                        <span className="truncate">
-                                            {s.title || "（无标题）"}
-                                        </span>
-                                    </button>
-                                ))}
-                                {openKeys[w.projectKey] &&
+                                {sidebarErr && (
+                                    <p className="px-2 py-0.5 text-[11px] text-destructive">
+                                        {sidebarErr}
+                                    </p>
+                                )}
+                                {(sessionsStatus[w.projectKey] === "loading" ||
+                                    (!sessionsStatus[w.projectKey] &&
+                                        !sessionsMap[w.projectKey])) &&
+                                    Array.from({ length: 3 }).map((_, i) => (
+                                        <Skeleton
+                                            key={i}
+                                            className="h-6 mx-2 rounded"
+                                        />
+                                    ))}
+                                {sessionsStatus[w.projectKey] === "error" && (
+                                    <p className="px-2 py-1 text-[11px] text-destructive">
+                                        加载会话失败
+                                    </p>
+                                )}
+                                {sessionsStatus[w.projectKey] === "ready" &&
+                                    (sessionsMap[w.projectKey] ?? []).map((s) => {
+                                        const rt = renameTarget?.s.id === s.id ? renameTarget : null;
+                                        const isActive =
+                                            selected?.projectKey === w.projectKey &&
+                                            activeSessionId === s.id;
+                                        return (
+                                            <div
+                                                key={s.id}
+                                                className={cn(
+                                                    "group flex items-center gap-1 px-2 py-1 rounded border border-transparent hover:border-border hover:bg-accent text-xs truncate",
+                                                    isActive && "bg-accent text-foreground border-border"
+                                                )}
+                                            >
+                                                <MessageSquare className="size-3 shrink-0 text-muted-foreground" />
+                                                {rt ? (
+                                                    <Input
+                                                        className="h-5 px-1 text-xs flex-1"
+                                                        value={rt.value}
+                                                        autoFocus
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        onChange={(e) =>
+                                                            setRenameTarget({
+                                                                ...rt,
+                                                                value: e.target.value,
+                                                            })
+                                                        }
+                                                        onKeyDown={(e) => {
+                                                            e.stopPropagation();
+                                                            if (e.key === "Enter")
+                                                                submitRename(rt);
+                                                            else if (e.key === "Escape")
+                                                                setRenameTarget(null);
+                                                        }}
+                                                        onBlur={() => setRenameTarget(null)}
+                                                    />
+                                                ) : (
+                                                    <button
+                                                        className="flex-1 truncate text-left"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            resume(w, s.id);
+                                                        }}
+                                                        onDoubleClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setRenameTarget({
+                                                                w,
+                                                                s,
+                                                                value: s.title || "",
+                                                            });
+                                                        }}
+                                                    >
+                                                        {s.title || "（无标题）"}
+                                                    </button>
+                                                )}
+                                                {!rt && (
+                                                    <span className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+                                                        <button
+                                                            title="重命名"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setRenameTarget({
+                                                                    w,
+                                                                    s,
+                                                                    value: s.title || "",
+                                                                });
+                                                            }}
+                                                        >
+                                                            <Pencil className="size-3 text-muted-foreground" />
+                                                        </button>
+                                                        <button
+                                                            title="删除"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setDeleteTarget({ w, s });
+                                                            }}
+                                                        >
+                                                            <Trash2 className="size-3 text-muted-foreground" />
+                                                        </button>
+                                                    </span>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                {sessionsStatus[w.projectKey] === "ready" &&
                                     (sessionsMap[w.projectKey] ?? []).length === 0 && (
                                         <p className="px-2 py-1 text-[11px] text-muted-foreground">
                                             暂无会话
@@ -164,6 +351,28 @@ export function AppSidebar() {
                     </Collapsible>
                 ))}
             </div>
+
+            <Dialog
+                open={!!deleteTarget}
+                onOpenChange={(o) => !o && setDeleteTarget(null)}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>删除会话？</DialogTitle>
+                    </DialogHeader>
+                    <p className="text-sm text-muted-foreground">
+                        删除后无法恢复：{deleteTarget?.s.title || "（无标题）"}
+                    </p>
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <Button variant="ghost">取消</Button>
+                        </DialogClose>
+                        <Button variant="destructive" onClick={confirmDelete}>
+                            删除
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </ScrollArea>
     );
 }
