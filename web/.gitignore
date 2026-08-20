@@ -1,9 +1,10 @@
-# Nuxt
-.nuxt
-.output
-.data
+# Next
+.next
+.next-env.d.ts
+out
 dist
 node_modules
+tsconfig.tsbuildinfo
 
 # Env
 .env
@@ -12,3 +13,6 @@ node_modules
 
 # Logs
 *.log
+
+# Playwright CLI artifacts（从本目录运行 playwright-cli 会写入，勿提交）
+.playwright-cli/

@@ -5,4 +5,15 @@ packages:
 allowBuilds:
   "@parcel/watcher": true
   esbuild: true
+  msw: false
+  sharp: false
   vue-demi: true
+minimumReleaseAgeExclude:
+  - '@vitest/expect@4.1.11'
+  - '@vitest/mocker@4.1.11'
+  - '@vitest/pretty-format@4.1.11'
+  - '@vitest/runner@4.1.11'
+  - '@vitest/snapshot@4.1.11'
+  - '@vitest/spy@4.1.11'
+  - '@vitest/utils@4.1.11'
+  - vitest@4.1.11

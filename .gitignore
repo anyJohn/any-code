@@ -27,3 +27,4 @@ SOUL.md
 .agent*/
 .anycode/
 .playwright-mcp/
+.playwright-cli/
