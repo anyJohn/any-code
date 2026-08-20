@@ -28,3 +28,6 @@ SOUL.md
 .anycode/
 .playwright-mcp/
 .playwright-cli/
+
+# RDD process state（session-only；永久规格 .rdd/items/ 入库，state.yml 不入库）
+.rdd/state.yml
