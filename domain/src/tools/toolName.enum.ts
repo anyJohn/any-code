@@ -7,6 +7,7 @@ enum ToolName {
     Plan = "plan",
     Glob = "glob",
     Grep = "grep",
+    SaveMemory = "save_memory",
 }
 
 export { ToolName };

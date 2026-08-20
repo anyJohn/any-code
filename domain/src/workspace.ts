@@ -138,3 +138,13 @@ export function resolvePath(workspace: Workspace, userPath: string): string {
 export function workspaceConfigDir(workspace: Workspace): string {
     return path.join(workspace.rootPath, ".anycode");
 }
+
+/** 全局配置目录：~/.anycode（工作区注册表 + 全局 memory）。与项目级 workspaceConfigDir 对应。 */
+export function globalConfigDir(): string {
+    return REGISTRY_DIR;
+}
+
+/** 全局记忆文件：~/.anycode/memory.md（跨项目通用记忆）。 */
+export function globalMemoryFile(): string {
+    return path.join(REGISTRY_DIR, "memory.md");
+}

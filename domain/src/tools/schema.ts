@@ -190,6 +190,32 @@ const writeSchema: ChatCompletionTool = {
     },
 };
 
+const saveMemorySchema: ChatCompletionTool = {
+    type: "function",
+    function: {
+        name: ToolName.SaveMemory,
+        description:
+            "Save a piece of information to long-term memory for future sessions. Use this when you learn something worth remembering across conversations (user preferences, key decisions, project conventions, durable facts). Do NOT use it for transient task state or trivial chatter. Default scope is project (this workspace); use global for cross-project preferences.",
+        parameters: {
+            type: "object",
+            properties: {
+                content: {
+                    type: "string",
+                    description:
+                        "The memory content to persist. Write it as a concise, self-contained note (you control phrasing).",
+                },
+                scope: {
+                    type: "string",
+                    enum: ["project", "global"],
+                    description:
+                        "project = this workspace only (default); global = cross-project general preference.",
+                },
+            },
+            required: ["content"],
+        },
+    },
+};
+
 export {
     globSchema,
     grepSchema,
@@ -198,4 +224,5 @@ export {
     editSchema,
     exploreSchema,
     executeBashSchema,
+    saveMemorySchema,
 };

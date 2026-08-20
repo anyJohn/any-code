@@ -1,4 +1,4 @@
-import { loadMemory, saveMemory } from "./memory";
+import { loadMemory } from "./memory";
 import {
     AgentStatus,
     AgentEvent,
@@ -222,7 +222,7 @@ class AnyAgent {
             eventStream: this.eventStream,
             signal: abortController.signal,
         };
-        const { result } = await agentLoop(
+        await agentLoop(
             task,
             session.messages,
             this.definition.maxIterations,
@@ -231,7 +231,7 @@ class AnyAgent {
             ctx,
             this.tools
         );
-        saveMemory(task, result, this.workspace);
+        // 记忆改由 save_memory 工具触发（LLM 在循环内主动调用），不再无条件全记
         this.abortController = null;
         // 终态信号：被 stop 中断 → STOPPED（前端显示"已停止任务"）；否则 DONE。
         // Error 由 catchError 发 ERROR，前端同样解除 pending。
@@ -261,6 +261,12 @@ class AnyAgent {
         if (memory) {
             sysPrompt += memory;
         }
+        // 引导 LLM 主动用 save_memory 工具记值得长期记住的信息。
+        // 仅在确有必要时记，避免噪音；闲聊/无意义任务不应记。
+        sysPrompt +=
+            "\n\n# Memory\n你有 save_memory 工具，可主动记录值得跨会话记住的信息" +
+            "（用户偏好、关键决策、项目约定、持久事实）。scope=project 记项目级，" +
+            "global 记跨项目通用。仅在确有必要时调用，勿记录琐碎或临时任务状态。";
         if (skills) {
             sysPrompt += skills;
         }

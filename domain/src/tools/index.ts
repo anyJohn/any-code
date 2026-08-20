@@ -8,6 +8,7 @@ import {
     editSchema,
     exploreSchema,
     executeBashSchema,
+    saveMemorySchema,
 } from "./schema";
 import { executeBashFunc } from "./functions/bash";
 import { readFunc } from "./functions/read";
@@ -16,6 +17,7 @@ import { writeFunc } from "./functions/write";
 import { exploreFunc } from "./functions/explore";
 import { globFunc } from "./functions/glob";
 import { grepFunc } from "./functions/grep";
+import { saveMemoryFunc } from "./functions/saveMemory";
 
 /**
  * Tool = schema（给 LLM）+ handler（执行）。统一内置工具与 AgentTool，
@@ -33,10 +35,23 @@ const writeTool: Tool = { schema: writeSchema, handler: writeFunc };
 const exploreTool: Tool = { schema: exploreSchema, handler: exploreFunc };
 const globTool: Tool = { schema: globSchema, handler: globFunc };
 const grepTool: Tool = { schema: grepSchema, handler: grepFunc };
+const saveMemoryTool: Tool = {
+    schema: saveMemorySchema,
+    handler: saveMemoryFunc,
+};
 
 // plan 不再是 builtin——它由 AgentTool(planAgent) 提供（见 agent.ts）。
 const ToolKit = {
-    allTools: [bashTool, readTool, editTool, writeTool, exploreTool, globTool, grepTool],
+    allTools: [
+        bashTool,
+        readTool,
+        editTool,
+        writeTool,
+        exploreTool,
+        globTool,
+        grepTool,
+        saveMemoryTool,
+    ],
     readOnlyTools: [readTool, exploreTool, globTool, grepTool],
     executeTools: [
         bashTool,
@@ -46,6 +61,7 @@ const ToolKit = {
         exploreTool,
         globTool,
         grepTool,
+        saveMemoryTool,
     ],
 };
 

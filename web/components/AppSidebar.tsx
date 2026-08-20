@@ -147,14 +147,14 @@ export function AppSidebar() {
             setSidebarErr("删除会话失败，请重试");
             return;
         }
-        // 本地 filter 掉（DEC AC-001）
+        // 本地 filter 掉
         setSessionsMap((p) => ({
             ...p,
             [t.w.projectKey]: (p[t.w.projectKey] ?? []).filter(
                 (s) => s.id !== t.s.id
             ),
         }));
-        // 删的是当前活动 session → 清 agent + 跳回列表（AC-003）
+        // 删的是当前活动 session → 清 agent + 跳回列表
         if (activeSessionId === t.s.id) {
             const m = pathname?.match(/^\/chat\/(.+)$/);
             if (m) {
@@ -184,7 +184,7 @@ export function AppSidebar() {
             setRenameTarget(null);
             return;
         }
-        // 本地更新 title（AC-002）
+        // 本地更新 title
         setSessionsMap((p) => ({
             ...p,
             [t.w.projectKey]: (p[t.w.projectKey] ?? []).map((s) =>

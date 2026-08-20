@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { SessionService, type SessionKey } from "@any-code/domain";
 
 // DELETE /api/workspaces/:projectKey/sessions/:sessionId —— 删除 session 磁盘文件
-// domain SessionService.remove 对不存在的文件静默（幂等）。与 agentPool 解耦（DEC-001）。
+// domain SessionService.remove 对不存在的文件静默（幂等）。与 agentPool 解耦。
 export async function DELETE(
     _req: Request,
     ctx: { params: Promise<{ projectKey: string; sessionId: string }> }
