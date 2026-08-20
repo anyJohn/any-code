@@ -45,6 +45,14 @@ export function getAgent(id: string): AnyAgent | null {
     return agent ?? null;
 }
 
+/** 从池中移除并销毁指定 agent（删当前活动 session 时调用，避免悬空 agent）。不存在则静默。 */
+export function removeAgent(id: string): void {
+    const agent = pool.get(id);
+    if (agent) agent.destroy();
+    pool.delete(id);
+    lastUsed.delete(id);
+}
+
 /** 仅供测试：直接注入 mock agent。 */
 export function __setAgentForTest(id: string, agent: AnyAgent) {
     pool.set(id, agent);

@@ -1,18 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // mock agentPool：注入 fake agent（用 vi.hoisted 避免 hoisting 引用未初始化变量）
-const { getAgent, createAgent } = vi.hoisted(() => ({
+const { getAgent, createAgent, removeAgent } = vi.hoisted(() => ({
     getAgent: vi.fn(),
     createAgent: vi.fn(),
+    removeAgent: vi.fn(),
 }));
 vi.mock("@/lib/server/agentPool", () => ({
     getAgent,
     createAgent,
+    removeAgent,
     __setAgentForTest: vi.fn(),
 }));
 
 import { POST as createAgentRoute } from "@/app/api/agents/route";
-import { GET as agentMeta } from "@/app/api/agents/[id]/route";
+import { GET as agentMeta, DELETE as agentDelete } from "@/app/api/agents/[id]/route";
 import { GET as agentHistory } from "@/app/api/agents/[id]/history/route";
 import { POST as agentMessages } from "@/app/api/agents/[id]/messages/route";
 import { POST as agentStop } from "@/app/api/agents/[id]/stop/route";
@@ -33,6 +35,7 @@ describe("agents API (TEST-002)", () => {
     beforeEach(() => {
         getAgent.mockReset();
         createAgent.mockReset();
+        removeAgent.mockReset();
     });
 
     it("TC-002 create: 缺 workspacePath → 400", async () => {
@@ -105,5 +108,12 @@ describe("agents API (TEST-002)", () => {
         const r = await agentStop(req("http://x/api/agents/a1", { method: "POST" }), ctx("a1"));
         expect((await r.json()).status).toBe("stopped");
         expect(stop).toHaveBeenCalledOnce();
+    });
+
+    it("DELETE: 调 removeAgent + 返回 removed（幂等，不验证存在）", async () => {
+        const r = await agentDelete(req("http://x/api/agents/a1", { method: "DELETE" }), ctx("a1"));
+        expect(r.status).toBe(200);
+        expect((await r.json()).status).toBe("removed");
+        expect(removeAgent).toHaveBeenCalledWith("a1");
     });
 });
