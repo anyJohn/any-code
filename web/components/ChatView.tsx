@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -141,6 +141,7 @@ export function ChatView({
     const [openTools, setOpenTools] = useState<Record<string, boolean>>({});
     const [openSubs, setOpenSubs] = useState<Record<string, boolean>>({});
     const scrollRef = useRef<HTMLDivElement>(null);
+    const didInit = useRef(false);
 
     const renderItems = useMemo(() => toRenderItems(events), [events]);
 
@@ -167,10 +168,16 @@ export function ChatView({
     const toggleSub = (id: string) =>
         setOpenSubs((p) => ({ ...p, [id]: !p[id] }));
 
-    // 新消息自动滚到底；用户上滑阅读时不打断；首次历史灌入强制滚到底
-    useEffect(() => {
+    // 首次历史灌入强制滚到底（展示最新）；之后用户上滑阅读时不打断，仅 nearBottom 时滚。
+    // useLayoutEffect 在 paint 前滚，避免闪顶。按 sessionId key 重挂载时 didInit 重置。
+    useLayoutEffect(() => {
         const el = scrollRef.current;
         if (!el) return;
+        if (!didInit.current) {
+            didInit.current = true;
+            el.scrollTop = el.scrollHeight;
+            return;
+        }
         const nearBottom =
             el.scrollHeight - el.scrollTop - el.clientHeight < 200;
         if (nearBottom) el.scrollTop = el.scrollHeight;

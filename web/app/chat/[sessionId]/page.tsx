@@ -117,6 +117,7 @@ export default function ChatPage() {
 
     return (
         <ChatView
+            key={ready.sessionId ?? "new"}
             sessionId={ready.sessionId}
             rootPath={ready.rootPath}
             initialEvents={ready.initialEvents}
