@@ -26,7 +26,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronRight, MessageSquare, Folder, Trash2, Pencil } from "lucide-react";
+import { ChevronRight, MessageSquare, Folder, Trash2, Pencil, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiJson } from "@/lib/api";
 
@@ -46,7 +46,6 @@ export function AppSidebar() {
     const [sessionsMap, setSessionsMap] = useState<Record<string, SessionMeta[]>>({});
     const [sessionsStatus, setSessionsStatus] = useState<Record<string, SessionsStatus>>({});
     const [openKeys, setOpenKeys] = useState<Record<string, boolean>>({});
-    const [busy, setBusy] = useState(false); // newChat/resume 按钮态
     const [sidebarErr, setSidebarErr] = useState("");
     // 删除目标（弹窗受控）；重命名目标（inline 编辑受控）
     const [deleteTarget, setDeleteTarget] = useState<{
@@ -94,17 +93,23 @@ export function AppSidebar() {
         setOpenKeys((p) => ({ ...p, [w.projectKey]: willOpen }));
     };
 
+    // 点 workspace 名称 → 选中 + 展开 + 跳总览页（首页展示该工作区会话列表）
+    const onOpenWorkspace = (w: WorkspaceMeta) => {
+        dispatch(setSelected(w));
+        setOpenKeys((p) => ({ ...p, [w.projectKey]: true }));
+        if (!sessionsMap[w.projectKey]) loadSessions(w);
+        router.push("/");
+    };
+
     // 目标 C：newChat/resume 不再 POST 建 agent——只导航。session 由 useAgent 在首条消息时建（两步法），
     // 历史由 chat 页 GET /history 直读盘。故这里无网络往返、无失败态。
     const newChat = (w: WorkspaceMeta) => {
-        if (busy) return;
         dispatch(setSelected(w));
         dispatch(setActiveSession(null));
         router.push(`/chat/new`);
     };
 
     const resume = (w: WorkspaceMeta, sessionId: string) => {
-        if (busy) return;
         dispatch(setSelected(w));
         dispatch(setActiveSession(sessionId));
         router.push(`/chat/${sessionId}`);
@@ -179,35 +184,49 @@ export function AppSidebar() {
                         open={!!openKeys[w.projectKey]}
                         onOpenChange={() => onToggle(w)}
                     >
-                        <CollapsibleTrigger
+                        <div
                             className={cn(
-                                "flex items-center gap-1.5 w-full px-2 py-1.5 rounded-md text-sm hover:bg-accent text-left",
+                                "flex items-center gap-1 w-full px-2 py-1.5 rounded-md text-sm hover:bg-accent",
                                 selected?.projectKey === w.projectKey && "bg-accent"
                             )}
                         >
-                            <ChevronRight
-                                className="size-3.5 transition-transform"
-                                style={{
-                                    transform: openKeys[w.projectKey]
-                                        ? "rotate(90deg)"
-                                        : undefined,
+                            <CollapsibleTrigger asChild>
+                                <button
+                                    className="shrink-0 p-0.5 rounded hover:bg-accent"
+                                    aria-label={
+                                        openKeys[w.projectKey] ? "折叠" : "展开"
+                                    }
+                                >
+                                    <ChevronRight
+                                        className="size-3.5 transition-transform"
+                                        style={{
+                                            transform: openKeys[w.projectKey]
+                                                ? "rotate(90deg)"
+                                                : undefined,
+                                        }}
+                                    />
+                                </button>
+                            </CollapsibleTrigger>
+                            <button
+                                className="flex items-center gap-1.5 flex-1 min-w-0 truncate text-left"
+                                onClick={() => onOpenWorkspace(w)}
+                            >
+                                <Folder className="size-3.5 text-muted-foreground shrink-0" />
+                                <span className="truncate">{w.name}</span>
+                            </button>
+                            <button
+                                title="新建对话"
+                                className="shrink-0 p-0.5 rounded hover:bg-accent text-muted-foreground"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    newChat(w);
                                 }}
-                            />
-                            <Folder className="size-3.5 text-muted-foreground" />
-                            <span className="truncate">{w.name}</span>
-                        </CollapsibleTrigger>
+                            >
+                                <Plus className="size-3.5" />
+                            </button>
+                        </div>
                         <CollapsibleContent>
                             <div className="ml-4 my-1 flex flex-col gap-1 border-l border-border pl-2">
-                                <button
-                                    className="flex items-center gap-1.5 px-2 py-1 rounded text-xs hover:bg-accent text-left disabled:opacity-50"
-                                    disabled={busy}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        newChat(w);
-                                    }}
-                                >
-                                    <MessageSquare className="size-3" /> {busy ? "创建中…" : "新建对话"}
-                                </button>
                                 {sidebarErr && (
                                     <p className="px-2 py-0.5 text-[11px] text-destructive">
                                         {sidebarErr}

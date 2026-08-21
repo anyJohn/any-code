@@ -324,26 +324,29 @@ export function ChatView({
                 </div>
             </div>
 
-            <div className="shrink-0 w-full max-w-3xl mx-auto px-4 py-3 border-t border-border bg-background flex gap-2">
-                <Input
-                    value={draft}
-                    disabled={pending}
-                    placeholder="输入任务... (Enter 发送)"
-                    onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            send();
-                        }
-                    }}
-                />
-                {pending ? (
-                    <Button variant="destructive" onClick={stop}>
-                        停止
-                    </Button>
-                ) : (
-                    <Button onClick={send}>发送</Button>
-                )}
+            <div className="shrink-0 w-full max-w-3xl mx-auto px-4 py-3">
+                <div className="flex items-center gap-2 rounded-lg border border-input bg-background px-2 py-1.5 focus-within:ring-1 focus-within:ring-ring">
+                    <Input
+                        value={draft}
+                        disabled={pending}
+                        placeholder="输入任务... (Enter 发送)"
+                        className="border-0 focus-visible:ring-0 bg-transparent"
+                        onChange={(e) => setDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                send();
+                            }
+                        }}
+                    />
+                    {pending ? (
+                        <Button variant="destructive" onClick={stop}>
+                            停止
+                        </Button>
+                    ) : (
+                        <Button onClick={send}>发送</Button>
+                    )}
+                </div>
             </div>
         </div>
     );
