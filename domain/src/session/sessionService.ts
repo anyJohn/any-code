@@ -69,4 +69,15 @@ export class SessionService {
     async setTitle(key: SessionKey, title: string): Promise<void> {
         await this.store.append(key, [titleMetaEntry(title)]);
     }
+
+    /** 跨项目按 sessionId 反查 session（直链 /chat/:sessionId 解析用，返回所属 key + session） */
+    async findSession(
+        sessionId: string
+    ): Promise<{ key: SessionKey; session: Session } | null> {
+        const key = await this.store.findKey(sessionId);
+        if (!key) return null;
+        const entries = await this.store.load(key);
+        if (!entries) return null;
+        return { key, session: entriesToSession(sessionId, entries) };
+    }
 }

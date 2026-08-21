@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useAppDispatch, useAppSelector } from "@/hooks/useRedux";
 import {
     selectWorkspace,
@@ -43,7 +43,6 @@ export function AppSidebar() {
         useAppSelector(selectWorkspace);
     const dispatch = useAppDispatch();
     const router = useRouter();
-    const pathname = usePathname();
 
     const [sessionsMap, setSessionsMap] = useState<Record<string, SessionMeta[]>>({});
     const [sessionsStatus, setSessionsStatus] = useState<Record<string, SessionsStatus>>({});
@@ -96,43 +95,20 @@ export function AppSidebar() {
         setOpenKeys((p) => ({ ...p, [w.projectKey]: willOpen }));
     };
 
-    const newChat = async (w: WorkspaceMeta) => {
+    // 目标 C：newChat/resume 不再 POST 建 agent——只导航。session 由 useAgent 在首条消息时建（两步法），
+    // 历史由 chat 页 GET /history 直读盘。故这里无网络往返、无失败态。
+    const newChat = (w: WorkspaceMeta) => {
         if (busy) return;
-        setBusy(true);
-        setSidebarErr("");
-        const data = await apiJson<{ id: string }>("/api/agents", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ workspacePath: w.rootPath }),
-        });
-        setBusy(false);
-        if (!data) {
-            setSidebarErr("创建对话失败，请重试");
-            return;
-        }
+        dispatch(setSelected(w));
         dispatch(setActiveSession(null));
-        router.push(`/chat/${data.id}`);
+        router.push(`/chat/new`);
     };
 
-    const resume = async (w: WorkspaceMeta, sessionId: string) => {
+    const resume = (w: WorkspaceMeta, sessionId: string) => {
         if (busy) return;
-        setBusy(true);
-        setSidebarErr("");
-        const data = await apiJson<{ id: string }>("/api/agents", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-                workspacePath: w.rootPath,
-                sessionId,
-            }),
-        });
-        setBusy(false);
-        if (!data) {
-            setSidebarErr("打开对话失败，请重试");
-            return;
-        }
+        dispatch(setSelected(w));
         dispatch(setActiveSession(sessionId));
-        router.push(`/chat/${data.id}`);
+        router.push(`/chat/${sessionId}`);
     };
 
     const confirmDelete = async () => {
@@ -154,12 +130,8 @@ export function AppSidebar() {
                 (s) => s.id !== t.s.id
             ),
         }));
-        // 删的是当前活动 session → 清 agent + 跳回列表
+        // 删的是当前活动 session → 跳回列表（目标 C：无 agent pool 需清理，session 文件已删即可）
         if (activeSessionId === t.s.id) {
-            const m = pathname?.match(/^\/chat\/(.+)$/);
-            if (m) {
-                await apiJson(`/api/agents/${m[1]}`, { method: "DELETE" });
-            }
             dispatch(setActiveSession(null));
             router.push("/");
         }

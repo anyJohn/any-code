@@ -148,7 +148,10 @@ class AnyAgent {
      * 切换 session / 工作区时调用，避免旧 agent 的 rxjs 订阅泄漏、阻止被 GC。
      */
     destroy() {
-        // 先中断当前任务（触发内层 takeUntil(stop$) + finalize），再拆外层管线
+        // 先 abort 在途 LLM 调用（真正中断推理），再拆订阅——使"关连接=真停"语义闭合。
+        // web 目标C：客户端断开 → handler 调 destroy() → 在途 LLM 立即停，不在后台继续跑。
+        this.abortController?.abort();
+        // 断外层管线订阅（兼容旧路径 + finalize 清 pending）
         this.stop$.next();
         this.stop$.complete();
         this.destroy$.next();

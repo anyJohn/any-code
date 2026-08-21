@@ -1,133 +1,114 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, act } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import { useAgent } from "@/hooks/useAgent";
+import type { AgentEvent } from "@/lib/sseEvents";
 
-// 假 EventSource：暴露 push 方法用于测试注入帧
-class FakeES {
-    url: string;
-    onmessage: ((ev: { data: string }) => void) | null = null;
-    onerror: (() => void) | null = null;
-    static last: FakeES | null = null;
-    constructor(url: string) {
-        this.url = url;
-        (FakeES.last as FakeES | null) = this;
-    }
-    close = vi.fn(() => {
-        (FakeES.last as FakeEventSource | null) = null;
+// 构造一个 SSE 流响应：body 发若干 `data: {json}\n\n` 帧后关闭
+function sseResponse(events: Array<Omit<AgentEvent, "id">>): Response {
+    const enc = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+            for (const e of events) {
+                controller.enqueue(
+                    enc.encode(`data: ${JSON.stringify(e)}\n\n`)
+                );
+            }
+            controller.close();
+        },
     });
-    push(e: unknown) {
-        this.onmessage?.({ data: JSON.stringify(e) });
-    }
+    return new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+    });
 }
-type FakeEventSource = typeof FakeES;
 
-describe("useAgent (TEST-005 TC-005.6/.7, B-004/B-011)", () => {
+function jsonResponse(obj: unknown, status = 200): Response {
+    return new Response(JSON.stringify(obj), {
+        status,
+        headers: { "content-type": "application/json" },
+    });
+}
+
+describe("useAgent (目标C: fetch-stream + 两步建 session)", () => {
     beforeEach(() => {
-        vi.stubGlobal("EventSource", FakeES);
         vi.stubGlobal("fetch", vi.fn());
-        FakeES.last = null;
+        // jsdom 没有 window.history.replaceState 的真实路由，但方法存在； stub 防 console 噪音
+        vi.spyOn(window.history, "replaceState").mockImplementation(() => {});
     });
     afterEach(() => vi.unstubAllGlobals());
 
-    function setup(history: unknown[] = [], eventsOk = true) {
+    it("initialEvents 注入历史", () => {
+        const { result } = renderHook(() =>
+            useAgent("s1", "/w", [
+                { id: "h1", timestamp: 1, type: "Assistant", message: "hist" },
+            ])
+        );
+        expect(result.current.events.length).toBe(1);
+        expect(result.current.events[0].message).toBe("hist");
+    });
+
+    it("submit 流式接收事件 + Done 解除 pending（含乐观 User 气泡）", async () => {
         const f = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
-        // loadHistory: GET /history ; submit: POST /messages
-        f.mockImplementation(async (url: string, init?: RequestInit) => {
-            if (typeof url === "string" && url.endsWith("/history")) {
-                return { ok: eventsOk, json: async () => history };
-            }
-            return { ok: true, json: async () => ({ status: "accepted" }) } as any;
+        f.mockResolvedValue(
+            sseResponse([
+                { timestamp: 1, type: "Iteration", message: "i1", turnId: "t1" },
+                { timestamp: 2, type: "Done", message: "完成" },
+            ])
+        );
+        const { result } = renderHook(() => useAgent("s1", "/w", []));
+        await act(async () => {
+            result.current.submit("hi");
         });
-    }
-
-    it("TC-005.6 乐观插入用户气泡 + pending=true（B-004）", async () => {
-        setup([]);
-        const { result } = renderHook(() => useAgent("a1"));
-        // 等 loadHistory + connect
-        await act(() => Promise.resolve());
-        await act(() => Promise.resolve());
-
-        act(() => result.current.submit("hi"));
-        const events = result.current.events;
-        // 立即出现本地 User 气泡
-        expect(events.some((e) => e.type === "User" && e.message === "hi")).toBe(true);
-        expect(result.current.pending).toBe(true);
-    });
-
-    it("TC-005.7 Done 解除 pending（B-011）", async () => {
-        setup([]);
-        const { result } = renderHook(() => useAgent("a1"));
-        await act(() => Promise.resolve());
-        await act(() => Promise.resolve());
-
-        act(() => result.current.submit("hi"));
-        expect(result.current.pending).toBe(true);
-
-        // SSE 推 Done
-        act(() => FakeES.last?.push({ type: "Done", message: "done" }));
-        expect(result.current.pending).toBe(false);
-    });
-
-    it("TC-005.7 Error 与 Stopped 也解除 pending（B-011）", async () => {
-        setup([]);
-        const { result } = renderHook(() => useAgent("a1"));
-        await act(() => Promise.resolve());
-        await act(() => Promise.resolve());
-
-        act(() => result.current.submit("hi"));
-        act(() => FakeES.last?.push({ type: "Error", message: "err" }));
-        expect(result.current.pending).toBe(false);
-
-        act(() => result.current.submit("again"));
-        act(() => FakeES.last?.push({ type: "Stopped", message: "stopped" }));
-        expect(result.current.pending).toBe(false);
-    });
-
-    it("TC-005.2 历史回放：messagesToEvents 注入为事件（B-002）", async () => {
-        setup([
-            { role: "user", content: "hist-user" },
-            { role: "assistant", content: "hist-assistant" },
-        ]);
-        const { result } = renderHook(() => useAgent("a1"));
-        await act(() => Promise.resolve());
-        await act(() => Promise.resolve());
+        await waitFor(() => expect(result.current.pending).toBe(false));
         const types = result.current.events.map((e) => e.type);
-        expect(types).toContain("User");
-        expect(types).toContain("Assistant");
+        expect(types).toContain("User"); // 乐观插入
+        expect(types).toContain("Iteration");
+        expect(types).toContain("Done");
+        // /run 调用带 task + workspacePath
+        expect(f).toHaveBeenCalledWith(
+            "/api/sessions/s1/run",
+            expect.objectContaining({ method: "POST" })
+        );
     });
 
-    it("historyLoading 初始 true，历史加载完转 false", async () => {
-        setup([]);
-        const { result } = renderHook(() => useAgent("a1"));
-        expect(result.current.historyLoading).toBe(true);
-        await act(() => Promise.resolve());
-        await act(() => Promise.resolve());
-        expect(result.current.historyLoading).toBe(false);
-    });
-
-    it("history 加载失败也解除 historyLoading", async () => {
-        // fetch /history 返回 !ok
+    it("新对话 submit：先 POST /api/sessions 建 session，再 /run", async () => {
         const f = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
         f.mockImplementation(async (url: string) => {
-            if (typeof url === "string" && url.endsWith("/history")) {
-                return { ok: false, json: async () => [] };
-            }
-            return { ok: true, json: async () => ({ status: "accepted" }) } as any;
+            if (url === "/api/sessions")
+                return jsonResponse({ sessionId: "new-sid", projectKey: "pk" }, 201);
+            return sseResponse([{ timestamp: 1, type: "Done", message: "ok" }]);
         });
-        const { result } = renderHook(() => useAgent("a1"));
-        await act(() => Promise.resolve());
-        await act(() => Promise.resolve());
-        expect(result.current.historyLoading).toBe(false);
+        const { result } = renderHook(() => useAgent(null, "/w", []));
+        await act(async () => {
+            result.current.submit("first");
+        });
+        await waitFor(() => expect(result.current.pending).toBe(false));
+        expect(f).toHaveBeenCalledWith("/api/sessions", expect.any(Object));
+        expect(f).toHaveBeenCalledWith(
+            "/api/sessions/new-sid/run",
+            expect.any(Object)
+        );
+        expect(
+            result.current.events.some((e) => e.type === "Done")
+        ).toBe(true);
     });
 
-    it("卸载时关闭 EventSource", async () => {
-        setup([]);
-        const { unmount } = renderHook(() => useAgent("a1"));
-        await act(() => Promise.resolve());
-        await act(() => Promise.resolve());
-        const es = FakeES.last;
-        expect(es).not.toBeNull();
-        unmount();
-        expect(es!.close).toHaveBeenCalled();
+    it("stop aborts the run fetch（关页面=停）", async () => {
+        let captured: AbortSignal | undefined;
+        const f = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+        f.mockImplementation(async (_url: string, init?: RequestInit) => {
+            captured = init?.signal ?? undefined;
+            // 永不关闭的流，模拟任务在跑
+            return new Response(new ReadableStream({ start() {} }), {
+                status: 200,
+            });
+        });
+        const { result } = renderHook(() => useAgent("s1", "/w", []));
+        act(() => {
+            result.current.submit("hi");
+        });
+        await waitFor(() => expect(captured).toBeTruthy());
+        act(() => result.current.stop());
+        expect(captured?.aborted).toBe(true);
     });
 });

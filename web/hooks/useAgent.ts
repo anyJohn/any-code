@@ -1,82 +1,91 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-    type AgentEvent,
-    type HistoryMessage,
-    messagesToEvents,
-    nextId,
-} from "@/lib/sseEvents";
+import { useCallback, useRef, useState } from "react";
+import { type AgentEvent, nextId } from "@/lib/sseEvents";
+
+const TERMINAL = new Set(["Done", "Error", "Stopped"]);
 
 /**
- * useAgent —— initAgent + rxjs 订阅。
- * 事件流不进 Redux，留局部 state。
- * onMounted 先拉历史（resume 回显旧消息），再连 SSE 接增量。
+ * 解析 SSE 流：读 fetch body，按 \n\n 分帧，取 data: 行 JSON.parse。
+ * fetch streaming SSE（非 EventSource）——支持 POST 带 body + abort=stop。
  */
-export function useAgent(agentId: string) {
-    const [events, setEvents] = useState<AgentEvent[]>([]);
-    const [pending, setPending] = useState(false);
-    const [historyLoading, setHistoryLoading] = useState(true);
-    const esRef = useRef<EventSource | null>(null);
-    // 防止同一 agentId 的历史被重复加载：dev 下 React StrictMode 会双调用
-    // effect，裸 append 会让两份历史（各含 hist-turn-0）叠加 → React key 撞车。
-    const historyLoadedFor = useRef<string | null>(null);
-
-    const loadHistory = useCallback(async () => {
-        // 同步置位：在 await 前标记，使 StrictMode 的第二次调用立即短路返回
-        if (historyLoadedFor.current === agentId) return;
-        historyLoadedFor.current = agentId;
-        try {
-            const res = await fetch(`/api/agents/${agentId}/history`);
-            if (!res.ok) {
-                setHistoryLoading(false);
-                return;
+async function* parseSSE(
+    body: ReadableStream<Uint8Array>
+): AsyncGenerator<Omit<AgentEvent, "id">> {
+    const reader = body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf("\n\n")) !== -1) {
+            const frame = buf.slice(0, idx);
+            buf = buf.slice(idx + 2);
+            for (const line of frame.split("\n")) {
+                if (!line.startsWith("data:")) continue;
+                const json = line.slice(5).trim();
+                if (!json) continue;
+                try {
+                    yield JSON.parse(json);
+                } catch {
+                    // 跳过损坏帧
+                }
             }
-            const msgs = (await res.json()) as HistoryMessage[];
-            // 首次加载直接替换（此时尚无实时事件），彻底避免重复
-            setEvents(messagesToEvents(msgs));
-            setHistoryLoading(false);
-        } catch {
-            historyLoadedFor.current = null; // 失败可重试
-            setHistoryLoading(false);
-            // 新建 agent（首条消息前 session 为 null）或历史为空，忽略
         }
-    }, [agentId]);
+    }
+}
 
-    const connect = useCallback(() => {
-        const es = new EventSource(`/api/agents/${agentId}/events`);
-        esRef.current = es;
-        es.onmessage = (ev) => {
-            const e = JSON.parse(ev.data) as Omit<AgentEvent, "id">;
-            setEvents((prev) => [...prev, { ...e, id: nextId("live") }]);
-            // Done / Error / Stopped 都解除 pending
-            if (e.type === "Done" || e.type === "Error" || e.type === "Stopped") {
-                setPending(false);
-            }
-        };
-        es.onerror = () => {
-            setPending(false); // 连接异常时解除 pending，避免输入框永久锁死
-        };
-    }, [agentId]);
-
-    useEffect(() => {
-        let cancelled = false;
-        (async () => {
-            await loadHistory();
-            if (!cancelled) connect();
-        })();
-        return () => {
-            cancelled = true;
-            esRef.current?.close();
-        };
-    }, [loadHistory, connect]);
+/**
+ * useAgent —— 目标 C：连接持有 agent。
+ * - 历史由调用方（chat 页）预取传入 initialEvents，hook 不再自取（避免双取）。
+ * - submit(task)：新对话（sessionId=null）先 POST /api/sessions 建 session，replaceState 更新 URL
+ *   （不触发 Next 重渲染，保留在途 run 流），再 POST /api/sessions/:sessionId/run 流式跑。
+ * - stop：abort fetch → 服务端见 disconnect → destroy → 真停（关页面同理）。
+ */
+export function useAgent(
+    sessionId: string | null,
+    rootPath: string,
+    initialEvents: AgentEvent[]
+) {
+    const [events, setEvents] = useState<AgentEvent[]>(initialEvents);
+    const [pending, setPending] = useState(false);
+    const [currentSessionId, setCurrentSessionId] = useState<string | null>(
+        sessionId
+    );
+    const abortRef = useRef<AbortController | null>(null);
 
     const submit = useCallback(
-        (task: string) => {
+        async (task: string) => {
             if (!task.trim() || pending) return;
             setPending(true);
-            // 乐观插入用户消息气泡（右对齐）：不等 SSE 往返，立刻显示。
-            // domain 不再发 User 事件（避免与历史回放的 User 重复），所以本地补一条。
+
+            // 两步法：新对话先建 session
+            let sid = currentSessionId;
+            if (!sid) {
+                try {
+                    const cr = await fetch("/api/sessions", {
+                        method: "POST",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({ workspacePath: rootPath }),
+                    });
+                    if (!cr.ok) {
+                        setPending(false);
+                        return;
+                    }
+                    const created = (await cr.json()) as { sessionId: string };
+                    sid = created.sessionId;
+                    setCurrentSessionId(sid);
+                    // 更新 URL 不触发 Next 路由重渲染（保留在途流），刷新后能落到 /chat/{sid}
+                    window.history.replaceState(null, "", `/chat/${sid}`);
+                } catch {
+                    setPending(false);
+                    return;
+                }
+            }
+
+            // 乐观插入用户消息气泡（右对齐）：不等 SSE 往返，立刻显示
             setEvents((prev) => [
                 ...prev,
                 {
@@ -86,29 +95,70 @@ export function useAgent(agentId: string) {
                     message: task,
                 },
             ]);
-            fetch(`/api/agents/${agentId}/messages`, {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ task }),
-            }).catch((err) => {
+
+            const ac = new AbortController();
+            abortRef.current = ac;
+            try {
+                const res = await fetch(`/api/sessions/${sid}/run`, {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ task, workspacePath: rootPath }),
+                    signal: ac.signal,
+                });
+                if (!res.ok || !res.body) {
+                    setEvents((prev) => [
+                        ...prev,
+                        {
+                            id: nextId("local"),
+                            timestamp: Date.now(),
+                            type: "Error",
+                            message: `运行失败 (HTTP ${res.status})`,
+                        },
+                    ]);
+                    setPending(false);
+                    return;
+                }
+                for await (const e of parseSSE(res.body)) {
+                    setEvents((prev) => [...prev, { ...e, id: nextId("live") }]);
+                    if (TERMINAL.has(e.type)) setPending(false);
+                }
+            } catch (err) {
+                if (ac.signal.aborted) {
+                    // 用户主动停止：abort 关闭 SSE 流时，服务端 STOPPED 事件未必能送达，
+                    // 本地补一条 Stopped 标记，让用户看到"已停止"反馈。
+                    setEvents((prev) => [
+                        ...prev,
+                        {
+                            id: nextId("local"),
+                            timestamp: Date.now(),
+                            type: "Stopped",
+                            message: "已停止任务",
+                        },
+                    ]);
+                } else {
+                    setEvents((prev) => [
+                        ...prev,
+                        {
+                            id: nextId("local"),
+                            timestamp: Date.now(),
+                            type: "Error",
+                            message: `运行失败: ${
+                                err instanceof Error ? err.message : String(err)
+                            }`,
+                        },
+                    ]);
+                }
                 setPending(false);
-                setEvents((prev) => [
-                    ...prev,
-                    {
-                        id: nextId("local"),
-                        timestamp: Date.now(),
-                        type: "Error",
-                        message: `提交失败: ${err instanceof Error ? err.message : String(err)}`,
-                    },
-                ]);
-            });
+            } finally {
+                abortRef.current = null;
+            }
         },
-        [agentId, pending]
+        [currentSessionId, rootPath, pending]
     );
 
     const stop = useCallback(() => {
-        fetch(`/api/agents/${agentId}/stop`, { method: "POST" });
-    }, [agentId]);
+        abortRef.current?.abort(); // abort fetch → 服务端 destroy → 真停
+    }, []);
 
-    return { events, pending, historyLoading, submit, stop };
+    return { events, pending, submit, stop };
 }

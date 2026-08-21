@@ -6,6 +6,7 @@ import { useAppDispatch, useAppSelector } from "@/hooks/useRedux";
 import {
     selectWorkspace,
     setSelected,
+    setActiveSession,
     refreshWorkspaces,
 } from "@/store/workspaceSlice";
 import type { SessionMeta } from "@any-code/domain";
@@ -48,41 +49,17 @@ export default function Page() {
         });
     }, [selected?.projectKey]);
 
-    const newChat = async () => {
-        if (!selected || busy) return;
-        setBusy(true);
-        setActionErr("");
-        const data = await apiJson<{ id: string }>("/api/agents", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ workspacePath: selected.rootPath }),
-        });
-        setBusy(false);
-        if (!data) {
-            setActionErr("创建对话失败，请重试");
-            return;
-        }
-        router.push(`/chat/${data.id}`);
+    // 目标 C：newChat/resume 只导航，不 POST 建 agent（chat 页 + useAgent 负责）
+    const newChat = () => {
+        if (!selected) return;
+        dispatch(setActiveSession(null));
+        router.push(`/chat/new`);
     };
 
-    const resume = async (sessionId: string) => {
-        if (!selected || busy) return;
-        setBusy(true);
-        setActionErr("");
-        const data = await apiJson<{ id: string }>("/api/agents", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-                workspacePath: selected.rootPath,
-                sessionId,
-            }),
-        });
-        setBusy(false);
-        if (!data) {
-            setActionErr("打开对话失败，请重试");
-            return;
-        }
-        router.push(`/chat/${data.id}`);
+    const resume = (sessionId: string) => {
+        if (!selected) return;
+        dispatch(setActiveSession(sessionId));
+        router.push(`/chat/${sessionId}`);
     };
 
     void workspaces; // 触发 refresh 后 workspaces 更新

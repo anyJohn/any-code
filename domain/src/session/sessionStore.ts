@@ -14,6 +14,8 @@ export interface SessionStore {
     listMeta(projectKey: string): Promise<SessionMeta[]>;
     listAllMeta(): Promise<SessionMeta[]>;
     remove(key: SessionKey): Promise<void>;
+    /** 跨项目按 sessionId 反查所属 projectKey（sessionId-URL 直链解析用） */
+    findKey(sessionId: string): Promise<SessionKey | null>;
 }
 
 const BASE_DIR = path.join(os.homedir(), ".anycode", "projects");
@@ -117,5 +119,21 @@ export class LocalSessionStore implements SessionStore {
         } catch {
             // 忽略文件不存在
         }
+    }
+
+    async findKey(sessionId: string): Promise<SessionKey | null> {
+        try {
+            for (const pk of await fs.readdir(BASE_DIR)) {
+                try {
+                    await fs.stat(path.join(BASE_DIR, pk, `${sessionId}.jsonl`));
+                    return { projectKey: pk, sessionId };
+                } catch {
+                    // 不在该 project 目录，继续
+                }
+            }
+        } catch {
+            // BASE_DIR 不存在
+        }
+        return null;
     }
 }
