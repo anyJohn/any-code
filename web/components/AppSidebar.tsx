@@ -15,7 +15,6 @@ import {
     CollapsibleTrigger,
     CollapsibleContent,
 } from "@/components/ui/collapsible";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
     Dialog,
     DialogContent,
@@ -167,7 +166,7 @@ export function AppSidebar() {
     };
 
     return (
-        <ScrollArea className="h-full">
+        <div className="h-full overflow-y-auto">
             <div className="p-2 flex flex-col gap-1">
                 {workspaces.length === 0 && (
                     <p className="px-2 py-4 text-xs text-muted-foreground">
@@ -238,7 +237,7 @@ export function AppSidebar() {
                                             <div
                                                 key={s.id}
                                                 className={cn(
-                                                    "group flex items-center gap-1 px-2 py-1 rounded border border-transparent hover:border-border hover:bg-accent text-xs truncate",
+                                                    "group flex items-center gap-1 px-2 py-1 rounded border border-transparent hover:border-border hover:bg-accent text-xs",
                                                     isActive && "bg-accent text-foreground border-border"
                                                 )}
                                             >
@@ -266,7 +265,8 @@ export function AppSidebar() {
                                                     />
                                                 ) : (
                                                     <button
-                                                        className="flex-1 truncate text-left"
+                                                        className="flex-1 min-w-0 truncate text-left"
+                                                        title={s.title || "（无标题）"}
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             resume(w, s.id);
@@ -284,7 +284,7 @@ export function AppSidebar() {
                                                     </button>
                                                 )}
                                                 {!rt && (
-                                                    <span className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+                                                    <span className="flex items-center gap-0.5 shrink-0">
                                                         <button
                                                             title="重命名"
                                                             onClick={(e) => {
@@ -345,6 +345,6 @@ export function AppSidebar() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </ScrollArea>
+        </div>
     );
 }
