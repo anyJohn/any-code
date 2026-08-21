@@ -272,7 +272,7 @@ pnpm test          # prettier 格式检查
 | Prompt 工程优化 | ⚠️ 基础 | 系统提示词较基础，未做结构化指令 / few-shot 优化 |
 | 交互式确认弹窗 | ❌ 未实现 | plan 模式、危险命令缺少人工确认环节 |
 | 单元 / 集成测试 | ❌ 0% | 三个包均无测试，仅 TUI 做 prettier 格式检查 |
-| EventStream 多实例 | ⚠️ 全局单例 | `EventStream` 为单例，多 agent 并发会串流（`agentPool` 已注释标记）。单用户可用，多用户前需改 per-agent |
+| EventStream 多实例 | ✅ 已实现 | 每个 `AnyAgent` 持自己的 `EventStream`（per-agent，非单例），多 agent 并发不串流。生命周期绑 agent，`destroy()` 后随 GC |
 
 ### P2 — 扩展
 

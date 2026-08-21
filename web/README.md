@@ -68,7 +68,6 @@ URL 里的 `:id` 是服务端生成的 **agentId**（UUID），不是 sessionId�
 
 ## 已知限制（P0 范围内可接受）
 
-- **EventStream 是全局单例**（`domain/src/eventStream.ts`）：多个 agent 并发会串流。P0 单用户单 agent 可用；多用户前需 per-agent。
 - **session 按 workspace 分区**：`projectKey = projectKeyOf(workspace.rootPath)`，会话存全局 `~/.anycode/projects/<projectKey>/`。web 和 TUI 注册同一个目录即共享会话。
 - **安全**：bash 工具服务端执行 LLM 生成的 shell 命令，开发/生产服务器**仅监听 127.0.0.1**，切勿暴露公网。
 - **新建对话首条消息后才落盘**（已知小缺陷，P3）：侧栏不自动刷新新会话。

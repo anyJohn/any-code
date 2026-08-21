@@ -2,8 +2,8 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { AnyAgent, WorkspaceRegistry } from "@any-code/domain";
 
-// EventStream 是全局单例（eventStream.ts 的 getInstance()），多 agent 并发会串流。
-// P0 单用户单 agent 可用；多用户前需改 per-agent。
+// 每个 AnyAgent 持有自己的 EventStream 实例（per-agent，非全局单例），
+// 多 agent 并发事件不串流。生命周期绑在 agent 上：removeAgent/destroy 后随 GC。
 
 // ⚠️ 池必须挂在 globalThis 上：Next dev 下，不同 Route Handler 文件
 // （POST /api/agents 的 route.ts 与 GET /api/agents/[id] 的 [id]/route.ts）
