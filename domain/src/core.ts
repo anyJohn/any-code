@@ -28,7 +28,7 @@ export async function agentLoop(
     messages.push(userMsg);
     await onMessage?.(userMsg);
     for (let i = 0; i < maxIter; i++) {
-        // 迭代边界先查中断：stop() 已 abort 的话直接返回，不再发起 LLM 调用
+        // 迭代边界先查中断：stop() 已 abort 的话直接返回，不发起 LLM 调用
         if (ctx.signal.aborted) {
             return { result: "[stopped]", messages };
         }

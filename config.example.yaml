@@ -1,6 +1,6 @@
 # anycode 配置文件模板。
 # 复制此文件到 <workspace>/.anycode/config.yaml 并填写。
-# 所有配置只在此文件（不再使用 .env / 环境变量）。
+# 所有配置只在此文件。
 
 # 命名 provider：每个 provider 自带 apiKey / baseURL / model / streaming
 providers:
@@ -17,3 +17,15 @@ providers:
 
 # 当前生效 provider（改后下次调用生效；web 可热更新）
 default: openai
+
+# MCP server 配置
+# 每个 server：{ type: stdio, command, args?, env? } 或 { type: sse, url, headers? }
+mcp:
+  filesystem:
+    type: stdio
+    command: npx
+    args: [-y, "@modelcontextprotocol/server-filesystem", /tmp]
+  # remote:
+  #   type: sse
+  #   url: https://example.com/sse
+  #   headers: { Authorization: "Bearer xxx" }

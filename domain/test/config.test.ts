@@ -60,6 +60,44 @@ default: p2
         expect(cfg.providers.p2.streaming).toBe(false);
     });
 
+    it("AC-001b config mcp 段解析 → mcpServers", () => {
+        const { workspace, dir } = mkWs();
+        writeConfig(
+            dir,
+            `
+providers:
+  p:
+    apiKey: sk
+    model: m
+default: p
+mcp:
+  filesystem:
+    type: stdio
+    command: npx
+    args: [-y, fs-server, /tmp]
+  remote:
+    type: sse
+    url: https://x/sse
+    headers: { Authorization: "Bearer t" }
+`
+        );
+        const cfg = Config.load(workspace);
+        expect(Object.keys(cfg.mcpServers)).toHaveLength(2);
+        expect(cfg.mcpServers.filesystem).toMatchObject({
+            type: "stdio",
+            command: "npx",
+            args: ["-y", "fs-server", "/tmp"],
+        });
+        expect(cfg.mcpServers.remote).toMatchObject({
+            type: "sse",
+            url: "https://x/sse",
+        });
+        // 无 mcp 段时 mcpServers 为空
+        const { workspace: w2, dir: d2 } = mkWs();
+        writeConfig(d2, `providers:\n  p:\n    apiKey: sk\n    model: m\ndefault: p\n`);
+        expect(Object.keys(Config.load(w2).mcpServers)).toHaveLength(0);
+    });
+
     it("AC-005 无 config.yaml → 抛错引导建配置（不再退回 env）", () => {
         const { workspace } = mkWs(); // 无 config.yaml
         expect(() => Config.load(workspace)).toThrow(/配置文件不存在/);

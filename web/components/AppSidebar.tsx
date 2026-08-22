@@ -26,9 +26,18 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronRight, MessageSquare, Folder, Trash2, Pencil, Plus } from "lucide-react";
+import {
+    ChevronRight,
+    MessageSquare,
+    Folder,
+    Trash2,
+    Pencil,
+    Plus,
+    Settings,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiJson } from "@/lib/api";
+import Link from "next/link";
 
 type SessionsStatus = "loading" | "ready" | "error";
 
@@ -101,7 +110,7 @@ export function AppSidebar() {
         router.push("/");
     };
 
-    // 目标 C：newChat/resume 不再 POST 建 agent——只导航。session 由 useAgent 在首条消息时建（两步法），
+    // newChat/resume 只导航，不建 agent。session 由 useAgent 在首条消息时建（两步法），
     // 历史由 chat 页 GET /history 直读盘。故这里无网络往返、无失败态。
     const newChat = (w: WorkspaceMeta) => {
         dispatch(setSelected(w));
@@ -171,9 +180,10 @@ export function AppSidebar() {
     };
 
     return (
-        <div className="h-full overflow-y-auto">
-            <div className="p-2 flex flex-col gap-1">
-                {workspaces.length === 0 && (
+        <div className="h-full flex flex-col">
+            <div className="flex-1 min-h-0 overflow-y-auto">
+                <div className="p-2 flex flex-col gap-1">
+                    {workspaces.length === 0 && (
                     <p className="px-2 py-4 text-xs text-muted-foreground">
                         顶栏「添加工作区」选一个本地目录开始
                     </p>
@@ -341,6 +351,17 @@ export function AppSidebar() {
                         </CollapsibleContent>
                     </Collapsible>
                 ))}
+                </div>
+            </div>
+
+            <div className="shrink-0 border-t border-border p-2">
+                <Link
+                    href="/settings"
+                    className="flex items-center gap-1.5 w-full px-2 py-1.5 rounded-md text-sm hover:bg-accent"
+                >
+                    <Settings className="size-3.5 text-muted-foreground shrink-0" />
+                    <span>设置</span>
+                </Link>
             </div>
 
             <Dialog

@@ -1,54 +1,36 @@
-import fs from "fs";
-import path from "path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import type { ChatCompletionTool } from "openai/resources/index";
-import type { Workspace } from "./workspace";
-import { workspaceConfigDir } from "./workspace";
 import type { Tool } from "./tools";
 
 /**
- * MCP 真协议连接。
- * 配置在 <workspace>/.anycode/mcp.json，每个 server 一个对象：
- *   { type: "stdio", command, args?, env? }
- *   { type: "sse", url, headers? }
+ * MCP 真协议连接。配置从 .anycode/config.yaml 的 mcp 段来（Config.mcpServers）。
+ * 每个 server：{ type: "stdio", command, args?, env? } / { type: "sse", url, headers? }。
  * 连接 per-agent：AnyAgent.create 时建连，destroy 时 cleanup。
- * 用官方 @modelcontextprotocol/sdk v1。v2 @modelcontextprotocol/client 留未来迁移。
  */
-
-interface StdioServerConfig {
+export interface StdioServerConfig {
     type: "stdio";
     command: string;
     args?: string[];
     env?: Record<string, string>;
     disabled?: boolean;
 }
-interface SseServerConfig {
+export interface SseServerConfig {
     type: "sse";
     url: string;
     headers?: Record<string, string>;
     disabled?: boolean;
 }
-type ServerConfig = StdioServerConfig | SseServerConfig | { type?: undefined; disabled?: boolean };
+export type McpServerConfig =
+    | StdioServerConfig
+    | SseServerConfig
+    | { type?: undefined; disabled?: boolean };
 
 /** MCP 连接管理器：工具集 + 清理函数。per-agent 生命周期绑定。 */
 export interface McpManager {
     tools: Tool[];
     cleanup: () => Promise<void>;
-}
-
-function mcpConfigPath(workspace: Workspace): string {
-    return path.join(workspaceConfigDir(workspace), "mcp.json");
-}
-
-/** 确保配置文件存在（父目录一并创建）。无文件则建空 {}。 */
-function ensureMcpConfig(workspace: Workspace): void {
-    const file = mcpConfigPath(workspace);
-    if (!fs.existsSync(file)) {
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, JSON.stringify({}), "utf-8");
-    }
 }
 
 /** 从 callTool 结果 content 提取文本（text 段拼接；isError 由调用方前缀）。 */
@@ -83,28 +65,20 @@ function toOpenAiTool(
 }
 
 /**
- * 读 mcp.json 并对每个 server 建真连接（stdio spawn / SSE HTTP），
- * listTools 拿工具 schema，包装成 Tool（handler 经 call_tool 转发）。
- * 单 server 失败不阻断其余。返回 tools + cleanup。
+ * 对每个 MCP server 建真连接（stdio spawn / SSE HTTP），listTools 拿工具 schema，
+ * 包装成 Tool（handler 经 call_tool 转发）。单 server 失败不阻断其余。返回 tools + cleanup。
+ * 入参 mcpServers 来自 Config.mcpServers（config.yaml 的 mcp 段）。
  */
-export async function loadMcpTools(workspace: Workspace): Promise<McpManager> {
-    ensureMcpConfig(workspace);
+export async function loadMcpTools(
+    mcpServers: Record<string, McpServerConfig>
+): Promise<McpManager> {
     const tools: Tool[] = [];
     const cleanups: Array<() => Promise<void>> = [];
 
-    let config: Record<string, ServerConfig>;
-    try {
-        const fileContent = fs.readFileSync(mcpConfigPath(workspace), "utf-8");
-        config = JSON.parse(fileContent);
-    } catch (error) {
-        console.error("[MCP] Failed to parse MCP config:", error);
-        return { tools, cleanup: async () => {} };
-    }
-
-    for (const [serverName, serverConfig] of Object.entries(config)) {
+    for (const [serverName, serverConfig] of Object.entries(mcpServers)) {
         if (serverConfig.disabled) continue;
         if (serverConfig.type !== "stdio" && serverConfig.type !== "sse") {
-            // 新格式要求 type 字段；旧静态 schema 格式（无 type）不识别，跳过记错
+            // 要求 type 字段；无 type 的旧格式不识别，跳过记错
             console.error(
                 `[MCP] server "${serverName}" missing/unknown type, skipped`
             );

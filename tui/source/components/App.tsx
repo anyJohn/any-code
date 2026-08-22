@@ -46,7 +46,7 @@ export default function App(props: AppProps) {
     const subscriptionsRef = useRef<Array<{ unsubscribe: () => void }>>([]);
     const initializedRef = useRef(false);
 
-    // 配置只从 <workspace>/.anycode/config.yaml 读（AnyAgent.initConfig），不再用环境变量。
+    // 配置只从 <workspace>/.anycode/config.yaml 读（AnyAgent.initConfig）。
 
     // ChatMessage.content 可能是 string | null | 多模态数组（vision/tool 消息），
     // 直接 as string 会让数组渲染成 [object Object]

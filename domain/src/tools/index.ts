@@ -40,7 +40,7 @@ const saveMemoryTool: Tool = {
     handler: saveMemoryFunc,
 };
 
-// plan 不再是 builtin——它由 AgentTool(planAgent) 提供（见 agent.ts）。
+// plan 由 AgentTool(planAgent) 提供（见 agent.ts）。
 const ToolKit = {
     allTools: [
         bashTool,

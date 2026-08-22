@@ -1,7 +1,7 @@
 /*
  * Memory —— 项目级 + 全局级两层记忆，纯 markdown。
  *
- * 写入由 save_memory 工具触发（LLM 主动调用），不再无条件全记。
+ * 写入由 save_memory 工具触发（LLM 主动调用）。
  * 读取在 getSystemMessage 合并全局 + 项目两层注入系统提示词。
  * 格式保持 markdown（## 时间戳 + content），兼容旧 Task/Result 条目（降级读取）。
  *
@@ -30,7 +30,7 @@ function memoryFile(workspace: Workspace, scope: MemoryScope): string {
 
 /**
  * 保存一条记忆到指定层（默认项目级）。
- * 条目格式：## ISO时间戳\n\ncontent\n\n---\n（content 由 LLM 自主组织，不再是 task/result 模板）。
+ * 条目格式：## ISO时间戳\n\ncontent\n\n---\n（content 由 LLM 自主组织）。
  */
 export function saveMemory(
     workspace: Workspace,

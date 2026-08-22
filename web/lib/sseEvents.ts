@@ -61,7 +61,7 @@ export function contentToString(content: unknown): string {
 /**
  * 把持久化的消息按回合重建为事件流，让历史回放与实时 SSE **同形**：
  * assistant 消息开一个新回合（ITERATION + ASSISTANT + 其 tool_calls 对应的 TOOL 事件），
- * role=tool 的结果消息通过 tool_call_id 关联回 assistant 的 tool_calls，不再独立成事件。
+ * role=tool 的结果消息通过 tool_call_id 关联回 assistant 的 tool_calls，并入其回合。
  */
 export function messagesToEvents(msgs: HistoryMessage[]): AgentEvent[] {
     const events: AgentEvent[] = [];

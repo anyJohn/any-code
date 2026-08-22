@@ -5,7 +5,7 @@ import type { ToolContext } from "../context";
 import type { Tool } from "./index";
 
 /**
- * 工具调用分发。在传入的 tools 列表里按名查 handler（不再有全局 ToolsMap）。
+ * 工具调用分发。在传入的 tools 列表里按名查 handler。
  * tools 列表本身就是该 agent 的可用工具集——不在列表里 = 不可用。
  */
 export async function toolCall(

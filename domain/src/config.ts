@@ -1,12 +1,13 @@
 import { join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import * as yaml from "js-yaml";
 import type { Workspace } from "./workspace";
 import { workspaceConfigDir } from "./workspace";
+import type { McpServerConfig } from "./mcp";
 
 /**
  * 一个 LLM provider 的连接设置。streaming 粒度在 provider 层。
- * 所有配置只来自 <workspace>/.anycode/config.yaml，不再读环境变量。
+ * 所有配置只来自 <workspace>/.anycode/config.yaml。
  */
 export interface LlmProvider {
     apiKey: string;
@@ -15,9 +16,17 @@ export interface LlmProvider {
     streaming: boolean;
 }
 
-interface ConfigShape {
+export interface ConfigShape {
     providers?: Record<string, Partial<LlmProvider>>;
     default?: string;
+    mcp?: Record<string, McpServerConfig>;
+}
+
+/** apiKey 脱敏（前4后4，过短则 ****） */
+export function maskApiKey(key: string): string {
+    if (!key) return "";
+    if (key.length <= 8) return "****";
+    return `${key.slice(0, 4)}...${key.slice(-4)}`;
 }
 
 /** streaming 缺省 true（向后兼容流式默认） */
@@ -44,16 +53,19 @@ function normalize(
 export class Config {
     providers: Record<string, LlmProvider>;
     default: string;
+    mcpServers: Record<string, McpServerConfig>;
     private workspace: Workspace;
 
     private constructor(
         workspace: Workspace,
         providers: Record<string, LlmProvider>,
-        def: string
+        def: string,
+        mcpServers: Record<string, McpServerConfig>
     ) {
         this.workspace = workspace;
         this.providers = providers;
         this.default = def;
+        this.mcpServers = mcpServers;
     }
 
     static load(workspace: Workspace): Config {
@@ -74,7 +86,8 @@ export class Config {
                 `配置文件 ${file} 的 default="${def}" 未在 providers 中定义。`
             );
         }
-        return new Config(workspace, providers, def);
+        const mcpServers = parsed?.mcp ?? {};
+        return new Config(workspace, providers, def, mcpServers);
     }
 
     /** 当前生效 provider（按 default 字段） */
@@ -82,10 +95,35 @@ export class Config {
         return this.providers[this.default];
     }
 
-    /** 热更新：重读配置文件，新 default/provider 生效（下次 callLLM 用新值） */
+    /** 热更新：重读配置文件，新 default/provider/mcp 生效（下次 callLLM/initMcp 用新值） */
     reload(): void {
         const fresh = Config.load(this.workspace);
         this.providers = fresh.providers;
         this.default = fresh.default;
+        this.mcpServers = fresh.mcpServers;
+    }
+
+    /** 校验 + 写回 config.yaml（js-yaml dump）。供 web 改配置后保存。 */
+    static save(workspace: Workspace, data: ConfigShape): void {
+        const providers = data.providers ?? {};
+        if (!Object.keys(providers).length) {
+            throw new Error("providers 不能为空");
+        }
+        const def = data.default ?? Object.keys(providers)[0];
+        if (!providers[def]) {
+            throw new Error(`default="${def}" 未在 providers 中定义`);
+        }
+        for (const [name, s] of Object.entries(data.mcp ?? {})) {
+            if (s && s.type !== "stdio" && s.type !== "sse" && s.type !== undefined) {
+                throw new Error(`mcp server "${name}" type 非法（需 stdio/sse）`);
+            }
+        }
+        const dir = workspaceConfigDir(workspace);
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(
+            join(dir, "config.yaml"),
+            yaml.dump({ providers, default: def, mcp: data.mcp ?? {} }),
+            "utf-8"
+        );
     }
 }

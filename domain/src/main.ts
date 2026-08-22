@@ -105,7 +105,7 @@ class AnyAgent {
     /** 加载 MCP 工具（真协议连接），追加到工具集，per-agent 生命周期绑定。 */
     private async initMcp(): Promise<void> {
         try {
-            const mcp = await loadMcpTools(this.workspace);
+            const mcp = await loadMcpTools(this.config.mcpServers);
             if (mcp.tools.length) this.tools = [...this.tools, ...mcp.tools];
             this.mcpCleanup = mcp.cleanup;
         } catch (err) {
@@ -274,7 +274,7 @@ class AnyAgent {
             ctx,
             this.tools
         );
-        // 记忆改由 save_memory 工具触发（LLM 在循环内主动调用），不再无条件全记
+        // 记忆由 save_memory 工具触发（LLM 在循环内主动调用）
         this.abortController = null;
         // 终态信号：被 stop 中断 → STOPPED（前端显示"已停止任务"）；否则 DONE。
         // Error 由 catchError 发 ERROR，前端同样解除 pending。
