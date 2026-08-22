@@ -38,8 +38,23 @@ export function groupByTurn(events: AgentEvent[]): TurnItem[] {
         if (e.type === "Iteration") {
             flush();
             cur = { kind: "turn", turnId: e.turnId ?? "", iteration: e, tools: [] };
+        } else if (e.type === "AssistantDelta") {
+            // 流式增量：累积进当前回合的 assistant 文本（实时态，不入盘）。
+            // 到 ASSISTANT 定稿时由同回合替换，内容一致。
+            if (!cur) cur = { kind: "turn", turnId: e.turnId ?? "", tools: [] };
+            if (!cur.assistant) {
+                cur.assistant = { ...e, type: "Assistant" } as AgentEvent;
+            } else {
+                cur.assistant = {
+                    ...cur.assistant,
+                    message: cur.assistant.message + e.message,
+                };
+            }
         } else if (e.type === "Assistant") {
-            if (cur && !cur.assistant && !cur.tools.length) {
+            // 定稿：同回合则替换累积的 delta 文本（内容一致），否则正常归位
+            if (cur && cur.turnId === (e.turnId ?? "")) {
+                cur.assistant = e;
+            } else if (cur && !cur.assistant && !cur.tools.length) {
                 cur.assistant = e;
             } else {
                 flush();

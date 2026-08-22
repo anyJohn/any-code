@@ -144,6 +144,42 @@ describe("toRenderItems (TEST-005 TC-005.4, B-003 sub-agent)", () => {
     });
 });
 
+describe("groupByTurn 流式 delta 累积", () => {
+    it("AssistantDelta 累积进当前回合 assistant，定稿 Assistant 替换", () => {
+        const events: AgentEvent[] = [
+            ev("Iteration", "i1", { turnId: "t1" }),
+            ev("AssistantDelta", "hel", { turnId: "t1" }),
+            ev("AssistantDelta", "lo", { turnId: "t1" }),
+            ev("Assistant", "hello", { turnId: "t1" }),
+        ];
+        const turns = groupByTurn(events);
+        expect(turns).toHaveLength(1);
+        expect(turns[0].assistant?.message).toBe("hello");
+        expect(turns[0].assistant?.type).toBe("Assistant");
+    });
+
+    it("delta 无定稿时也累积成 assistant（流式中途渲染）", () => {
+        const events: AgentEvent[] = [
+            ev("Iteration", "i1", { turnId: "t1" }),
+            ev("AssistantDelta", "hel", { turnId: "t1" }),
+            ev("AssistantDelta", "lo", { turnId: "t1" }),
+        ];
+        const turns = groupByTurn(events);
+        expect(turns).toHaveLength(1);
+        expect(turns[0].assistant?.message).toBe("hello");
+    });
+
+    it("历史回放不产 AssistantDelta（只产整段 Assistant）", () => {
+        const msgs: HistoryMessage[] = [
+            { role: "user", content: "hi" },
+            { role: "assistant", content: "hello" },
+        ];
+        const types = messagesToEvents(msgs).map((e) => e.type);
+        expect(types).not.toContain("AssistantDelta");
+        expect(types).toContain("Assistant");
+    });
+});
+
 describe("formatToolCall (TEST-005 TC-005.5, B-005)", () => {
     const tc = (name: string, args: Record<string, unknown>) =>
         formatToolCall({ name, args, result: "" });

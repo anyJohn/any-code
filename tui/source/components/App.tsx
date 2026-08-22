@@ -30,6 +30,10 @@ export default function App(props: AppProps) {
     // 当前任务文本用 state 而非 ref：pendingTasks$ 长度恒 >0 时 setIsProcessing 会 bail-out，
     // ref 变更不触发重渲染会导致显示陈旧
     const [currentTaskText, setCurrentTaskText] = useState("");
+    // 流式输出实时区：<Static> 按 index 缓存、不可重渲，故流式 delta 只能累积到
+    // state 在实时区重绘最后一帧，等定稿事件到达再整体入 <Static>
+    const [streamingText, setStreamingText] = useState("");
+    const streamingTurnIdRef = useRef<string | null>(null);
     // 当前 session id —— 作为 <Static> 的 key，切换 session 时强制 remount 清空缓存的旧消息
     const [currentSessionId, setCurrentSessionId] = useState<
         string | undefined
@@ -73,9 +77,12 @@ export default function App(props: AppProps) {
             [EventType.USER]: MessageType.USER,
             [EventType.TOOL]: MessageType.TOOL,
             [EventType.ITERATION]: MessageType.ITERATION,
+            [EventType.ASSISTANT_DELTA]: MessageType.ASSISTANT,
             [EventType.ASSISTANT]: MessageType.ASSISTANT,
             [EventType.PLANNING]: MessageType.PLANNING,
             [EventType.ERROR]: MessageType.ERROR,
+            [EventType.DONE]: MessageType.SYSTEM,
+            [EventType.STOPPED]: MessageType.SYSTEM,
         };
         return eventTypeMap[eventType] || MessageType.SYSTEM;
     }, []);
@@ -148,6 +155,32 @@ export default function App(props: AppProps) {
             // Subscribe to agent's event stream
             const eventSubscription = agent.eventStream$.subscribe({
                 next: (event) => {
+                    if (event.type === EventType.ASSISTANT_DELTA) {
+                        // 流式增量：累积到实时区，不入 <Static>（Static 按 index
+                        // 缓存、永不重渲，逐 token 追加会刷屏）
+                        setStreamingText(
+                            (prev) => prev + (event.message ?? "")
+                        );
+                        streamingTurnIdRef.current =
+                            event.turnId ?? streamingTurnIdRef.current;
+                        return;
+                    }
+                    if (event.type === EventType.ASSISTANT) {
+                        // 定稿：整条入 <Static>，清空实时区
+                        addMessage(
+                            MessageType.ASSISTANT,
+                            event.message,
+                            event.data
+                        );
+                        setStreamingText("");
+                        streamingTurnIdRef.current = null;
+                        return;
+                    }
+                    if (event.type === EventType.STOPPED) {
+                        // 中断时丢弃未定稿的流式片段
+                        setStreamingText("");
+                        streamingTurnIdRef.current = null;
+                    }
                     addMessage(
                         mapEventType(event.type),
                         event.message,
@@ -381,6 +414,17 @@ export default function App(props: AppProps) {
                     onCancel={handleSessionCancel}
                 />
             )}
+            {streamingText ? (
+                <Box flexDirection="column" marginBottom={1}>
+                    <Text color="#10B981" bold>
+                        {" "}
+                        ● Assistant
+                    </Text>
+                    <Box paddingLeft={12}>
+                        <Text>{streamingText}</Text>
+                    </Box>
+                </Box>
+            ) : null}
             <InputBox
                 onSubmit={handleSubmit}
                 onCancel={handleCancel}

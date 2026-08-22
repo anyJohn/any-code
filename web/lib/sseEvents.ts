@@ -9,6 +9,7 @@ export interface AgentEvent {
         | "User"
         | "Tool"
         | "Iteration"
+        | "AssistantDelta"
         | "Assistant"
         | "Planning"
         | "Error"

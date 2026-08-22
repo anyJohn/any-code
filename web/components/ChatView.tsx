@@ -25,6 +25,7 @@ const tagClass: Record<AgentEvent["type"], string> = {
     User: "text-primary-foreground",
     Tool: "text-muted-foreground",
     Iteration: "text-muted-foreground/70",
+    AssistantDelta: "text-primary",
     Assistant: "text-primary",
     Planning: "text-muted-foreground",
     Error: "text-destructive",

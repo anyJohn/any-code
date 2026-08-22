@@ -45,16 +45,33 @@ export async function agentLoop(
             msg = await callLLM(
                 messages,
                 { ...params, tools: tools.map((t) => t.schema) },
-                ctx.signal
+                ctx.signal,
+                // 流式 delta：每段 text 到达即发 ASSISTANT_DELTA（实时态，不入盘）
+                (delta) =>
+                    ctx.eventStream.submit({
+                        type: EventType.ASSISTANT_DELTA,
+                        message: delta,
+                        turnId,
+                    })
             );
         } catch (err) {
-            // LLM 调用被中断（stop 触发 abort）→ 安静返回，由 executeTask 发 STOPPED
+            // callLLM 流式 abort 时返回截断（不抛），此处只兜底其他异常
             if (ctx.signal.aborted) {
                 return { result: "[stopped]", messages };
             }
             throw err;
         }
+        // abort 截断：callLLM 返回已累积的截断 message（仅 content），定稿落盘后返回 stopped
         if (ctx.signal.aborted) {
+            if (msg?.content) {
+                messages.push(msg);
+                await onMessage?.(msg);
+                ctx.eventStream.submit({
+                    type: EventType.ASSISTANT,
+                    message: msg.content,
+                    turnId,
+                });
+            }
             return { result: "[stopped]", messages };
         }
         messages.push(msg);

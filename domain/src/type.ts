@@ -12,6 +12,7 @@ export enum EventType {
     USER = "User",
     TOOL = "Tool",
     ITERATION = "Iteration",
+    ASSISTANT_DELTA = "AssistantDelta",
     ASSISTANT = "Assistant",
     PLANNING = "Planning",
     ERROR = "Error",
@@ -28,7 +29,7 @@ export interface AgentEvent {
     author?: string;
     /** 一次 sub-agent 调用的分组 id,前端据此折叠展示 */
     runId?: string;
-    /** 一次推理回合的分组 id:同一回合的 ITERATION/ASSISTANT/TOOL 事件共用,
+    /** 一次推理回合的分组 id:同一回合的 ITERATION/ASSISTANT_DELTA/ASSISTANT/TOOL 事件共用,
      *  前端据此把 "assistant 文本 + 紧随的工具调用" 组成块状展示 */
     turnId?: string;
 }
