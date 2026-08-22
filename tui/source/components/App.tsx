@@ -13,9 +13,6 @@ import {
 } from "@any-code/domain";
 
 interface AppProps {
-    apiKey?: string;
-    baseUrl?: string;
-    model?: string;
     sessionId?: string;
     /** 切换 session 时由 cli 层重新 render 整个 App（unmount 旧实例以重置 Ink 的 static 输出缓冲） */
     onSwitchSession?: (sessionId: string) => void;
@@ -49,10 +46,7 @@ export default function App(props: AppProps) {
     const subscriptionsRef = useRef<Array<{ unsubscribe: () => void }>>([]);
     const initializedRef = useRef(false);
 
-    // Apply CLI config overrides to env vars before agent init
-    if (props.apiKey) process.env.OPENAI_API_KEY = props.apiKey;
-    if (props.baseUrl) process.env.OPENAI_BASE_URL = props.baseUrl;
-    if (props.model) process.env.OPENAI_MODEL = props.model;
+    // 配置只从 <workspace>/.anycode/config.yaml 读（AnyAgent.initConfig），不再用环境变量。
 
     // ChatMessage.content 可能是 string | null | 多模态数组（vision/tool 消息），
     // 直接 as string 会让数组渲染成 [object Object]

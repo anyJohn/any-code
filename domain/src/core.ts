@@ -46,13 +46,15 @@ export async function agentLoop(
                 messages,
                 { ...params, tools: tools.map((t) => t.schema) },
                 ctx.signal,
-                // 流式 delta：每段 text 到达即发 ASSISTANT_DELTA（实时态，不入盘）
+                // 流式 delta：每段 text 到达即发 ASSISTANT_DELTA（实时态，不入盘）。
+                // 非流式 provider 不调 onDelta，无 delta 事件。
                 (delta) =>
                     ctx.eventStream.submit({
                         type: EventType.ASSISTANT_DELTA,
                         message: delta,
                         turnId,
-                    })
+                    }),
+                ctx.llm
             );
         } catch (err) {
             // callLLM 流式 abort 时返回截断（不抛），此处只兜底其他异常

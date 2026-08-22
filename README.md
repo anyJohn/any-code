@@ -89,26 +89,33 @@ pnpm install
 
 ### 配置
 
-复制配置模板并填入你的密钥：
+复制配置模板到工作区的 `.anycode/` 并填入密钥：
 
 ```bash
-cp .env.example .env
+mkdir -p .anycode && cp config.example.yaml .anycode/config.yaml
 ```
 
-`.env` 内容：
+所有配置只来自 `.anycode/config.yaml`（不再使用 `.env` / 环境变量）。支持多 provider + provider 粒度流式开关：
 
-| 变量 | 必填 | 说明 |
-| --- | --- | --- |
-| `OPENAI_API_KEY` | ✅ | API 密钥 |
-| `OPENAI_BASE_URL` | 可选 | API 基础 URL（兼容第三方 OpenAI 接口） |
-| `OPENAI_MODEL` | 可选 | 模型名称 |
-
-> TUI / Web 的 CLI 参数（`--api-key` / `--base-url` / `--model`）优先级高于 `.env`，会写入 `process.env`。
+```yaml
+providers:
+  openai:
+    apiKey: sk-your-key
+    baseURL: https://api.openai.com/v1   # 可选
+    model: gpt-4o
+    streaming: true                       # 可选，缺省 true
+  deepseek:
+    apiKey: sk-your-deepseek-key
+    baseURL: https://api.deepseek.com/v1
+    model: deepseek-chat
+    streaming: true
+default: openai                           # 当前生效 provider
+```
 
 ### 运行 Web（推荐体验）
 
 ```bash
-pnpm dev:web          # 启动 Nuxt 开发服务器
+pnpm dev:web          # 启动开发服务器
 # 打开 http://127.0.0.1:3000
 ```
 
@@ -118,7 +125,6 @@ pnpm dev:web          # 启动 Nuxt 开发服务器
 
 ```bash
 pnpm dev:tui          # 启动终端 UI 开发模式
-pnpm dev:tui -- --api-key=sk-xxx --model=gpt-4o   # 带参数
 ```
 
 ### 运行 CLI 示例
@@ -279,7 +285,7 @@ pnpm test          # prettier 格式检查
 | 项 | 现状 | 说明 |
 | --- | --- | --- |
 | 权限策略层 | ❌ 未实现 | `TOOL` 事件已留 `{name,args,result}` 天然拦截点（注释已标"未来权限/黑白名单在此决策"），但无 allow/deny/ask 策略。补最小策略即可从"无安全边界"升到"有工具级管控"；危险命令确认弹窗并入此项 |
-| 多 provider + 运行时模型切换 | ❌ 未实现 | `Config` 锁死 OpenAI SDK、单一 `OPENAI_MODEL`。抽 LLM provider 接口，支持运行时切 model（GLM/Claude/本地）。LLM 调用失败重试/退避并入此项 |
+| 多 provider + 运行时模型切换 | ✅ 已实现（FE-008）| 配置收敛到 `.anycode/config.yaml`（命名 provider map + default + provider 粒度流式开关），不再用环境变量；`reloadConfig()` 热更新切 default。LLM 调用失败重试/退避仍待补 |
 | 上下文 compaction | ❌ 未实现 | 记忆已是两层 markdown + 4000 滑窗 + `save_memory` 工具，但**无 compaction/RAG**，长会话撑爆窗口。借 Claude Code 的 auto-compaction（到阈值摘要旧 tool 结果），不抄事件溯源 log（太重） |
 | 工具结果截断 | ❌ 未实现 | 大文件全文进事件，长输出撑爆 UI。与 compaction 同属上下文管理 |
 | Prompt 工程优化 | ⚠️ 基础 | 系统提示词较基础，未做结构化指令 / few-shot 优化 |

@@ -3,40 +3,76 @@ import {
     ChatCompletionMessage,
 } from "openai/resources/index";
 import { ChatMessage } from "./type";
-import { Config } from "./config";
+import type { LlmProvider } from "./config";
 import OpenAI from "openai";
 import { ToolKit } from "./tools";
 
 /**
- * 调用 LLM（流式）。消费 ChatCompletionChunk 流，累积成完整 assistant message：
- * content 拼接 + tool_calls 按 index 拼装。
- * onDelta 在每段 text delta 到达时触发（agentLoop 据此发 ASSISTANT_DELTA 事件）。
- * signal aborted 时返回已累积的截断 message（仅 content，丢 tool_calls），不抛——
- * 让 agentLoop 截断定稿 + 返回 [stopped]，已发 delta 已展示不丢。
+ * 调用 LLM。按传入 provider 的 streaming 决定流式 / 非流式（provider 粒度开关）。
+ * 流式：消费 chunk 累积成完整 message（content 拼接 + tool_calls 按 index 拼装），onDelta 发增量；
+ *       abort 时返回已累积的截断 message（仅 content）不抛。
+ * 非流式：整段返回 choices[0].message。
+ * llm 由调用方（AnyAgent 从 config.yaml 解析）传入，必填。
  */
 export async function callLLM(
     messages: ChatMessage[],
     params?: Partial<ChatCompletionCreateParamsNonStreaming>,
     signal?: AbortSignal,
-    onDelta?: (delta: string) => void
+    onDelta?: (delta: string) => void,
+    llm?: LlmProvider
 ): Promise<ChatCompletionMessage> {
-    const config = new Config();
-    const { apiKey, baseURL, model } = config;
-    if (!apiKey) {
-        console.error("Error: OPENAI_API_KEY environment variable is required");
+    if (!llm) {
+        throw new Error("callLLM 需要 provider 配置（由 AnyAgent 从 config.yaml 解析传入）");
+    }
+    const provider = llm;
+    if (!provider.apiKey) {
+        console.error("Error: provider.apiKey 为空，请在 .anycode/config.yaml 配置 apiKey");
         process.exit(1);
     }
     const client = new OpenAI({
-        apiKey,
-        baseURL,
+        apiKey: provider.apiKey,
+        baseURL: provider.baseURL,
     });
     const payload: ChatCompletionCreateParamsNonStreaming = {
-        model,
+        model: provider.model,
         messages,
         tools: ToolKit.readOnlyTools.map((t) => t.schema), // 默认只读权限（schema）
         ...params,
     };
-    // signal 透传：stop() abort 时正在进行的流式生成会抛 AbortError，下方 catch 兜底返回截断。
+    // signal 透传：stop() abort 时流式生成抛 AbortError（下方 catch 兜底）/ 非流式 fetch 取消。
+    if (provider.streaming) {
+        return streamCall(client, payload, signal, onDelta, provider.model);
+    }
+    return nonStreamCall(client, payload, signal, provider.model);
+}
+
+/** 非流式调用：整段返回 */
+async function nonStreamCall(
+    client: OpenAI,
+    payload: ChatCompletionCreateParamsNonStreaming,
+    signal: AbortSignal | undefined,
+    model: string
+): Promise<ChatCompletionMessage> {
+    const resp = await client.chat.completions.create(payload, { signal });
+    const message = resp.choices[0]?.message;
+    if (!message) {
+        throw new Error(
+            `LLM returned no choices (model=${model}, finish_reason=${
+                resp.choices[0]?.finish_reason ?? "n/a"
+            })`
+        );
+    }
+    return message;
+}
+
+/** 流式调用：累积 chunk 成完整 message，onDelta 发增量，abort 返回截断 */
+async function streamCall(
+    client: OpenAI,
+    payload: ChatCompletionCreateParamsNonStreaming,
+    signal: AbortSignal | undefined,
+    onDelta: ((delta: string) => void) | undefined,
+    model: string
+): Promise<ChatCompletionMessage> {
     const stream = await client.chat.completions.create(
         { ...payload, stream: true },
         { signal }

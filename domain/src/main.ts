@@ -16,6 +16,7 @@ import { mainAgent } from "./agent";
 import type { AgentDefinition } from "./agent";
 import type { Tool } from "./tools";
 import { loadMcpTools } from "./mcp";
+import { Config, type LlmProvider } from "./config";
 import {
     BehaviorSubject,
     catchError,
@@ -65,6 +66,8 @@ class AnyAgent {
     private sessionKey: SessionKey | null = null;
     // MCP 连接清理（per-agent）：create 时建连，destroy 时清理
     private mcpCleanup: (() => Promise<void>) | null = null;
+    // 当前生效的 LLM provider 配置（多 provider + 流式开关）；create 时 initConfig 从 config.yaml 加载，web 改配置后 reload
+    private config!: Config;
 
     private constructor(opts: AnyAgentOptions) {
         this.service = opts.service ?? new SessionService();
@@ -79,8 +82,24 @@ class AnyAgent {
     static async create(opts: AnyAgentOptions): Promise<AnyAgent> {
         const agent = new AnyAgent(opts);
         await agent.initSession(opts.sessionId);
+        agent.initConfig();
         await agent.initMcp();
         return agent;
+    }
+
+    /** 加载配置文件（多 provider + 流式开关），解析当前 provider */
+    private initConfig(): void {
+        this.config = Config.load(this.workspace);
+    }
+
+    /** 热更新配置：重读 config.yaml，新 default/provider 生效（供 web 改配置后触发） */
+    reloadConfig(): void {
+        this.config.reload();
+    }
+
+    /** 当前生效 provider（供 web 状态面板读 model/provider） */
+    getCurrentProvider(): LlmProvider {
+        return this.config.getCurrentProvider();
     }
 
     /** 加载 MCP 工具（真协议连接），追加到工具集，per-agent 生命周期绑定。 */
@@ -244,6 +263,7 @@ class AnyAgent {
             workspace: this.workspace,
             eventStream: this.eventStream,
             signal: abortController.signal,
+            llm: this.config.getCurrentProvider(),
         };
         await agentLoop(
             task,

@@ -15,9 +15,6 @@ const cli = meow(
     $ anycode
 
   Options
-    --api-key     OpenAI API key
-    --base-url    API base URL
-    --model       Model name
     --resume      Resume a session by id
     --continue    Resume the most recent session
     --sessions    List sessions for the current project and exit
@@ -27,21 +24,11 @@ const cli = meow(
     $ anycode --continue
     $ anycode --resume=a1b2c3d4
     $ anycode --sessions
-    $ anycode --api-key=sk-xxx --base-url=https://api.openai.com/v1
 `,
     {
         importMeta: import.meta,
         argv,
         flags: {
-            apiKey: {
-                type: "string",
-            },
-            baseUrl: {
-                type: "string",
-            },
-            model: {
-                type: "string",
-            },
             resume: {
                 type: "string",
             },
@@ -97,13 +84,7 @@ async function main() {
             process.stdout.write("\x1B[2J\x1B[3J\x1B[H");
         }
         inkInstance = render(
-            <App
-                apiKey={cli.flags.apiKey}
-                baseUrl={cli.flags.baseUrl}
-                model={cli.flags.model}
-                sessionId={sid}
-                onSwitchSession={startApp}
-            />
+            <App sessionId={sid} onSwitchSession={startApp} />
         );
     };
     startApp(sessionId);

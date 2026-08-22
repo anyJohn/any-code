@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const { mockCreate } = vi.hoisted(() => ({ mockCreate: vi.fn() }));
 
@@ -10,13 +10,10 @@ vi.mock("openai", () => ({
 }));
 
 import { callLLM } from "../src/llm";
+import type { LlmProvider } from "../src/config";
 
-// callLLM 内部 new Config() 读 env，给齐避免 process.exit(1)
-beforeAll(() => {
-    process.env.OPENAI_API_KEY = "test-key";
-    process.env.OPENAI_BASE_URL = "http://test";
-    process.env.OPENAI_MODEL = "test-model";
-});
+// 流式 provider（默认）；非流式测试用 streaming:false 覆盖
+const PROVIDER: LlmProvider = { apiKey: "k", model: "m", streaming: true };
 
 /** 构造一个 fake chunk 流（async iterable） */
 const makeStream = (chunks: unknown[]) => ({
@@ -37,7 +34,7 @@ describe("callLLM 流式（llm.ts）", () => {
             ])
         );
         const onDelta = vi.fn();
-        const msg = await callLLM([], undefined, undefined, onDelta);
+        const msg = await callLLM([], undefined, undefined, onDelta, PROVIDER);
 
         expect(msg.role).toBe("assistant");
         expect(msg.content).toBe("hello");
@@ -72,7 +69,7 @@ describe("callLLM 流式（llm.ts）", () => {
                 },
             ])
         );
-        const msg = (await callLLM([], undefined, undefined)) as {
+        const msg = (await callLLM([], undefined, undefined, undefined, PROVIDER)) as {
             tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }>;
         };
         expect(msg.tool_calls).toHaveLength(1);
@@ -93,14 +90,43 @@ describe("callLLM 流式（llm.ts）", () => {
                 throw new Error("aborted");
             },
         });
-        const msg = await callLLM([], undefined, ac.signal);
+        const msg = await callLLM([], undefined, ac.signal, undefined, PROVIDER);
         expect(ac.signal.aborted).toBe(true);
         expect(msg.content).toBe("hello");
         expect(msg.tool_calls).toBeUndefined();
     });
 
+    it("AC-003 provider.streaming=false → 非流式（无 onDelta，整段返回）", async () => {
+        mockCreate.mockResolvedValue({
+            choices: [{ message: { role: "assistant", content: "hello" } }],
+        });
+        const onDelta = vi.fn();
+        const msg = await callLLM([], undefined, undefined, onDelta, {
+            apiKey: "k",
+            model: "m",
+            streaming: false,
+        });
+        expect(onDelta).not.toHaveBeenCalled();
+        expect(msg.content).toBe("hello");
+        // 非流式 payload 不含 stream:true
+        expect(mockCreate.mock.calls[0][0].stream).toBeFalsy();
+    });
+
+    it("AC-003b provider.streaming=true → 流式（发 onDelta）", async () => {
+        mockCreate.mockResolvedValue(
+            makeStream([{ choices: [{ delta: { content: "hi" } }] }])
+        );
+        const onDelta = vi.fn();
+        await callLLM([], undefined, undefined, onDelta, PROVIDER);
+        expect(onDelta).toHaveBeenCalledWith("hi");
+        // 流式 payload 含 stream:true
+        expect(mockCreate.mock.calls[0][0].stream).toBe(true);
+    });
+
     it("空响应（无 content 无 tool_calls）抛错", async () => {
         mockCreate.mockResolvedValue(makeStream([{ choices: [{ delta: {} }] }]));
-        await expect(callLLM([], undefined, undefined)).rejects.toThrow(/no content/);
+        await expect(callLLM([], undefined, undefined, undefined, PROVIDER)).rejects.toThrow(
+            /no content/
+        );
     });
 });

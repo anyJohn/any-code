@@ -1,5 +1,6 @@
 import type { Workspace } from "./workspace";
 import type { AgentEventPayload } from "./type";
+import type { LlmProvider } from "./config";
 
 /** 最小事件发射接口。EventStream 实现它;AgentTool 的 tagged proxy 也实现它。 */
 export interface EventEmitter {
@@ -11,6 +12,7 @@ export interface EventEmitter {
  * workspace 给文件工具经 resolvePath、bash 设 cwd；eventStream 给工具发事件；
  * signal 用于中断——AnyAgent 持有 AbortController，stop() 时 abort，
  * agentLoop 在迭代边界检查、callLLM 传给 OpenAI 客户端，正在进行的 LLM 调用会抛 AbortError。
+ * llm 是当前生效 provider 设置（apiKey/baseURL/model/streaming），由 AnyAgent 从 Config 解析传入。
  *
  * 主 agent 的 ctx.eventStream 是 AnyAgent 自己的 EventStream；
  * sub-agent 的 ctx.eventStream 是一个 tagged proxy——转发到父流并打 author/runId。
@@ -20,4 +22,5 @@ export interface ToolContext {
     workspace: Workspace;
     eventStream: EventEmitter;
     signal: AbortSignal;
+    llm?: LlmProvider;
 }
