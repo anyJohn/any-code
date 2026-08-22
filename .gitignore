@@ -13,6 +13,7 @@ build/
 .cache/
 docs/
 test/
+!domain/test/
 
 # IDE
 .vscode/
