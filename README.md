@@ -11,6 +11,7 @@ AnyCode 用一个响应式 Agent 内核驱动三种交互形态：**Web UI**、*
 ## 特性 · Features
 
 **核心引擎（domain）**
+
 - 响应式 Agent 内核：基于 RxJS 的 `task$` 队列 + `concatMap` 串行处理，`submit` / `stop` / `eventStream$` / `pendingTasks$` 响应式 API
 - 推理循环 `agentLoop`：think → tool_call → observe → think → respond，按回合（turnId）分组事件
 - 真正的任务中断：`AbortController` 贯穿 `AnyAgent` → `agentLoop` → `callLLM` → OpenAI SDK，`stop()` 能真正打断进行中的 LLM 调用，而非仅断开订阅
@@ -21,6 +22,7 @@ AnyCode 用一个响应式 Agent 内核驱动三种交互形态：**Web UI**、*
 - 记忆 / 规则 / 技能：`.anycode/memory.md`、`.anycode/rules/`、`.anycode/skills/` 自动注入 system prompt
 
 **Web UI（web）**
+
 - Nuxt 3 + Tailwind v4 + shadcn-vue 的现代聊天界面
 - 多工作区、多会话侧栏：工作区与会话**双重高亮**，自动展开、乐观更新
 - SSE 实时事件流：推理回合块状展示，工具调用默认折叠、按需展开看参数与结果
@@ -29,6 +31,7 @@ AnyCode 用一个响应式 Agent 内核驱动三种交互形态：**Web UI**、*
 - 历史回放与实时同形：`messagesToEvents` 把持久化消息按回合重建，刷新页面后表现一致
 
 **终端 TUI（tui）**
+
 - Ink / React 19 渲染的终端 UI，`<Static>` 持久化输出
 - 会话选择器，CLI 参数透传
 
@@ -95,7 +98,7 @@ cp .env.example .env
 `.env` 内容：
 
 | 变量 | 必填 | 说明 |
-|---|---|---|
+| --- | --- | --- |
 | `OPENAI_API_KEY` | ✅ | API 密钥 |
 | `OPENAI_BASE_URL` | 可选 | API 基础 URL（兼容第三方 OpenAI 接口） |
 | `OPENAI_MODEL` | 可选 | 模型名称 |
@@ -136,7 +139,7 @@ npx tsx src/cliExample.ts "列出当前目录下的文件"
 每个工作区根目录下可放置 `.anycode/` 运行时配置（被 `.gitignore` 忽略，不提交）：
 
 | 路径 | 作用 |
-|---|---|
+| --- | --- |
 | `.anycode/memory.md` | 跨会话记忆，自动注入 system prompt |
 | `.anycode/rules/` | 自定义规则（markdown 文件） |
 | `.anycode/skills/` | 自定义技能（markdown 文件） |
@@ -151,7 +154,7 @@ npx tsx src/cliExample.ts "列出当前目录下的文件"
 `Tool = schema（给 LLM）+ handler（执行）`，handler 接收 `ToolContext`（workspace + eventStream + signal）。
 
 | 工具 | 权限分组 | 作用 |
-|---|---|---|
+| --- | --- | --- |
 | `bash` | all / execute | 执行 shell 命令 |
 | `read` | all / read / execute | 读取文件（支持 offset / limit） |
 | `edit` | all / execute | 精确字符串替换编辑 |
@@ -254,42 +257,58 @@ pnpm test          # prettier 格式检查
 
 ## Roadmap / 待实现
 
-下列为**重新核对当前代码后**的真实缺口（不沿用早期需求文档）。
+下列为**重新核对当前代码 + 横向对比五款 agent harness 后**重新排定的优先级。不沿用早期需求文档，也非追平体量——anycode 守"最小可读内核"定位，原则是 **"小而全 + 真协议接入生态 + 轻量编排"**，不和大型 harness 拼体量。
 
-### P0 — 体验与健壮性
+### 战略 stance
+
+- ✅ **做**：堵工程欠债 → 补关键能力 → 选一个轻量差异化切入
+- ❌ **不做**："一切皆插件"插件框架（体量过大）、多通道消息网关（与定位无关）、沙箱隔离（太重，用权限策略兜底）、体量扩张（保持小而清晰是卖点）
+
+### P0 — 堵工程欠债（让 anycode 真正可用）
+
+从 P0 开始实现。这三项是与成熟 harness 最大工程落差，也是 README 此前自标的未实现项。
 
 | 项 | 现状 | 说明 |
-|---|---|---|
-| 流式输出 | ❌ 未实现 | `callLLM` 仍为非流式调用，整段返回后才发事件。需改为 streaming + token 级渲染 |
-| 错误恢复与重试 | ❌ 未实现 | LLM 调用失败无重试 / 退避策略 |
+| --- | --- | --- |
+| MCP 真协议连接（stdio/SSE） | ⚠️ 仅静态 schema | `loadMcpTools` 只读 `.anycode/mcp.json` 注入 schema，未实现 client 真实连接。**与四款最大工程差距**——没真 MCP，anycode 是扩展孤岛 |
+| 流式输出 | ❌ 未实现 | `callLLM` 非流式，整段返回后才发事件。Web/TUI 已备 SSE fetch-streaming，只差 LLM 侧 token 级流式 |
+| 核心路径单测 | ❌ 0% | 不求高覆盖，给 `agentLoop` / `toolCall` / `session` 派发等关键路径加单测，让重构有回归网 |
 
-### P1 — 能力与安全
+### P1 — 补关键能力（实用性 + 对齐趋势）
 
 | 项 | 现状 | 说明 |
-|---|---|---|
-| 安全沙箱 / 权限模型 | ❌ 未实现 | bash 服务端执行无沙箱；`TOOL` 事件已留 `{name,args,result}` 钩子，但无黑白名单 / bypass / 危险命令确认策略 |
-| MCP 协议真实集成 | ⚠️ 仅静态 schema | `loadMcpTools` 只读 `mcp.json` 注入 schema，未实现 stdio / SSE client 真实连接工具 |
+| --- | --- | --- |
+| 权限策略层 | ❌ 未实现 | `TOOL` 事件已留 `{name,args,result}` 天然拦截点（注释已标"未来权限/黑白名单在此决策"），但无 allow/deny/ask 策略。补最小策略即可从"无安全边界"升到"有工具级管控"；危险命令确认弹窗并入此项 |
+| 多 provider + 运行时模型切换 | ❌ 未实现 | `Config` 锁死 OpenAI SDK、单一 `OPENAI_MODEL`。抽 LLM provider 接口，支持运行时切 model（GLM/Claude/本地）。LLM 调用失败重试/退避并入此项 |
+| 上下文 compaction | ❌ 未实现 | 记忆已是两层 markdown + 4000 滑窗 + `save_memory` 工具，但**无 compaction/RAG**，长会话撑爆窗口。借 Claude Code 的 auto-compaction（到阈值摘要旧 tool 结果），不抄事件溯源 log（太重） |
+| 工具结果截断 | ❌ 未实现 | 大文件全文进事件，长输出撑爆 UI。与 compaction 同属上下文管理 |
 | Prompt 工程优化 | ⚠️ 基础 | 系统提示词较基础，未做结构化指令 / few-shot 优化 |
-| 交互式确认弹窗 | ❌ 未实现 | plan 模式、危险命令缺少人工确认环节 |
-| 单元 / 集成测试 | ❌ 0% | 三个包均无测试，仅 TUI 做 prettier 格式检查 |
-| EventStream 多实例 | ✅ 已实现 | 每个 `AnyAgent` 持自己的 `EventStream`（per-agent，非单例），多 agent 并发不串流。生命周期绑 agent，`destroy()` 后随 GC |
 
-### P2 — 扩展
+### P2 — 选一个差异化方向（不追全，只挑一个）
 
 | 项 | 现状 | 说明 |
-|---|---|---|
-| 记忆系统增强 | ⚠️ 简陋 | 仅追加式 `.anycode/memory.md`，无摘要 / 检索 / 裁剪 |
-| 多模型切换 | ❌ 未实现 | 单一 `OPENAI_MODEL`，运行时不可切换 |
-| 工具结果截断 / 虚拟滚动 | ❌ 未实现 | 大文件全文进事件，长输出会撑爆 UI |
+| --- | --- | --- |
+| 轻量编排切入 | ❌ 未实现 | 不做 dsh 那种全 subagent provider 体系。挑一个轻量切入：支持 ACP 委托外部 harness，或 `delegate_to_cli` 让 anycode 调外部 Claude Code/Codex。蹭上"跨 harness 编排"趋势但不背重包袱 |
+| 程序性记忆 / 自学习 | ❌ 未实现 | 借 Hermes `skill_manage` 思路：anycode 已有 `.anycode/skills/` 加载，加 `create_skill` 工具让 agent 自造 skill，拿到"越用越强"的最小自学习循环 |
 | CI/CD | ❌ 无 | 无 `.github/workflows` |
-| `--verbose` 调试模式 | ❌ 未实现 | 无 LLM 请求/响应、工具调用详情的可观测开关 |
+| `--verbose` 调试模式 | ❌ 无 | 无 LLM 请求/响应、工具调用详情的可观测开关 |
 
-### P3 — 工程化
+### 已实现（对比中确认）
 
-| 项 | 现状 | 说明 |
-|---|---|---|
-| npm 发布配置 | ❌ 无 | 未配置发布流程 |
-| 新会话落盘后侧栏刷新 | ⚠️ 小缺陷 | Web 新建对话首条消息后，侧栏列表不自动刷新出新会话 |
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| EventStream 多实例 | ✅ | 每个 `AnyAgent` 持自己的 `EventStream`（per-agent，非单例），多 agent 并发不串流。生命周期绑 agent，`destroy()` 后随 GC |
+| 真 AbortController 取消 | ✅ | `AnyAgent.stop()` 调 `abortController.abort()`，信号穿进 OpenAI SDK 调用，中断在途 LLM 而非仅断订阅 |
+| 两层记忆 + save_memory | ✅ | 全局 `~/.anycode/memory.md` + 项目 `.anycode/memory.md`，4000 滑窗，LLM 主动调 `save_memory` 写入 |
+| 连接持有 agent（Web） | ✅ | `/run` 每 request 一 agent，终态/断开即 `destroy()`，单飞 409 防并发 |
+| 子 agent 委托 | ✅ | `AgentTool(planAgent)` 声明式子 agent，独立上下文 + 带 tag 代理 EventStream |
+
+### 明确不做（防失焦）
+
+- ❌ "一切皆插件"插件框架 / Cordis 式插件系统——体量过大，不追
+- ❌ 多通道消息网关（WhatsApp/Telegram/Discord…）——与 anycode 定位无关
+- ❌ 进程/文件系统级沙箱——太重，留将来，用 P1 权限策略兜底
+- ❌ 体量扩张——保持小而清晰是卖点，不是缺点
 
 ---
 
