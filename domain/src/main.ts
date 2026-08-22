@@ -15,6 +15,7 @@ import { createWorkspace, Workspace } from "./workspace";
 import { mainAgent } from "./agent";
 import type { AgentDefinition } from "./agent";
 import type { Tool } from "./tools";
+import { loadMcpTools } from "./mcp";
 import {
     BehaviorSubject,
     catchError,
@@ -62,6 +63,8 @@ class AnyAgent {
     // session 延迟到首条用户消息时才创建，避免每次启动都落盘一个空 session
     private session: Session | null = null;
     private sessionKey: SessionKey | null = null;
+    // MCP 连接清理（per-agent）：create 时建连，destroy 时清理
+    private mcpCleanup: (() => Promise<void>) | null = null;
 
     private constructor(opts: AnyAgentOptions) {
         this.service = opts.service ?? new SessionService();
@@ -76,7 +79,21 @@ class AnyAgent {
     static async create(opts: AnyAgentOptions): Promise<AnyAgent> {
         const agent = new AnyAgent(opts);
         await agent.initSession(opts.sessionId);
+        await agent.initMcp();
         return agent;
+    }
+
+    /** 加载 MCP 工具（真协议连接），追加到工具集，per-agent 生命周期绑定。 */
+    private async initMcp(): Promise<void> {
+        try {
+            const mcp = await loadMcpTools(this.workspace);
+            if (mcp.tools.length) this.tools = [...this.tools, ...mcp.tools];
+            this.mcpCleanup = mcp.cleanup;
+        } catch (err) {
+            // MCP 加载失败不阻断 agent 启动（仅内置工具）
+            console.error("[MCP] loadMcpTools failed:", err);
+            this.mcpCleanup = null;
+        }
     }
 
     private async initSession(sessionId?: string) {
@@ -158,6 +175,9 @@ class AnyAgent {
         this.destroy$.complete();
         // per-agent eventStream，切换时清空释放内存
         this.eventStream.clear();
+        // MCP 连接清理（per-agent）：kill stdio 子进程 / 关 SSE 连接
+        this.mcpCleanup?.().catch(() => {});
+        this.mcpCleanup = null;
     }
 
     submit(task: string) {

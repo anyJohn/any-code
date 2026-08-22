@@ -20,6 +20,7 @@
         "test": "vitest run"
     },
     "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.30.0",
         "dotenv": "^17.4.2",
         "glob": "^13.0.6",
         "openai": "^6.32.0",
