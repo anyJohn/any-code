@@ -143,4 +143,28 @@ describe("callLLM 流式（llm.ts）", () => {
             /no content/
         );
     });
+
+    it("AC-001 捕获 delta.reasoning_content → onThinkingDelta（SPEC-015）", async () => {
+        mockCreate.mockResolvedValue(
+            makeStream([
+                { choices: [{ delta: { reasoning_content: "think-1" } }] },
+                { choices: [{ delta: { reasoning_content: "think-2" } }] },
+                { choices: [{ delta: { content: "answer" } }] },
+            ])
+        );
+        const onThinking = vi.fn();
+        await callLLM([], undefined, undefined, undefined, PROVIDER, onThinking);
+        expect(onThinking).toHaveBeenCalledTimes(2);
+        expect(onThinking).toHaveBeenNthCalledWith(1, "think-1");
+        expect(onThinking).toHaveBeenNthCalledWith(2, "think-2");
+    });
+
+    it("无 reasoning_content 时 onThinkingDelta 不被调（SPEC-015 B-007）", async () => {
+        mockCreate.mockResolvedValue(
+            makeStream([{ choices: [{ delta: { content: "answer" } }] }])
+        );
+        const onThinking = vi.fn();
+        await callLLM([], undefined, undefined, undefined, PROVIDER, onThinking);
+        expect(onThinking).not.toHaveBeenCalled();
+    });
 });

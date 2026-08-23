@@ -132,4 +132,39 @@ describe("agentLoop（core.ts）", () => {
         expect(res.result).toBe("Max iterations reached");
         expect(vi.mocked(callLLM)).toHaveBeenCalledTimes(2);
     });
+
+    it("AC-002 callLLM 第 6 参 onThinkingDelta → 发 THINKING 事件（SPEC-015）", async () => {
+        // callLLM mock 调用第 6 参 onThinkingDelta，模拟思考型模型流
+        vi.mocked(callLLM).mockImplementation(
+            async (
+                _msgs: unknown,
+                _params: unknown,
+                _signal: unknown,
+                _onDelta: unknown,
+                _llm: unknown,
+                onThinking?: (d: string) => void
+            ) => {
+                onThinking?.("think-x");
+                return assistantMsg("answer") as never;
+            }
+        );
+        const submit = vi.fn();
+        const ctx: ToolContext = {
+            workspace: {} as never,
+            eventStream: { submit },
+            signal: new AbortController().signal,
+        };
+        await agentLoop("task", [], 30, undefined, undefined, ctx, []);
+
+        const thinkingCall = submit.mock.calls.find(
+            (c) => c[0]?.type === "Thinking"
+        );
+        expect(thinkingCall).toBeTruthy();
+        expect(thinkingCall![0].message).toBe("think-x");
+        // turnId 与同回合 Iteration 一致
+        const iterCall = submit.mock.calls.find(
+            (c) => c[0]?.type === "Iteration"
+        );
+        expect(thinkingCall![0].turnId).toBe(iterCall![0].turnId);
+    });
 });

@@ -144,6 +144,40 @@ describe("toRenderItems (TEST-005 TC-005.4, B-003 sub-agent)", () => {
     });
 });
 
+describe("groupByTurn Thinking 累积（SPEC-015 AC-003/005）", () => {
+    it("AC-003 同回合多个 Thinking 事件累积进 TurnItem.thinking", () => {
+        const events: AgentEvent[] = [
+            ev("Iteration", "i1", { turnId: "t1" }),
+            ev("Thinking", "think-1", { turnId: "t1" }),
+            ev("Thinking", "think-2", { turnId: "t1" }),
+            ev("Assistant", "answer", { turnId: "t1" }),
+        ];
+        const turns = groupByTurn(events);
+        expect(turns).toHaveLength(1);
+        expect(turns[0].thinking).toBe("think-1think-2");
+    });
+
+    it("AC-003 Thinking 在 Assistant 前累积，thinking 独立于 assistant", () => {
+        const events: AgentEvent[] = [
+            ev("Iteration", "i1", { turnId: "t1" }),
+            ev("Thinking", "reasoning", { turnId: "t1" }),
+            ev("Assistant", "final", { turnId: "t1" }),
+        ];
+        const turns = groupByTurn(events);
+        expect(turns[0].thinking).toBe("reasoning");
+        expect(turns[0].assistant?.message).toBe("final");
+    });
+
+    it("AC-005 无 Thinking 事件 → TurnItem.thinking 为 undefined", () => {
+        const events: AgentEvent[] = [
+            ev("Iteration", "i1", { turnId: "t1" }),
+            ev("Assistant", "answer", { turnId: "t1" }),
+        ];
+        const turns = groupByTurn(events);
+        expect(turns[0].thinking).toBeUndefined();
+    });
+});
+
 describe("groupByTurn 流式 delta 累积", () => {
     it("AssistantDelta 累积进当前回合 assistant，定稿 Assistant 替换", () => {
         const events: AgentEvent[] = [
