@@ -87,9 +87,9 @@ class AnyAgent {
         return agent;
     }
 
-    /** 加载配置文件（多 provider + 流式开关），解析当前 provider */
+    /** 加载配置文件（全局 ~/.anycode/config.yaml，多 provider + 流式开关），解析当前 provider */
     private initConfig(): void {
-        this.config = Config.load(this.workspace);
+        this.config = Config.load();
     }
 
     /** 热更新配置：重读 config.yaml，新 default/provider 生效（供 web 改配置后触发） */

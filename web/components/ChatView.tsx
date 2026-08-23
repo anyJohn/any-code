@@ -425,12 +425,10 @@ export function ChatView({
                             appendSystem("无法获取当前模型");
                         }
                     } else {
-                        const res = await fetch(
-                            `/api/workspaces/${projectKey}/config`,
-                            {
-                                method: "PATCH",
-                                headers: { "content-type": "application/json" },
-                                body: JSON.stringify({ default: args }),
+                        const res = await fetch(`/api/config`, {
+                            method: "PATCH",
+                            headers: { "content-type": "application/json" },
+                            body: JSON.stringify({ default: args }),
                             }
                         );
                         if (res.ok) {

@@ -1,5 +1,5 @@
 # anycode 配置文件模板。
-# 复制此文件到 <workspace>/.anycode/config.yaml 并填写。
+# 复制此文件到 ~/.anycode/config.yaml 并填写。
 # 所有配置只在此文件。
 
 # 命名 provider：每个 provider 自带 apiKey / baseURL / model / streaming

@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAppSelector } from "@/hooks/useRedux";
-import { selectWorkspace } from "@/store/workspaceSlice";
 import type { ConfigShape } from "@any-code/domain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -169,9 +167,6 @@ function toConfigShape(
 }
 
 export default function SettingsPage() {
-    const { selected } = useAppSelector(selectWorkspace);
-    const projectKey = selected?.projectKey;
-
     const [providers, setProviders] = useState<ProviderForm[]>([]);
     const [def, setDef] = useState("");
     const [mcp, setMcp] = useState<McpForm[]>([]);
@@ -184,26 +179,20 @@ export default function SettingsPage() {
     );
 
     useEffect(() => {
-        if (!projectKey) {
-            setStatus("ready");
-            return;
-        }
         setStatus("loading");
         setMsg(null);
-        apiJson<ConfigResponse>(`/api/workspaces/${projectKey}/config`).then(
-            (res) => {
-                if (res === null) {
-                    setStatus("error");
-                    return;
-                }
-                const { providers: ps, default: d, mcp: ms } = fromResponse(res);
-                setProviders(ps);
-                setDef(d);
-                setMcp(ms);
-                setStatus("ready");
+        apiJson<ConfigResponse>(`/api/config`).then((res) => {
+            if (res === null) {
+                setStatus("error");
+                return;
             }
-        );
-    }, [projectKey]);
+            const { providers: ps, default: d, mcp: ms } = fromResponse(res);
+            setProviders(ps);
+            setDef(d);
+            setMcp(ms);
+            setStatus("ready");
+        });
+    }, []);
 
     const patchProvider = (i: number, patch: Partial<ProviderForm>) =>
         setProviders((p) =>
@@ -221,19 +210,15 @@ export default function SettingsPage() {
         setMcp((p) => p.filter((_, idx) => idx !== i));
 
     const save = async () => {
-        if (!projectKey) return;
         setSaving(true);
         setMsg(null);
         const body = toConfigShape(providers, def, mcp);
         try {
-            const res = await fetch(
-                `/api/workspaces/${projectKey}/config`,
-                {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify(body),
-                }
-            );
+            const res = await fetch(`/api/config`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify(body),
+            });
             if (res.ok) {
                 setMsg({ kind: "ok", text: "已保存，下次对话生效" });
             } else {
@@ -253,18 +238,6 @@ export default function SettingsPage() {
         }
     };
 
-    if (!projectKey) {
-        return (
-            <div className="h-full overflow-y-auto">
-                <div className="w-full max-w-3xl mx-auto px-4 py-6">
-                    <p className="text-sm text-muted-foreground">
-                        请先选择工作区
-                    </p>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div className="h-full overflow-y-auto">
             <div className="w-full max-w-3xl mx-auto px-4 py-6 flex flex-col gap-6">
@@ -272,8 +245,8 @@ export default function SettingsPage() {
                     <h1 className="text-2xl font-bold text-foreground">
                         设置
                     </h1>
-                    <span className="text-xs text-muted-foreground font-mono truncate">
-                        📁 {selected?.rootPath}
+                    <span className="text-xs text-muted-foreground font-mono">
+                        全局配置 ~/.anycode/config.yaml
                     </span>
                 </div>
 

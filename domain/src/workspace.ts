@@ -139,9 +139,9 @@ export function workspaceConfigDir(workspace: Workspace): string {
     return path.join(workspace.rootPath, ".anycode");
 }
 
-/** 全局配置目录：~/.anycode（工作区注册表 + 全局 memory）。与项目级 workspaceConfigDir 对应。 */
+/** 全局配置目录：~/.anycode（调用时算 os.homedir，便于测试用临时 HOME 覆盖；registry 仍用冻结的 REGISTRY_DIR） */
 export function globalConfigDir(): string {
-    return REGISTRY_DIR;
+    return path.join(os.homedir(), ".anycode");
 }
 
 /** 全局记忆文件：~/.anycode/memory.md（跨项目通用记忆）。 */

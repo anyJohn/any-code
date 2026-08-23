@@ -1,13 +1,12 @@
 import { join } from "node:path";
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import * as yaml from "js-yaml";
-import type { Workspace } from "./workspace";
-import { workspaceConfigDir } from "./workspace";
+import { globalConfigDir } from "./workspace";
 import type { McpServerConfig } from "./mcp";
 
 /**
  * 一个 LLM provider 的连接设置。streaming 粒度在 provider 层。
- * 所有配置只来自 <workspace>/.anycode/config.yaml。
+ * 配置全局：~/.anycode/config.yaml（跨工作区共享，不按工作区隔离）。
  */
 export interface LlmProvider {
     apiKey: string;
@@ -47,8 +46,12 @@ function normalize(
     return out;
 }
 
+function globalConfigFile(): string {
+    return join(globalConfigDir(), "config.yaml");
+}
+
 /**
- * 配置加载器：唯一来源 <workspace>/.anycode/config.yaml（命名 provider map + default + streaming）。
+ * 配置加载器：唯一来源 ~/.anycode/config.yaml（全局，命名 provider map + default + streaming + mcp）。
  * 无文件 / 无 provider / default 未定义 → 抛错（引导用户建配置）。
  * 热更新：reload() 重读文件，供 web 改配置后触发。
  */
@@ -56,25 +59,22 @@ export class Config {
     providers: Record<string, LlmProvider>;
     default: string;
     mcpServers: Record<string, McpServerConfig>;
-    private workspace: Workspace;
 
     private constructor(
-        workspace: Workspace,
         providers: Record<string, LlmProvider>,
         def: string,
         mcpServers: Record<string, McpServerConfig>
     ) {
-        this.workspace = workspace;
         this.providers = providers;
         this.default = def;
         this.mcpServers = mcpServers;
     }
 
-    static load(workspace: Workspace): Config {
-        const file = join(workspaceConfigDir(workspace), "config.yaml");
+    static load(): Config {
+        const file = globalConfigFile();
         if (!existsSync(file)) {
             throw new Error(
-                `配置文件不存在：${file}。请复制仓库根的 config.example.yaml 到 <workspace>/.anycode/config.yaml 并填写。`
+                `配置文件不存在：${file}。请复制仓库根的 config.example.yaml 到 ~/.anycode/config.yaml 并填写。`
             );
         }
         const parsed = yaml.load(readFileSync(file, "utf-8")) as ConfigShape | null;
@@ -89,7 +89,7 @@ export class Config {
             );
         }
         const mcpServers = parsed?.mcp ?? {};
-        return new Config(workspace, providers, def, mcpServers);
+        return new Config(providers, def, mcpServers);
     }
 
     /** 当前生效 provider（按 default 字段） */
@@ -99,14 +99,14 @@ export class Config {
 
     /** 热更新：重读配置文件，新 default/provider/mcp 生效（下次 callLLM/initMcp 用新值） */
     reload(): void {
-        const fresh = Config.load(this.workspace);
+        const fresh = Config.load();
         this.providers = fresh.providers;
         this.default = fresh.default;
         this.mcpServers = fresh.mcpServers;
     }
 
-    /** 校验 + 写回 config.yaml（js-yaml dump）。供 web 改配置后保存。 */
-    static save(workspace: Workspace, data: ConfigShape): void {
+    /** 校验 + 写回 ~/.anycode/config.yaml（js-yaml dump）。供 web 改配置后保存。 */
+    static save(data: ConfigShape): void {
         const providers = data.providers ?? {};
         if (!Object.keys(providers).length) {
             throw new Error("providers 不能为空");
@@ -120,10 +120,9 @@ export class Config {
                 throw new Error(`mcp server "${name}" type 非法（需 stdio/sse）`);
             }
         }
-        const dir = workspaceConfigDir(workspace);
-        mkdirSync(dir, { recursive: true });
+        mkdirSync(globalConfigDir(), { recursive: true });
         writeFileSync(
-            join(dir, "config.yaml"),
+            globalConfigFile(),
             yaml.dump({ providers, default: def, mcp: data.mcp ?? {} }),
             "utf-8"
         );

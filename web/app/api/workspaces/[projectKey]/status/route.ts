@@ -48,7 +48,7 @@ export async function GET(
 
     let cfg: Config | null = null;
     try {
-        cfg = Config.load(workspace);
+        cfg = Config.load();
     } catch {
         // 无配置 → 返回空骨架，状态条仍渲染
         return NextResponse.json(EMPTY);

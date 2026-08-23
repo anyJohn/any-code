@@ -30,11 +30,11 @@ dev 用 **Turbopack**（`next dev --turbopack`）：消费 `transpilePackages` �
 > **性能**：dev 模式每路由 warm ~300ms（Next dev 逐请求运行时开销，与 domain 消费方式无关）；
 > 要更快用生产模式 `pnpm build && pnpm start`（warm ~5ms）。
 
-需要 LLM 配置。`domain/src/config.ts` 从选中工作区的 `.anycode/config.yaml` 加载（不再用环境变量）。
-把仓库根的 `config.example.yaml` 复制到你的工作区 `.anycode/config.yaml` 并填写：
+需要 LLM 配置。`domain/src/config.ts` 从全局 `~/.anycode/config.yaml` 加载（跨工作区共享）。
+把仓库根的 `config.example.yaml` 复制到 `~/.anycode/config.yaml` 并填写：
 
 ```bash
-mkdir -p <workspace>/.anycode && cp config.example.yaml <workspace>/.anycode/config.yaml
+mkdir -p ~/.anycode && cp config.example.yaml ~/.anycode/config.yaml
 ```
 
 ## 开发须知

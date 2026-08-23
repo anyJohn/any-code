@@ -12,6 +12,8 @@ scope: 配置文件（YAML）+ 多 provider + provider 粒度流式开关 + 热�
 # SPEC-008: 配置文件 + 多 provider + 流式开关
 
 > 修订：废弃 `.env` / 环境变量（含 `${VAR}` 引用），所有配置只从 `.anycode/config.yaml` 读（DEC-028，覆盖原 C-005/C-006/AC-005/AC-006）。
+>
+> 再修订：配置改**全局** `~/.anycode/config.yaml`（跨工作区共享，不按工作区隔离）。`Config.load()` / `Config.save(data)` 去 workspace 参数；web 改用 `/api/config`（全局）。skills/memory/rules 仍按工作区。
 
 ## 配置文件形态（.anycode/config.yaml）
 
