@@ -110,9 +110,13 @@ default: p1
         expect(cfg.getCurrentProvider().contextWindow).toBe(128000);
     });
 
-    it("AC-005 无 config.yaml → 抛错引导建配置", () => {
-        // beforeEach 已清空 .anycode，无 config.yaml
-        expect(() => Config.load()).toThrow(/配置文件不存在/);
+    it("AC-005 无 config.yaml → 自动创建默认配置 + 加载成功", () => {
+        // beforeEach 已清空 .anycode，无 config.yaml → load 自动建默认
+        const cfg = Config.load();
+        expect(cfg.default).toBe("default");
+        expect(cfg.providers.default.apiKey).toBe("");
+        expect(cfg.providers.default.model).toBe("gpt-4o");
+        expect(fs.existsSync(cfgFile())).toBe(true);
     });
 
     it("无 providers / default 未定义 → 抛错", () => {

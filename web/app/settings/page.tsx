@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import type { ConfigShape } from "@any-code/domain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -174,13 +175,9 @@ export default function SettingsPage() {
         "loading"
     );
     const [saving, setSaving] = useState(false);
-    const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(
-        null
-    );
 
     useEffect(() => {
         setStatus("loading");
-        setMsg(null);
         apiJson<ConfigResponse>(`/api/config`).then((res) => {
             if (res === null) {
                 setStatus("error");
@@ -211,7 +208,6 @@ export default function SettingsPage() {
 
     const save = async () => {
         setSaving(true);
-        setMsg(null);
         const body = toConfigShape(providers, def, mcp);
         try {
             const res = await fetch(`/api/config`, {
@@ -220,7 +216,7 @@ export default function SettingsPage() {
                 body: JSON.stringify(body),
             });
             if (res.ok) {
-                setMsg({ kind: "ok", text: "已保存，下次对话生效" });
+                toast.success("已保存，下次对话生效");
             } else {
                 let text = "保存失败";
                 try {
@@ -229,10 +225,10 @@ export default function SettingsPage() {
                 } catch {
                     // body 非 json，忽略
                 }
-                setMsg({ kind: "err", text });
+                toast.error(text);
             }
         } catch {
-            setMsg({ kind: "err", text: "网络错误，保存失败" });
+            toast.error("网络错误，保存失败");
         } finally {
             setSaving(false);
         }
@@ -553,19 +549,6 @@ export default function SettingsPage() {
                                 )}
                             </CardContent>
                         </Card>
-
-                        {msg && (
-                            <p
-                                className={cn(
-                                    "text-sm",
-                                    msg.kind === "ok"
-                                        ? "text-primary"
-                                        : "text-destructive"
-                                )}
-                            >
-                                {msg.text}
-                            </p>
-                        )}
 
                         <div className="flex justify-end">
                             <Button onClick={save} disabled={saving}>

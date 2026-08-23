@@ -73,9 +73,13 @@ export class Config {
     static load(): Config {
         const file = globalConfigFile();
         if (!existsSync(file)) {
-            throw new Error(
-                `配置文件不存在：${file}。请复制仓库根的 config.example.yaml 到 ~/.anycode/config.yaml 并填写。`
-            );
+            // 首次启动：自动创建默认配置模板（用户经 /settings 填 apiKey）
+            Config.save({
+                providers: {
+                    default: { apiKey: "", model: "gpt-4o", streaming: true, contextWindow: 128000 },
+                },
+                default: "default",
+            });
         }
         const parsed = yaml.load(readFileSync(file, "utf-8")) as ConfigShape | null;
         const providers = normalize(parsed?.providers ?? {});

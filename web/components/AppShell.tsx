@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Toaster } from "sonner";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AppTopbar } from "@/components/AppTopbar";
 
@@ -77,6 +78,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </header>
                 <main className="flex-1 min-h-0 overflow-hidden">{children}</main>
             </div>
+            <Toaster richColors position="top-center" />
         </div>
     );
 }
