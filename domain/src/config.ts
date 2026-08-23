@@ -147,27 +147,31 @@ export class Config {
             }
         }
         const providers = normalize(data.providers ?? {});
-        if (!Object.keys(providers).length) {
-            throw new Error("providers 不能为空");
-        }
+        const errors: string[] = [];
         const def = data.default ?? Object.keys(providers)[0];
-        if (!providers[def]) {
-            throw new Error(`default="${def}" 未在 providers 中定义`);
-        }
-        for (const [name, p] of Object.entries(providers)) {
-            if (!p.models.length) {
-                throw new Error(`provider "${name}" 的 models 不能为空`);
+        if (!Object.keys(providers).length) {
+            errors.push("providers 不能为空");
+        } else {
+            if (!providers[def]) {
+                errors.push(`default="${def}" 未在 providers 中定义`);
             }
-            if (!p.models.some((m) => m.id === p.defaultModel)) {
-                throw new Error(
-                    `provider "${name}" 的 defaultModel="${p.defaultModel}" 未在 models 中`
-                );
+            for (const [name, p] of Object.entries(providers)) {
+                if (!p.models.length) {
+                    errors.push(`provider "${name}" 的 models 不能为空`);
+                } else if (!p.models.some((m) => m.id === p.defaultModel)) {
+                    errors.push(
+                        `provider "${name}" 的 defaultModel="${p.defaultModel}" 未在 models 中`
+                    );
+                }
             }
         }
         for (const [name, s] of Object.entries(data.mcp ?? {})) {
             if (s && s.type !== "stdio" && s.type !== "sse" && s.type !== undefined) {
-                throw new Error(`mcp server "${name}" type 非法（需 stdio/sse）`);
+                errors.push(`mcp server "${name}" type 非法（需 stdio/sse）`);
             }
+        }
+        if (errors.length) {
+            throw new Error(errors.join("\n"));
         }
         mkdirSync(globalConfigDir(), { recursive: true });
         writeFileSync(

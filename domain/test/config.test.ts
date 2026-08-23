@@ -146,6 +146,18 @@ default: p
         expect(() => Config.load()).toThrow(/未定义 models/);
     });
 
+    it("Config.save 完整校验：一次返回所有错误", () => {
+        // default 不在 providers + provider 无 models → 两条错误一次抛
+        expect(() =>
+            Config.save({
+                providers: { p: { apiKey: "sk", models: [], defaultModel: "" } },
+                default: "nope",
+            })
+        ).toThrow(/default="nope" 未在 providers 中定义[\s\S]*provider "p" 的 models 不能为空/);
+        // 无 providers
+        expect(() => Config.save({ providers: {} })).toThrow(/providers 不能为空/);
+    });
+
     it("AC-004/007 reload() 重读文件，default/provider 切换生效", () => {
         writeConfig(`
 providers:

@@ -176,11 +176,9 @@ function toConfigShape(
             mOut[name] = entry;
         }
     }
-    // def 为空或不匹配现有 provider 时落回首个 provider（避免 default="" 报错）
-    const defName = def && pOut[def] ? def : Object.keys(pOut)[0];
     return {
         providers: pOut,
-        default: defName,
+        default: def,
         mcp: mOut,
     };
 }
