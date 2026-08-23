@@ -2,16 +2,19 @@ import {
     ChatCompletionCreateParamsNonStreaming,
     ChatCompletionMessage,
 } from "openai/resources/index";
-import { ChatMessage } from "./type";
+import { ChatMessage, type LlmUsage } from "./type";
 import type { LlmProvider } from "./config";
 import OpenAI from "openai";
 import { ToolKit } from "./tools";
+
+type LlmResult = ChatCompletionMessage & { usage?: LlmUsage };
 
 /**
  * 调用 LLM。按传入 provider 的 streaming 决定流式 / 非流式（provider 粒度开关）。
  * 流式：消费 chunk 累积成完整 message（content 拼接 + tool_calls 按 index 拼装），onDelta 发增量；
  *       abort 时返回已累积的截断 message（仅 content）不抛。
  * 非流式：整段返回 choices[0].message。
+ * usage：捕获响应 token 用量（非流式 resp.usage；流式 stream_options.include_usage 末片）附在返回 message 上。
  * llm 由调用方（AnyAgent 从 config.yaml 解析）传入，必填。
  */
 export async function callLLM(
@@ -20,7 +23,7 @@ export async function callLLM(
     signal?: AbortSignal,
     onDelta?: (delta: string) => void,
     llm?: LlmProvider
-): Promise<ChatCompletionMessage> {
+): Promise<LlmResult> {
     if (!llm) {
         throw new Error("callLLM 需要 provider 配置（由 AnyAgent 从 config.yaml 解析传入）");
     }
@@ -46,13 +49,19 @@ export async function callLLM(
     return nonStreamCall(client, payload, signal, provider.model);
 }
 
-/** 非流式调用：整段返回 */
+/** 从 CompletionUsage 取 prompt/completion tokens */
+function toUsage(u: { prompt_tokens?: number; completion_tokens?: number } | undefined): LlmUsage | undefined {
+    if (!u || u.prompt_tokens == null) return undefined;
+    return { prompt_tokens: u.prompt_tokens, completion_tokens: u.completion_tokens ?? 0 };
+}
+
+/** 非流式调用：整段返回，附 usage */
 async function nonStreamCall(
     client: OpenAI,
     payload: ChatCompletionCreateParamsNonStreaming,
     signal: AbortSignal | undefined,
     model: string
-): Promise<ChatCompletionMessage> {
+): Promise<LlmResult> {
     const resp = await client.chat.completions.create(payload, { signal });
     const message = resp.choices[0]?.message;
     if (!message) {
@@ -62,22 +71,24 @@ async function nonStreamCall(
             })`
         );
     }
-    return message;
+    return { ...message, usage: toUsage(resp.usage) } as LlmResult;
 }
 
-/** 流式调用：累积 chunk 成完整 message，onDelta 发增量，abort 返回截断 */
+/** 流式调用：累积 chunk 成完整 message，onDelta 发增量，abort 返回截断；末片带 usage */
 async function streamCall(
     client: OpenAI,
     payload: ChatCompletionCreateParamsNonStreaming,
     signal: AbortSignal | undefined,
     onDelta: ((delta: string) => void) | undefined,
     model: string
-): Promise<ChatCompletionMessage> {
+): Promise<LlmResult> {
+    // include_usage：末片 chunk.usage 带 token 用量
     const stream = await client.chat.completions.create(
-        { ...payload, stream: true },
+        { ...payload, stream: true, stream_options: { include_usage: true } },
         { signal }
     );
     let content = "";
+    let usage: LlmUsage | undefined;
     const toolCalls: Array<{
         id: string;
         type: "function";
@@ -85,6 +96,7 @@ async function streamCall(
     }> = [];
     try {
         for await (const chunk of stream) {
+            if (chunk.usage) usage = toUsage(chunk.usage);
             const delta = chunk.choices[0]?.delta;
             if (!delta) continue;
             if (delta.content) {
@@ -121,7 +133,7 @@ async function streamCall(
             return {
                 role: "assistant",
                 content: content || null,
-            } as ChatCompletionMessage;
+            } as LlmResult;
         }
         throw err;
     }
@@ -133,5 +145,6 @@ async function streamCall(
         role: "assistant",
         content: content || null,
         tool_calls: toolCalls.length ? toolCalls : undefined,
-    } as ChatCompletionMessage;
+        usage,
+    } as LlmResult;
 }

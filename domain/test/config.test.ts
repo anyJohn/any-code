@@ -98,6 +98,28 @@ mcp:
         expect(Object.keys(Config.load(w2).mcpServers)).toHaveLength(0);
     });
 
+    it("AC-003 contextWindow：per-provider 可配，缺省 128000", () => {
+        const { workspace, dir } = mkWs();
+        writeConfig(
+            dir,
+            `
+providers:
+  p1:
+    apiKey: sk
+    model: m
+  p2:
+    apiKey: sk2
+    model: m2
+    contextWindow: 200000
+default: p1
+`
+        );
+        const cfg = Config.load(workspace);
+        expect(cfg.providers.p1.contextWindow).toBe(128000);
+        expect(cfg.providers.p2.contextWindow).toBe(200000);
+        expect(cfg.getCurrentProvider().contextWindow).toBe(128000);
+    });
+
     it("AC-005 无 config.yaml → 抛错引导建配置（不再退回 env）", () => {
         const { workspace } = mkWs(); // 无 config.yaml
         expect(() => Config.load(workspace)).toThrow(/配置文件不存在/);

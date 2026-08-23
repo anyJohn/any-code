@@ -60,6 +60,9 @@ export function groupByTurn(events: AgentEvent[]): TurnItem[] {
                 flush();
                 cur = { kind: "turn", turnId: e.turnId ?? "", assistant: e, tools: [] };
             }
+        } else if (e.type === "Usage") {
+            // 状态元数据，落在 Assistant 与 Tool 之间：不打断当前回合，也不入盘。
+            continue;
         } else if (e.type === "Tool") {
             if (!cur) cur = { kind: "turn", turnId: e.turnId ?? "", tools: [] };
             cur.tools.push(e);

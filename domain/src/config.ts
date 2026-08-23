@@ -14,6 +14,7 @@ export interface LlmProvider {
     baseURL?: string;
     model: string;
     streaming: boolean;
+    contextWindow: number;
 }
 
 export interface ConfigShape {
@@ -40,6 +41,7 @@ function normalize(
             baseURL: p.baseURL,
             model: p.model ?? "",
             streaming: p.streaming ?? true,
+            contextWindow: p.contextWindow ?? 128000,
         };
     }
     return out;

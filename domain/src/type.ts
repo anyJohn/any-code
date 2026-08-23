@@ -14,10 +14,17 @@ export enum EventType {
     ITERATION = "Iteration",
     ASSISTANT_DELTA = "AssistantDelta",
     ASSISTANT = "Assistant",
+    USAGE = "Usage",
     PLANNING = "Planning",
     ERROR = "Error",
     DONE = "Done",
     STOPPED = "Stopped",
+}
+
+/** LLM API 响应里的 token 用量（OpenAI 兼容 shape） */
+export interface LlmUsage {
+    prompt_tokens: number;
+    completion_tokens: number;
 }
 
 export interface AgentEvent {

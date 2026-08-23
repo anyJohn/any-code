@@ -29,7 +29,12 @@ export default function ChatPage() {
     const { selected, workspaces } = useAppSelector(selectWorkspace);
     // null=加载中, AgentInfo=就绪, "missing"=会话不存在, "noworkspace"=未选工作区
     const [ready, setReady] = useState<
-        | { rootPath: string; sessionId: string | null; initialEvents: AgentEvent[] }
+        | {
+              rootPath: string;
+              projectKey: string;
+              sessionId: string | null;
+              initialEvents: AgentEvent[];
+          }
         | "missing"
         | "noworkspace"
         | null
@@ -48,6 +53,7 @@ export default function ChatPage() {
                 if (cancelled) return;
                 setReady({
                     rootPath: selected.rootPath,
+                    projectKey: selected.projectKey,
                     sessionId: null,
                     initialEvents: [],
                 });
@@ -72,6 +78,7 @@ export default function ChatPage() {
             dispatch(setActiveSession(routeSessionId));
             setReady({
                 rootPath: meta?.rootPath ?? selected?.rootPath ?? data.projectKey,
+                projectKey: data.projectKey,
                 sessionId: routeSessionId,
                 initialEvents: messagesToEvents(data.messages),
             });
@@ -120,6 +127,7 @@ export default function ChatPage() {
             key={ready.sessionId ?? "new"}
             sessionId={ready.sessionId}
             rootPath={ready.rootPath}
+            projectKey={ready.projectKey}
             initialEvents={ready.initialEvents}
         />
     );

@@ -85,6 +85,20 @@ export async function agentLoop(
                 turnId,
             });
         }
+        if (msg.usage) {
+            ctx.eventStream.submit({
+                type: EventType.USAGE,
+                message: `${msg.usage.prompt_tokens}/${
+                    ctx.llm?.contextWindow ?? 128000
+                }`,
+                data: {
+                    prompt_tokens: msg.usage.prompt_tokens,
+                    completion_tokens: msg.usage.completion_tokens,
+                    contextWindow: ctx.llm?.contextWindow ?? 128000,
+                },
+                turnId,
+            });
+        }
         if (!msg?.tool_calls) {
             return {
                 result: msg.content || "",

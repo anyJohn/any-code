@@ -11,6 +11,7 @@ export interface AgentEvent {
         | "Iteration"
         | "AssistantDelta"
         | "Assistant"
+        | "Usage"
         | "Planning"
         | "Error"
         | "Done"
@@ -20,6 +21,13 @@ export interface AgentEvent {
     author?: string; // sub-agent 名（主 agent 省略）
     runId?: string; // 一次 sub-agent 调用的分组 id
     turnId?: string; // 一次推理回合的分组 id：同回合的 Iteration/Assistant/Tool 共用
+}
+
+// USAGE 事件 data 形状（domain EventType.Usage）：每轮 LLM 调用的 token 用量
+export interface UsageData {
+    prompt_tokens: number;
+    completion_tokens: number;
+    contextWindow: number;
 }
 
 // domain TOOL 事件 data 的形状（见 domain/src/tools/toolCall.ts）

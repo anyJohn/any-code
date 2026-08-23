@@ -65,6 +65,31 @@ describe("agentLoop 流式增量事件（core.ts）", () => {
         expect(res.result).toBe("hello");
     });
 
+    it("AC-008 callLLM 返回 usage → 发 USAGE 事件（含 contextWindow 默认 128000）", async () => {
+        vi.mocked(callLLM).mockImplementation(
+            async (_m, _p, _s, onDelta?: (d: string) => void) => {
+                onDelta?.("hi");
+                return {
+                    role: "assistant",
+                    content: "hi",
+                    usage: { prompt_tokens: 100, completion_tokens: 50 },
+                } as never;
+            }
+        );
+        const ctx = mkCtx();
+        const messages: ChatMessage[] = [];
+        await agentLoop("task", messages, 30, undefined, () => {}, ctx, []);
+        const usages = ctx.submits.filter(
+            (e) => (e as { type: EventType }).type === EventType.USAGE
+        );
+        expect(usages).toHaveLength(1);
+        expect(
+            (usages[0] as {
+                data: { prompt_tokens: number; completion_tokens: number; contextWindow: number };
+            }).data
+        ).toMatchObject({ prompt_tokens: 100, completion_tokens: 50, contextWindow: 128000 });
+    });
+
     it("AC-005 abort 截断：partial 落盘定稿 + 返回 [stopped]", async () => {
         const ac = new AbortController();
         const ctx = mkCtx(ac.signal);

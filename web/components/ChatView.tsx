@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { useAgent } from "@/hooks/useAgent";
+import { apiJson } from "@/lib/api";
 import {
     groupByTurn,
     toRenderItems,
@@ -17,7 +18,7 @@ import {
     toolResult,
     type RenderItem,
 } from "@/lib/renderItems";
-import type { AgentEvent } from "@/lib/sseEvents";
+import type { AgentEvent, UsageData } from "@/lib/sseEvents";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
 const tagClass: Record<AgentEvent["type"], string> = {
@@ -27,11 +28,97 @@ const tagClass: Record<AgentEvent["type"], string> = {
     Iteration: "text-muted-foreground/70",
     AssistantDelta: "text-primary",
     Assistant: "text-primary",
+    Usage: "text-muted-foreground",
     Planning: "text-muted-foreground",
     Error: "text-destructive",
     Done: "text-muted-foreground",
     Stopped: "text-muted-foreground",
 };
+
+interface StatusInfo {
+    provider: string;
+    model: string;
+    contextWindow: number;
+    skillCount: number;
+    mcpCount: number;
+}
+
+/**
+ * StatusBar —— 聊天区底部状态条：模型 / 上下文用量 / 技能数 / MCP 数。
+ * 静态信息挂载时拉一次，上下文用量取最新 Usage 事件实时更新。
+ */
+function StatusBar({ projectKey, events }: { projectKey: string; events: AgentEvent[] }) {
+    const [status, setStatus] = useState<StatusInfo>({
+        provider: "",
+        model: "",
+        contextWindow: 128000,
+        skillCount: 0,
+        mcpCount: 0,
+    });
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const data = await apiJson<StatusInfo & { skillNames: string[]; mcpServers: { name: string; type: string }[] }>(
+                `/api/workspaces/${projectKey}/status`
+            );
+            if (cancelled || !data) return;
+            setStatus({
+                provider: data.provider,
+                model: data.model,
+                contextWindow: data.contextWindow,
+                skillCount: data.skillCount,
+                mcpCount: data.mcpServers.length,
+            });
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [projectKey]);
+
+    // 最新 Usage 事件 → 实时 token 用量
+    let promptTokens = 0;
+    let ctxWindow = status.contextWindow;
+    for (let i = events.length - 1; i >= 0; i--) {
+        if (events[i].type === "Usage") {
+            const d = events[i].data as UsageData | undefined;
+            if (d) {
+                promptTokens = d.prompt_tokens;
+                ctxWindow = d.contextWindow || status.contextWindow;
+            }
+            break;
+        }
+    }
+    const pct = ctxWindow > 0 ? Math.min(100, (promptTokens / ctxWindow) * 100) : 0;
+    const modelLabel = status.model
+        ? status.provider
+            ? `${status.provider}/${status.model}`
+            : status.model
+        : "—";
+
+    return (
+        <div className="shrink-0 border-t border-border px-4 py-1.5 text-xs text-muted-foreground flex items-center gap-3 max-w-3xl mx-auto w-full">
+            <span className="truncate font-mono">{modelLabel}</span>
+            <div className="flex items-center gap-1.5 min-w-0" title={`${promptTokens} / ${ctxWindow}`}>
+                <span className="tabular-nums shrink-0">
+                    {promptTokens}/{ctxWindow}
+                </span>
+                <div className="h-1.5 w-20 rounded-full bg-muted overflow-hidden shrink-0">
+                    <div
+                        className={cn(
+                            "h-full rounded-full transition-all",
+                            pct > 80 ? "bg-amber-500" : "bg-primary/60"
+                        )}
+                        style={{ width: `${pct}%` }}
+                    />
+                </div>
+            </div>
+            <span className="shrink-0">skill: {status.skillCount}</span>
+            <span className="shrink-0">mcp: {status.mcpCount}</span>
+        </div>
+    );
+}
+
 
 function ToolRow({
     event,
@@ -128,10 +215,12 @@ export function ChatView({
     sessionId,
     rootPath,
     initialEvents,
+    projectKey,
 }: {
     sessionId: string | null;
     rootPath: string;
     initialEvents: AgentEvent[];
+    projectKey?: string;
 }) {
     const { events, pending, submit, stop } = useAgent(
         sessionId,
@@ -356,6 +445,8 @@ export function ChatView({
                     )}
                 </div>
             </div>
+
+            {projectKey && <StatusBar projectKey={projectKey} events={events} />}
         </div>
     );
 }
