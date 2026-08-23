@@ -160,5 +160,19 @@ export function useAgent(
         abortRef.current?.abort(); // abort fetch → 服务端 destroy → 真停
     }, []);
 
-    return { events, pending, submit, stop };
+    const clear = useCallback(() => setEvents([]), []);
+
+    const appendSystem = useCallback((message: string) => {
+        setEvents((prev) => [
+            ...prev,
+            {
+                id: nextId("sys"),
+                timestamp: Date.now(),
+                type: "System",
+                message,
+            },
+        ]);
+    }, []);
+
+    return { events, pending, submit, stop, clear, appendSystem };
 }

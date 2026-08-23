@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -42,6 +43,21 @@ interface StatusInfo {
     skillCount: number;
     mcpCount: number;
 }
+
+interface CommandItem {
+    name: string;
+    desc: string;
+    body?: string;
+}
+
+const BUILTIN_COMMANDS: CommandItem[] = [
+    { name: "clear", desc: "清空当前对话" },
+    { name: "new", desc: "新建对话" },
+    { name: "help", desc: "列出所有指令" },
+    { name: "config", desc: "打开设置" },
+    { name: "model", desc: "查看/切换模型（/model <name>）" },
+    { name: "sessions", desc: "列出最近会话" },
+];
 
 /**
  * StatusBar —— 聊天区底部状态条：模型 / 上下文用量 / 技能数 / MCP 数。
@@ -222,18 +238,60 @@ export function ChatView({
     initialEvents: AgentEvent[];
     projectKey?: string;
 }) {
-    const { events, pending, submit, stop } = useAgent(
+    const { events, pending, submit, stop, clear, appendSystem } = useAgent(
         sessionId,
         rootPath,
         initialEvents
     );
+    const router = useRouter();
     const [draft, setDraft] = useState("");
     const [openTools, setOpenTools] = useState<Record<string, boolean>>({});
     const [openSubs, setOpenSubs] = useState<Record<string, boolean>>({});
+    const [customCommands, setCustomCommands] = useState<CommandItem[]>([]);
+    const [highlight, setHighlight] = useState(0);
     const scrollRef = useRef<HTMLDivElement>(null);
     const didInit = useRef(false);
 
     const renderItems = useMemo(() => toRenderItems(events), [events]);
+
+    // 拉取自定义斜杠命令模板（<workspace>/.anycode/commands/*.md）
+    useEffect(() => {
+        if (!projectKey) return;
+        let cancelled = false;
+        apiJson<{ name: string; body: string }[]>(
+            `/api/workspaces/${projectKey}/commands`
+        ).then((list) => {
+            if (cancelled) return;
+            setCustomCommands(
+                (list ?? []).map((c) => ({ name: c.name, desc: "自定义", body: c.body }))
+            );
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [projectKey]);
+
+    const commandList = useMemo<CommandItem[]>(
+        () => [...BUILTIN_COMMANDS, ...customCommands],
+        [customCommands]
+    );
+
+    const commandMode = draft.startsWith("/");
+    const query = commandMode ? draft.slice(1).split(/\s/)[0] : "";
+    const filtered = useMemo(
+        () =>
+            commandMode
+                ? commandList.filter((c) =>
+                      c.name.toLowerCase().startsWith(query.toLowerCase())
+                  )
+                : [],
+        [commandMode, commandList, query]
+    );
+    const commandOpen = commandMode && filtered.length > 0;
+
+    useEffect(() => {
+        setHighlight(0);
+    }, [query]);
 
     // pending 且本轮助手尚未回实质内容（Assistant 文本 / Tool 调用）→ 显示 typing。
     // 注意 agent 在 LLM 调用前就发 Iteration 事件，所以只判 last is User 会亚毫秒不可见；
@@ -278,6 +336,125 @@ export function ChatView({
         setDraft("");
         submit(task);
     };
+
+    const buildHelpText = useCallback(() => {
+        const lines = BUILTIN_COMMANDS.map((c) => `/${c.name} — ${c.desc}`);
+        if (customCommands.length) {
+            lines.push("", "自定义:");
+            lines.push(...customCommands.map((c) => `/${c.name}`));
+        }
+        return lines.join("\n");
+    }, [customCommands]);
+
+    // 执行斜杠指令：name=命令名（无 /），args=首个空格之后的参数串
+    const executeCommand = useCallback(
+        async (name: string, args: string) => {
+            switch (name) {
+                case "clear":
+                    clear();
+                    appendSystem("已清空对话");
+                    return;
+                case "new":
+                    router.push("/chat/new");
+                    return;
+                case "config":
+                    router.push("/settings");
+                    return;
+                case "help":
+                    appendSystem(buildHelpText());
+                    return;
+                case "model":
+                    if (!projectKey) {
+                        appendSystem("未选择工作区");
+                        return;
+                    }
+                    if (!args) {
+                        const data = await apiJson<{ provider: string; model: string }>(
+                            `/api/workspaces/${projectKey}/status`
+                        );
+                        if (data) {
+                            appendSystem(`当前: ${data.provider}/${data.model}`);
+                        } else {
+                            appendSystem("无法获取当前模型");
+                        }
+                    } else {
+                        const res = await fetch(
+                            `/api/workspaces/${projectKey}/config`,
+                            {
+                                method: "PATCH",
+                                headers: { "content-type": "application/json" },
+                                body: JSON.stringify({ default: args }),
+                            }
+                        );
+                        if (res.ok) {
+                            appendSystem(`已切到 ${args}（下次对话生效）`);
+                        } else {
+                            let text = "切换失败";
+                            try {
+                                const j = (await res.json()) as {
+                                    statusMessage?: string;
+                                };
+                                if (j.statusMessage) text = j.statusMessage;
+                            } catch {
+                                // body 非 json
+                            }
+                            appendSystem(text);
+                        }
+                    }
+                    return;
+                case "sessions":
+                    if (!projectKey) {
+                        appendSystem("未选择工作区");
+                        return;
+                    }
+                    {
+                        const list = await apiJson<
+                            { id: string; title: string; updatedAt: number }[]
+                        >(`/api/workspaces/${projectKey}/sessions`);
+                        if (list && list.length) {
+                            const lines = list.map(
+                                (s) =>
+                                    `- ${s.title} (${new Date(
+                                        s.updatedAt
+                                    ).toLocaleString()})`
+                            );
+                            appendSystem("会话列表:\n" + lines.join("\n"));
+                        } else {
+                            appendSystem("暂无会话");
+                        }
+                    }
+                    return;
+                default: {
+                    const custom = customCommands.find((c) => c.name === name);
+                    if (custom && custom.body != null) {
+                        submit(custom.body + (args ? "\n" + args : ""));
+                    } else {
+                        appendSystem("未知指令: " + name);
+                    }
+                }
+            }
+        },
+        [
+            clear,
+            appendSystem,
+            router,
+            projectKey,
+            customCommands,
+            submit,
+            buildHelpText,
+        ]
+    );
+
+    // 从输入框当前 draft 提取参数并执行某条命令
+    const runCommand = useCallback(
+        (name: string) => {
+            const parts = draft.split(/\s+/);
+            const args = parts.length > 1 ? parts.slice(1).join(" ") : "";
+            setDraft("");
+            void executeCommand(name, args);
+        },
+        [draft, executeCommand]
+    );
 
     return (
         <div className="h-full flex flex-col">
@@ -422,27 +599,91 @@ export function ChatView({
             </div>
 
             <div className="shrink-0 w-full max-w-3xl mx-auto px-4 py-3">
-                <div className="flex items-center gap-2 rounded-lg border border-input bg-background px-2 py-1.5 focus-within:ring-1 focus-within:ring-ring">
-                    <Input
-                        value={draft}
-                        disabled={pending}
-                        placeholder="输入任务... (Enter 发送)"
-                        className="border-0 focus-visible:ring-0 bg-transparent"
-                        onChange={(e) => setDraft(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault();
-                                send();
-                            }
-                        }}
-                    />
-                    {pending ? (
-                        <Button variant="destructive" onClick={stop}>
-                            停止
-                        </Button>
-                    ) : (
-                        <Button onClick={send}>发送</Button>
+                <div className="relative">
+                    {commandOpen && (
+                        <div className="absolute bottom-full left-0 right-0 mb-1 rounded-lg border border-border bg-popover shadow-md max-h-60 overflow-y-auto z-10">
+                            {filtered.map((c, i) => (
+                                <button
+                                    key={c.name}
+                                    type="button"
+                                    className={cn(
+                                        "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm",
+                                        i === highlight
+                                            ? "bg-accent"
+                                            : "hover:bg-accent/50"
+                                    )}
+                                    onMouseEnter={() => setHighlight(i)}
+                                    onClick={() => runCommand(c.name)}
+                                >
+                                    <span className="font-mono text-primary shrink-0">
+                                        /{c.name}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground truncate">
+                                        {c.desc}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
                     )}
+                    <div className="flex items-center gap-2 rounded-lg border border-input bg-background px-2 py-1.5 focus-within:ring-1 focus-within:ring-ring">
+                        <Input
+                            value={draft}
+                            disabled={pending}
+                            placeholder="输入任务... (Enter 发送，/ 指令)"
+                            className="border-0 focus-visible:ring-0 bg-transparent"
+                            onChange={(e) => setDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (commandOpen) {
+                                    if (e.key === "ArrowDown") {
+                                        e.preventDefault();
+                                        setHighlight((h) => (h + 1) % filtered.length);
+                                        return;
+                                    }
+                                    if (e.key === "ArrowUp") {
+                                        e.preventDefault();
+                                        setHighlight(
+                                            (h) => (h - 1 + filtered.length) % filtered.length
+                                        );
+                                        return;
+                                    }
+                                    if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+                                        e.preventDefault();
+                                        const idx = Math.min(highlight, filtered.length - 1);
+                                        runCommand(filtered[idx].name);
+                                        return;
+                                    }
+                                    if (e.key === "Escape") {
+                                        e.preventDefault();
+                                        setDraft("");
+                                        return;
+                                    }
+                                } else if (
+                                    draft.startsWith("/") &&
+                                    e.key === "Enter" &&
+                                    !e.shiftKey
+                                ) {
+                                    // 无匹配的未知指令：交给 executeCommand 报未知
+                                    e.preventDefault();
+                                    const rest = draft.slice(1).trim();
+                                    const [name, ...argParts] = rest.split(/\s+/);
+                                    setDraft("");
+                                    void executeCommand(name ?? "", argParts.join(" "));
+                                    return;
+                                }
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                    e.preventDefault();
+                                    send();
+                                }
+                            }}
+                        />
+                        {pending ? (
+                            <Button variant="destructive" onClick={stop}>
+                                停止
+                            </Button>
+                        ) : (
+                            <Button onClick={send}>发送</Button>
+                        )}
+                    </div>
                 </div>
             </div>
 

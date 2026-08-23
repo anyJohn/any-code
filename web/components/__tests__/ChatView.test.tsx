@@ -9,10 +9,15 @@ const { state } = vi.hoisted(() => ({
         pending: false,
         submit: () => {},
         stop: () => {},
+        clear: () => {},
+        appendSystem: () => {},
     },
 }));
 vi.mock("@/hooks/useAgent", () => ({
     useAgent: () => state,
+}));
+vi.mock("next/navigation", () => ({
+    useRouter: () => ({ push: () => {} }),
 }));
 
 import { ChatView } from "@/components/ChatView";
@@ -20,7 +25,14 @@ import { ChatView } from "@/components/ChatView";
 function reset(over: Partial<typeof state>) {
     Object.assign(
         state,
-        { events: [], pending: false, submit: () => {}, stop: () => {} },
+        {
+            events: [],
+            pending: false,
+            submit: () => {},
+            stop: () => {},
+            clear: () => {},
+            appendSystem: () => {},
+        },
         over
     );
 }

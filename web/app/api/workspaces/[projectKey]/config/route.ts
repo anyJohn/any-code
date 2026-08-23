@@ -94,3 +94,63 @@ export async function POST(
         );
     }
 }
+
+// PATCH /api/workspaces/:projectKey/config —— 切换默认 provider（保留 apiKey 原值）
+// body: { default: string }。服务端读到的 apiKey 未脱敏，原样写回。
+export async function PATCH(
+    req: Request,
+    ctx: { params: Promise<{ projectKey: string }> }
+) {
+    const { projectKey } = await ctx.params;
+    const workspace = resolveWorkspace(projectKey);
+    if (!workspace) {
+        return NextResponse.json(
+            { statusMessage: "workspace not found" },
+            { status: 404 }
+        );
+    }
+    let body: { default?: string };
+    try {
+        body = (await req.json()) as { default?: string };
+    } catch {
+        return NextResponse.json(
+            { statusMessage: "invalid json body" },
+            { status: 400 }
+        );
+    }
+    const newDefault = body.default?.trim();
+    if (!newDefault) {
+        return NextResponse.json(
+            { statusMessage: "default 不能为空" },
+            { status: 400 }
+        );
+    }
+    let cfg: Config;
+    try {
+        cfg = Config.load(workspace);
+    } catch (e) {
+        return NextResponse.json(
+            { statusMessage: (e as Error).message },
+            { status: 400 }
+        );
+    }
+    if (!cfg.providers[newDefault]) {
+        return NextResponse.json(
+            { statusMessage: `provider "${newDefault}" 不存在` },
+            { status: 400 }
+        );
+    }
+    try {
+        Config.save(workspace, {
+            providers: cfg.providers,
+            default: newDefault,
+            mcp: cfg.mcpServers,
+        });
+        return NextResponse.json({ statusMessage: "switched" });
+    } catch (e) {
+        return NextResponse.json(
+            { statusMessage: (e as Error).message },
+            { status: 400 }
+        );
+    }
+}
