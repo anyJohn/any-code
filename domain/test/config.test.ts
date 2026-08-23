@@ -125,7 +125,7 @@ default: p1
         expect(fs.existsSync(cfgFile())).toBe(true);
     });
 
-    it("AC-007 无 models / defaultModel 不在 models → 抛错", () => {
+    it("AC-007 lenient: defaultModel 不在 models → 自动用首个 model；无 models 不抛错", () => {
         writeConfig(`
 providers:
   p:
@@ -134,7 +134,8 @@ providers:
     defaultModel: nope
 default: p
 `);
-        expect(() => Config.load()).toThrow(/defaultModel.*未在 models 中/);
+        const cfg = Config.load();
+        expect(cfg.providers.p.defaultModel).toBe("m1"); // 自动修正为首个 model
         writeConfig(`
 providers:
   p:
@@ -143,7 +144,8 @@ providers:
     defaultModel: ""
 default: p
 `);
-        expect(() => Config.load()).toThrow(/未定义 models/);
+        const cfg2 = Config.load(); // 不抛错
+        expect(cfg2.providers.p.models).toHaveLength(0);
     });
 
     it("Config.save 完整校验：一次返回所有错误", () => {

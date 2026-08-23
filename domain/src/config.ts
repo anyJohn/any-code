@@ -105,21 +105,16 @@ export class Config {
             throw new Error(`配置文件 ${file} 未定义任何 provider。`);
         }
         const def = parsed?.default ?? Object.keys(providers)[0];
-        if (!providers[def]) {
-            throw new Error(`配置文件 ${file} 的 default="${def}" 未在 providers 中定义。`);
-        }
-        for (const [name, p] of Object.entries(providers)) {
-            if (!p.models.length) {
-                throw new Error(`配置文件 ${file} 的 provider "${name}" 未定义 models。`);
-            }
-            if (!p.models.some((m) => m.id === p.defaultModel)) {
-                throw new Error(
-                    `配置文件 ${file} 的 provider "${name}" 的 defaultModel="${p.defaultModel}" 未在 models 中。`
-                );
+        // lenient：default 不在 providers → 用首个；defaultModel 不在 models → 用首个 model。
+        // 不抛错——让 /settings 能加载（修正后的）坏配置供编辑覆写，agent 也能 best-effort 启动。
+        const resolvedDef = providers[def] ? def : Object.keys(providers)[0];
+        for (const p of Object.values(providers)) {
+            if (p.models.length && !p.models.some((m) => m.id === p.defaultModel)) {
+                p.defaultModel = p.models[0].id;
             }
         }
         const mcpServers = parsed?.mcp ?? {};
-        return new Config(providers, def, mcpServers);
+        return new Config(providers, resolvedDef, mcpServers);
     }
 
     /** 当前生效 provider（按 default 字段） */
