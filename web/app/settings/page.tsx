@@ -88,18 +88,27 @@ function fromResponse(res: ConfigResponse): {
     mcp: McpForm[];
 } {
     const providers: ProviderForm[] = Object.entries(res.providers ?? {}).map(
-        ([name, p]) => ({
-            name,
-            apiKey: "",
-            baseURL: p.baseURL ?? "",
-            models: (p.models ?? []).map((m) => ({
+        ([name, p]) => {
+            const models = (p.models ?? []).map((m) => ({
                 id: m.id ?? "",
                 name: m.name ?? "",
-            })),
-            defaultModel: p.defaultModel ?? "",
-            streaming: p.streaming ?? true,
-            maskedKey: p.apiKey ?? "",
-        })
+            }));
+            // defaultModel 不在 models 中 → 取首个，避免下拉框初始显示空白
+            const validIds = models.map((m) => m.id).filter(Boolean);
+            const defaultModel =
+                p.defaultModel && validIds.includes(p.defaultModel)
+                    ? p.defaultModel
+                    : validIds[0] ?? "";
+            return {
+                name,
+                apiKey: "",
+                baseURL: p.baseURL ?? "",
+                models,
+                defaultModel,
+                streaming: p.streaming ?? true,
+                maskedKey: p.apiKey ?? "",
+            };
+        }
     );
     const mcp: McpForm[] = Object.entries(res.mcp ?? {}).map(([name, s]) => {
         const type = (s.type as "stdio" | "sse") ?? "stdio";
@@ -142,12 +151,18 @@ function toConfigShape(
     for (const p of providers) {
         const name = p.name.trim();
         if (!name) continue;
+        const models = p.models
+            .map((m) => ({ id: m.id.trim(), name: m.name.trim() }))
+            .filter((m) => m.id);
+        // defaultModel 空 + models 非空 → 取首个，避免表单未选导致后端校验失败
+        const defaultModel =
+            p.defaultModel && models.some((m) => m.id === p.defaultModel)
+                ? p.defaultModel
+                : models[0]?.id ?? "";
         const entry: Record<string, unknown> = {
             apiKey: p.apiKey,
-            models: p.models
-                .map((m) => ({ id: m.id.trim(), name: m.name.trim() }))
-                .filter((m) => m.id),
-            defaultModel: p.defaultModel,
+            models,
+            defaultModel,
             streaming: p.streaming,
         };
         if (p.baseURL.trim()) entry.baseURL = p.baseURL.trim();
