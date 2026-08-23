@@ -135,8 +135,17 @@ export class Config {
         this.mcpServers = fresh.mcpServers;
     }
 
-    /** 校验 + 写回 ~/.anycode/config.yaml（js-yaml dump）。供 web 改配置后保存。 */
+    /** 校验 + 写回 ~/.anycode/config.yaml（js-yaml dump）。覆盖前先备份原配置到 config.yaml.bak，供误配置回滚。 */
     static save(data: ConfigShape): void {
+        const file = globalConfigFile();
+        // 备份原配置（若存在）→ config.yaml.bak，覆盖前的安全网
+        if (existsSync(file)) {
+            try {
+                writeFileSync(file + ".bak", readFileSync(file, "utf-8"), "utf-8");
+            } catch {
+                // 备份失败不阻断保存
+            }
+        }
         const providers = normalize(data.providers ?? {});
         if (!Object.keys(providers).length) {
             throw new Error("providers 不能为空");
@@ -162,7 +171,7 @@ export class Config {
         }
         mkdirSync(globalConfigDir(), { recursive: true });
         writeFileSync(
-            globalConfigFile(),
+            file,
             yaml.dump({ providers, default: def, mcp: data.mcp ?? {} }),
             "utf-8"
         );
