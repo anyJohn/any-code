@@ -15,7 +15,7 @@ import { createWorkspace, Workspace } from "./workspace";
 import { mainAgent } from "./agent";
 import type { AgentDefinition } from "./agent";
 import type { Tool } from "./tools";
-import { loadMcpTools } from "./mcp";
+import { loadMcpTools, loadProjectMcp } from "./mcp";
 import { Config, type LlmProvider } from "./config";
 import {
     BehaviorSubject,
@@ -105,7 +105,12 @@ class AnyAgent {
     /** 加载 MCP 工具（真协议连接），追加到工具集，per-agent 生命周期绑定。 */
     private async initMcp(): Promise<void> {
         try {
-            const mcp = await loadMcpTools(this.config.mcpServers);
+            // 合并全局 config.mcpServers + 项目 mcp.yaml（项目覆盖全局同名）
+            const merged = {
+                ...this.config.mcpServers,
+                ...loadProjectMcp(this.workspace),
+            };
+            const mcp = await loadMcpTools(merged);
             if (mcp.tools.length) this.tools = [...this.tools, ...mcp.tools];
             this.mcpCleanup = mcp.cleanup;
         } catch (err) {

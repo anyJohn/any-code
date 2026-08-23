@@ -3,12 +3,33 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import type { ChatCompletionTool } from "openai/resources/index";
 import type { Tool } from "./tools";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import * as yaml from "js-yaml";
+import type { Workspace } from "./workspace";
+import { workspaceConfigDir } from "./workspace";
 
 /**
- * MCP 真协议连接。配置从 .anycode/config.yaml 的 mcp 段来（Config.mcpServers）。
+ * MCP 真协议连接。全局 mcp 来自 ~/.anycode/config.yaml 的 mcp 段（Config.mcpServers），
+ * 项目 mcp 来自 <workspace>/.anycode/mcp.yaml（flat servers），AnyAgent.initMcp 合并两层（项目覆盖全局）。
  * 每个 server：{ type: "stdio", command, args?, env? } / { type: "sse", url, headers? }。
  * 连接 per-agent：AnyAgent.create 时建连，destroy 时 cleanup。
  */
+
+/** 读项目级 <workspace>/.anycode/mcp.yaml（flat servers map），无文件 → 空 */
+export function loadProjectMcp(workspace: Workspace): Record<string, McpServerConfig> {
+    const file = join(workspaceConfigDir(workspace), "mcp.yaml");
+    if (!existsSync(file)) return {};
+    try {
+        const parsed = yaml.load(readFileSync(file, "utf-8")) as
+            | Record<string, McpServerConfig>
+            | null;
+        return parsed ?? {};
+    } catch (e) {
+        console.error("[MCP] Failed to parse project mcp.yaml:", e);
+        return {};
+    }
+}
 export interface StdioServerConfig {
     type: "stdio";
     command: string;

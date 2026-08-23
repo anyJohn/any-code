@@ -1,34 +1,37 @@
 import fs from "fs";
 import path from "path";
 import type { Workspace } from "./workspace";
-import { workspaceConfigDir } from "./workspace";
+import { workspaceConfigDir, globalConfigDir } from "./workspace";
 
-/**
- * 加载 <workspace>/.anycode/rules/ 下的 markdown 文件，拼成 Prompt。
- * Rules 绑定项目：换 workspace，rules 随之切换。
- */
-export function loadRule(workspace: Workspace): string {
-    const ruleDir = path.join(workspaceConfigDir(workspace), "rules");
-    if (!fs.existsSync(ruleDir)) {
-        return "";
-    }
-
+function loadMdFiles(dir: string): Map<string, string> {
+    const map = new Map<string, string>();
+    if (!fs.existsSync(dir)) return map;
     let files: string[];
     try {
-        files = fs.readdirSync(ruleDir);
+        files = fs.readdirSync(dir);
     } catch {
-        return "";
+        return map;
     }
-    const mdFiles = files.filter((file) => file.endsWith(".md"));
-    if (mdFiles.length === 0) {
-        return "";
+    for (const file of files.filter((f) => f.endsWith(".md")).sort()) {
+        map.set(file, fs.readFileSync(path.join(dir, file), "utf-8"));
     }
+    return map;
+}
 
-    mdFiles.sort(); // 按文件名排序，加载顺序一致
+/** 合并全局 + 项目两层 markdown 文件（同名项目覆盖全局，不同名并集） */
+function mergeMdLayers(globalDir: string, projectDir: string): string[] {
+    const map = loadMdFiles(globalDir);
+    for (const [file, content] of loadMdFiles(projectDir)) {
+        map.set(file, content); // 项目覆盖全局
+    }
+    return [...map.values()];
+}
 
-    const contents = mdFiles.map((file) => {
-        return fs.readFileSync(path.join(ruleDir, file), "utf-8");
-    });
-
-    return `\n# Rule\n${contents.join("\n\n")}\n\n`;
+/** 加载全局 ~/.anycode/rules/ + 项目 .anycode/rules/ 的 markdown，拼成 Prompt */
+export function loadRule(workspace: Workspace): string {
+    const contents = mergeMdLayers(
+        path.join(globalConfigDir(), "rules"),
+        path.join(workspaceConfigDir(workspace), "rules")
+    );
+    return contents.length ? `\n# Rule\n${contents.join("\n\n")}\n\n` : "";
 }
