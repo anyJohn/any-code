@@ -14,6 +14,7 @@ export enum EventType {
     ITERATION = "Iteration",
     ASSISTANT_DELTA = "AssistantDelta",
     ASSISTANT = "Assistant",
+    THINKING = "Thinking",
     USAGE = "Usage",
     PLANNING = "Planning",
     ERROR = "Error",

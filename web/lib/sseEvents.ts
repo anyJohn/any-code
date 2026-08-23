@@ -11,6 +11,7 @@ export interface AgentEvent {
         | "Iteration"
         | "AssistantDelta"
         | "Assistant"
+        | "Thinking"
         | "Usage"
         | "Planning"
         | "Error"

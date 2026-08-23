@@ -12,6 +12,7 @@ type LlmResult = ChatCompletionMessage & { usage?: LlmUsage };
 /**
  * 调用 LLM。按传入 provider 的 streaming 决定流式 / 非流式（provider 粒度开关）。
  * 流式：消费 chunk 累积成完整 message（content 拼接 + tool_calls 按 index 拼装），onDelta 发增量；
+ *       onThinkingDelta 发 reasoning_content 增量（部分模型如 DeepSeek R1 支持）；
  *       abort 时返回已累积的截断 message（仅 content）不抛。
  * 非流式：整段返回 choices[0].message。
  * usage：捕获响应 token 用量（非流式 resp.usage；流式 stream_options.include_usage 末片）附在返回 message 上。
@@ -22,7 +23,8 @@ export async function callLLM(
     params?: Partial<ChatCompletionCreateParamsNonStreaming>,
     signal?: AbortSignal,
     onDelta?: (delta: string) => void,
-    llm?: LlmProvider
+    llm?: LlmProvider,
+    onThinkingDelta?: (delta: string) => void
 ): Promise<LlmResult> {
     if (!llm) {
         throw new Error("callLLM 需要 provider 配置（由 AnyAgent 从 config.yaml 解析传入）");
@@ -44,7 +46,7 @@ export async function callLLM(
     };
     // signal 透传：stop() abort 时流式生成抛 AbortError（下方 catch 兜底）/ 非流式 fetch 取消。
     if (provider.streaming) {
-        return streamCall(client, payload, signal, onDelta, provider.defaultModel);
+        return streamCall(client, payload, signal, onDelta, onThinkingDelta, provider.defaultModel);
     }
     return nonStreamCall(client, payload, signal, provider.defaultModel);
 }
@@ -80,6 +82,7 @@ async function streamCall(
     payload: ChatCompletionCreateParamsNonStreaming,
     signal: AbortSignal | undefined,
     onDelta: ((delta: string) => void) | undefined,
+    onThinkingDelta: ((delta: string) => void) | undefined,
     model: string
 ): Promise<LlmResult> {
     // include_usage：末片 chunk.usage 带 token 用量
@@ -99,6 +102,12 @@ async function streamCall(
             if (chunk.usage) usage = toUsage(chunk.usage);
             const delta = chunk.choices[0]?.delta;
             if (!delta) continue;
+            // reasoning_content：部分模型（如 DeepSeek R1）在思考阶段输出，字段位于 delta 扩展
+            if ((delta as Record<string, unknown>).reasoning_content) {
+                const reasoningDelta = (delta as Record<string, unknown>)
+                    .reasoning_content as string;
+                onThinkingDelta?.(reasoningDelta);
+            }
             if (delta.content) {
                 content += delta.content;
                 onDelta?.(delta.content);

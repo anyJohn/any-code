@@ -54,7 +54,14 @@ export async function agentLoop(
                         message: delta,
                         turnId,
                     }),
-                ctx.llm
+                ctx.llm,
+                // 思考内容（reasoning_content）：部分模型支持，发 THINKING 事件
+                (delta) =>
+                    ctx.eventStream.submit({
+                        type: EventType.THINKING,
+                        message: delta,
+                        turnId,
+                    })
             );
         } catch (err) {
             // callLLM 流式 abort 时返回截断（不抛），此处只兜底其他异常

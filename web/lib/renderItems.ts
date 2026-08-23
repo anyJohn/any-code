@@ -6,6 +6,7 @@ export interface TurnItem {
     turnId: string;
     iteration?: AgentEvent;
     assistant?: AgentEvent;
+    thinking?: string; // 思考内容累积（Thinking 事件的 message 拼接）
     tools: AgentEvent[];
 }
 export interface SubagentItem {
@@ -38,6 +39,10 @@ export function groupByTurn(events: AgentEvent[]): TurnItem[] {
         if (e.type === "Iteration") {
             flush();
             cur = { kind: "turn", turnId: e.turnId ?? "", iteration: e, tools: [] };
+        } else if (e.type === "Thinking") {
+            // 思考内容：累积进当前回合的 thinking 字段
+            if (!cur) cur = { kind: "turn", turnId: e.turnId ?? "", tools: [] };
+            cur.thinking = (cur.thinking ?? "") + e.message;
         } else if (e.type === "AssistantDelta") {
             // 流式增量：累积进当前回合的 assistant 文本（实时态，不入盘）。
             // 到 ASSISTANT 定稿时由同回合替换，内容一致。
