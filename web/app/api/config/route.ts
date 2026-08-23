@@ -61,21 +61,14 @@ export async function POST(req: Request) {
     }
 }
 
-// PATCH /api/config —— 切换默认 provider（服务端读到的 apiKey 未脱敏，原样写回）
+// PATCH /api/config —— 切换默认 provider {default} 或切当前 provider 的模型 {modelId}
 export async function PATCH(req: Request) {
-    let body: { default?: string };
+    let body: { default?: string; modelId?: string };
     try {
-        body = (await req.json()) as { default?: string };
+        body = (await req.json()) as { default?: string; modelId?: string };
     } catch {
         return NextResponse.json(
             { statusMessage: "invalid json body" },
-            { status: 400 }
-        );
-    }
-    const newDefault = body.default?.trim();
-    if (!newDefault) {
-        return NextResponse.json(
-            { statusMessage: "default 不能为空" },
             { status: 400 }
         );
     }
@@ -88,16 +81,42 @@ export async function PATCH(req: Request) {
             { status: 400 }
         );
     }
-    if (!cfg.providers[newDefault]) {
-        return NextResponse.json(
-            { statusMessage: `provider "${newDefault}" 不存在` },
-            { status: 400 }
-        );
-    }
     try {
+        if (body.modelId) {
+            // 切当前 provider 的模型（modelId 必须在该 provider 的 models 中）
+            const provider = cfg.providers[cfg.default];
+            if (!provider) {
+                return NextResponse.json(
+                    { statusMessage: `provider "${cfg.default}" 不存在` },
+                    { status: 400 }
+                );
+            }
+            if (!provider.models.some((m) => m.id === body.modelId)) {
+                return NextResponse.json(
+                    { statusMessage: `model "${body.modelId}" 不在 provider "${cfg.default}" 的 models 中` },
+                    { status: 400 }
+                );
+            }
+            provider.defaultModel = body.modelId;
+        } else if (body.default) {
+            // 切 provider
+            const newDefault = body.default.trim();
+            if (!cfg.providers[newDefault]) {
+                return NextResponse.json(
+                    { statusMessage: `provider "${newDefault}" 不存在` },
+                    { status: 400 }
+                );
+            }
+            cfg.default = newDefault;
+        } else {
+            return NextResponse.json(
+                { statusMessage: "需要 default 或 modelId" },
+                { status: 400 }
+            );
+        }
         Config.save({
             providers: cfg.providers,
-            default: newDefault,
+            default: cfg.default,
             mcp: cfg.mcpServers,
         });
         return NextResponse.json({ statusMessage: "switched" });

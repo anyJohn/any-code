@@ -13,7 +13,13 @@ import { callLLM } from "../src/llm";
 import type { LlmProvider } from "../src/config";
 
 // 流式 provider（默认）；非流式测试用 streaming:false 覆盖
-const PROVIDER: LlmProvider = { apiKey: "k", model: "m", streaming: true };
+const PROVIDER: LlmProvider = {
+    apiKey: "k",
+    models: [{ id: "m" }],
+    defaultModel: "m",
+    streaming: true,
+    contextWindow: 128000,
+};
 
 /** 构造一个 fake chunk 流（async iterable） */
 const makeStream = (chunks: unknown[]) => ({
@@ -103,8 +109,10 @@ describe("callLLM 流式（llm.ts）", () => {
         const onDelta = vi.fn();
         const msg = await callLLM([], undefined, undefined, onDelta, {
             apiKey: "k",
-            model: "m",
+            models: [{ id: "m" }],
+            defaultModel: "m",
             streaming: false,
+            contextWindow: 128000,
         });
         expect(onDelta).not.toHaveBeenCalled();
         expect(msg.content).toBe("hello");
@@ -117,7 +125,13 @@ describe("callLLM 流式（llm.ts）", () => {
             makeStream([{ choices: [{ delta: { content: "hi" } }] }])
         );
         const onDelta = vi.fn();
-        await callLLM([], undefined, undefined, onDelta, PROVIDER);
+        await callLLM([], undefined, undefined, onDelta, {
+            apiKey: "k",
+            models: [{ id: "m" }],
+            defaultModel: "m",
+            streaming: true,
+            contextWindow: 128000,
+        });
         expect(onDelta).toHaveBeenCalledWith("hi");
         // 流式 payload 含 stream:true
         expect(mockCreate.mock.calls[0][0].stream).toBe(true);

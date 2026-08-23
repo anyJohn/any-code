@@ -39,6 +39,7 @@ const tagClass: Record<AgentEvent["type"], string> = {
 interface StatusInfo {
     provider: string;
     model: string;
+    modelName: string;
     contextWindow: number;
     skillCount: number;
     mcpCount: number;
@@ -60,7 +61,8 @@ const BUILTIN_COMMANDS: CommandItem[] = [
     { name: "new", desc: "新建对话" },
     { name: "help", desc: "列出所有指令" },
     { name: "config", desc: "打开设置" },
-    { name: "model", desc: "查看/切换模型（/model <name>）" },
+    { name: "model", desc: "查看/切换模型（/model <id>）" },
+    { name: "provider", desc: "查看/切换 provider（/provider <name>）" },
     { name: "sessions", desc: "列出最近会话" },
 ];
 
@@ -72,6 +74,7 @@ function StatusBar({ projectKey, events }: { projectKey: string; events: AgentEv
     const [status, setStatus] = useState<StatusInfo>({
         provider: "",
         model: "",
+        modelName: "",
         contextWindow: 128000,
         skillCount: 0,
         mcpCount: 0,
@@ -87,6 +90,7 @@ function StatusBar({ projectKey, events }: { projectKey: string; events: AgentEv
             setStatus({
                 provider: data.provider,
                 model: data.model,
+                modelName: data.modelName,
                 contextWindow: data.contextWindow,
                 skillCount: data.skillCount,
                 mcpCount: data.mcpServers.length,
@@ -111,10 +115,11 @@ function StatusBar({ projectKey, events }: { projectKey: string; events: AgentEv
         }
     }
     const pct = ctxWindow > 0 ? Math.min(100, (promptTokens / ctxWindow) * 100) : 0;
-    const modelLabel = status.model
+    const labelName = status.modelName || status.model;
+    const modelLabel = labelName
         ? status.provider
-            ? `${status.provider}/${status.model}`
-            : status.model
+            ? `${status.provider}/${labelName}`
+            : labelName
         : "—";
 
     return (
@@ -416,13 +421,73 @@ export function ChatView({
                         return;
                     }
                     if (!args) {
-                        const data = await apiJson<{ provider: string; model: string }>(
+                        const [st, cfg] = await Promise.all([
+                            apiJson<{
+                                provider: string;
+                                model: string;
+                                modelName: string;
+                            }>(`/api/workspaces/${projectKey}/status`),
+                            apiJson<{
+                                providers: Record<
+                                    string,
+                                    { models: { id: string; name?: string }[] }
+                                >;
+                                default: string;
+                            }>(`/api/config`),
+                        ]);
+                        if (!st) {
+                            appendSystem("无法获取当前模型");
+                            return;
+                        }
+                        const lines: string[] = [
+                            `当前: ${st.provider} / ${st.modelName} (${st.model})`,
+                        ];
+                        const provider = cfg?.providers[cfg.default];
+                        if (provider?.models.length) {
+                            lines.push("", "可选模型:");
+                            for (const m of provider.models) {
+                                lines.push(
+                                    `  ${m.id}${m.name ? ` (${m.name})` : ""}`
+                                );
+                            }
+                        }
+                        appendSystem(lines.join("\n"));
+                    } else {
+                        const res = await fetch(`/api/config`, {
+                            method: "PATCH",
+                            headers: { "content-type": "application/json" },
+                            body: JSON.stringify({ modelId: args }),
+                            }
+                        );
+                        if (res.ok) {
+                            appendSystem(`已切到模型 ${args}（下次对话生效）`);
+                        } else {
+                            let text = "切换失败";
+                            try {
+                                const j = (await res.json()) as {
+                                    statusMessage?: string;
+                                };
+                                if (j.statusMessage) text = j.statusMessage;
+                            } catch {
+                                // body 非 json
+                            }
+                            appendSystem(text);
+                        }
+                    }
+                    return;
+                case "provider":
+                    if (!projectKey) {
+                        appendSystem("未选择工作区");
+                        return;
+                    }
+                    if (!args) {
+                        const data = await apiJson<{ provider: string }>(
                             `/api/workspaces/${projectKey}/status`
                         );
                         if (data) {
-                            appendSystem(`当前: ${data.provider}/${data.model}`);
+                            appendSystem(`当前 provider: ${data.provider}`);
                         } else {
-                            appendSystem("无法获取当前模型");
+                            appendSystem("无法获取当前 provider");
                         }
                     } else {
                         const res = await fetch(`/api/config`, {
@@ -432,7 +497,7 @@ export function ChatView({
                             }
                         );
                         if (res.ok) {
-                            appendSystem(`已切到 ${args}（下次对话生效）`);
+                            appendSystem(`已切到 provider ${args}（下次对话生效）`);
                         } else {
                             let text = "切换失败";
                             try {

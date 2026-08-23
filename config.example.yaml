@@ -2,18 +2,25 @@
 # 复制此文件到 ~/.anycode/config.yaml 并填写。
 # 所有配置只在此文件。
 
-# 命名 provider：每个 provider 自带 apiKey / baseURL / model / streaming
+# 命名 provider：每个 provider 自带 apiKey / baseURL / models / defaultModel / streaming / contextWindow
 providers:
   openai:
     apiKey: sk-your-key
     baseURL: https://api.openai.com/v1   # 可选
-    model: gpt-4o
     streaming: true                       # 可选，缺省 true
+    contextWindow: 128000                 # 可选，缺省 128000
+    models:                               # 该 provider 支持的模型列表
+      - id: gpt-4o                        # 调 API 的真实模型名
+        name: GPT-4o                      # 展示名（可选）
+      - id: gpt-4o-mini
+        name: GPT-4o Mini
+    defaultModel: gpt-4o                  # 当前生效模型 id
   deepseek:
     apiKey: sk-your-deepseek-key
     baseURL: https://api.deepseek.com/v1
-    model: deepseek-chat
-    streaming: true
+    models:
+      - id: deepseek-chat
+    defaultModel: deepseek-chat
 
 # 当前生效 provider（改后下次调用生效；web 可热更新）
 default: openai

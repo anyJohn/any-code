@@ -5,13 +5,22 @@ import { globalConfigDir } from "./workspace";
 import type { McpServerConfig } from "./mcp";
 
 /**
- * 一个 LLM provider 的连接设置。streaming 粒度在 provider 层。
- * 配置全局：~/.anycode/config.yaml（跨工作区共享，不按工作区隔离）。
+ * 一个模型：id（调 API 的真实模型名）+ name（展示名，可选）。
+ */
+export interface LlmModel {
+    id: string;
+    name?: string;
+}
+
+/**
+ * 一个 LLM provider 的连接设置。支持多模型：models 列表 + defaultModel（当前生效 id）。
+ * 配置全局：~/.anycode/config.yaml（跨工作区共享）。
  */
 export interface LlmProvider {
     apiKey: string;
     baseURL?: string;
-    model: string;
+    models: LlmModel[];
+    defaultModel: string;
     streaming: boolean;
     contextWindow: number;
 }
@@ -29,16 +38,18 @@ export function maskApiKey(key: string): string {
     return `${key.slice(0, 4)}...${key.slice(-4)}`;
 }
 
-/** streaming 缺省 true（向后兼容流式默认） */
+/** streaming 缺省 true；models/defaultModel 缺省取首个 */
 function normalize(
     providers: Record<string, Partial<LlmProvider>>
 ): Record<string, LlmProvider> {
     const out: Record<string, LlmProvider> = {};
     for (const [name, p] of Object.entries(providers)) {
+        const models = p.models ?? [];
         out[name] = {
             apiKey: p.apiKey ?? "",
             baseURL: p.baseURL,
-            model: p.model ?? "",
+            models,
+            defaultModel: p.defaultModel ?? models[0]?.id ?? "",
             streaming: p.streaming ?? true,
             contextWindow: p.contextWindow ?? 128000,
         };
@@ -51,9 +62,9 @@ function globalConfigFile(): string {
 }
 
 /**
- * 配置加载器：唯一来源 ~/.anycode/config.yaml（全局，命名 provider map + default + streaming + mcp）。
- * 无文件 / 无 provider / default 未定义 → 抛错（引导用户建配置）。
- * 热更新：reload() 重读文件，供 web 改配置后触发。
+ * 配置加载器：唯一来源 ~/.anycode/config.yaml（全局，命名 provider map + models + defaultModel + mcp）。
+ * 无文件 → 自动创建默认模板；无 provider / default 未定义 / provider 无 models / defaultModel 不在 models → 抛错。
+ * 热更新：reload() 重读文件。
  */
 export class Config {
     providers: Record<string, LlmProvider>;
@@ -76,7 +87,14 @@ export class Config {
             // 首次启动：自动创建默认配置模板（用户经 /settings 填 apiKey）
             Config.save({
                 providers: {
-                    default: { apiKey: "", model: "gpt-4o", streaming: true, contextWindow: 128000 },
+                    default: {
+                        apiKey: "",
+                        baseURL: undefined,
+                        models: [{ id: "gpt-4o", name: "GPT-4o" }],
+                        defaultModel: "gpt-4o",
+                        streaming: true,
+                        contextWindow: 128000,
+                    },
                 },
                 default: "default",
             });
@@ -88,9 +106,17 @@ export class Config {
         }
         const def = parsed?.default ?? Object.keys(providers)[0];
         if (!providers[def]) {
-            throw new Error(
-                `配置文件 ${file} 的 default="${def}" 未在 providers 中定义。`
-            );
+            throw new Error(`配置文件 ${file} 的 default="${def}" 未在 providers 中定义。`);
+        }
+        for (const [name, p] of Object.entries(providers)) {
+            if (!p.models.length) {
+                throw new Error(`配置文件 ${file} 的 provider "${name}" 未定义 models。`);
+            }
+            if (!p.models.some((m) => m.id === p.defaultModel)) {
+                throw new Error(
+                    `配置文件 ${file} 的 provider "${name}" 的 defaultModel="${p.defaultModel}" 未在 models 中。`
+                );
+            }
         }
         const mcpServers = parsed?.mcp ?? {};
         return new Config(providers, def, mcpServers);
@@ -111,13 +137,23 @@ export class Config {
 
     /** 校验 + 写回 ~/.anycode/config.yaml（js-yaml dump）。供 web 改配置后保存。 */
     static save(data: ConfigShape): void {
-        const providers = data.providers ?? {};
+        const providers = normalize(data.providers ?? {});
         if (!Object.keys(providers).length) {
             throw new Error("providers 不能为空");
         }
         const def = data.default ?? Object.keys(providers)[0];
         if (!providers[def]) {
             throw new Error(`default="${def}" 未在 providers 中定义`);
+        }
+        for (const [name, p] of Object.entries(providers)) {
+            if (!p.models.length) {
+                throw new Error(`provider "${name}" 的 models 不能为空`);
+            }
+            if (!p.models.some((m) => m.id === p.defaultModel)) {
+                throw new Error(
+                    `provider "${name}" 的 defaultModel="${p.defaultModel}" 未在 models 中`
+                );
+            }
         }
         for (const [name, s] of Object.entries(data.mcp ?? {})) {
             if (s && s.type !== "stdio" && s.type !== "sse" && s.type !== undefined) {

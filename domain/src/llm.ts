@@ -37,16 +37,16 @@ export async function callLLM(
         baseURL: provider.baseURL,
     });
     const payload: ChatCompletionCreateParamsNonStreaming = {
-        model: provider.model,
+        model: provider.defaultModel,
         messages,
         tools: ToolKit.readOnlyTools.map((t) => t.schema), // 默认只读权限（schema）
         ...params,
     };
     // signal 透传：stop() abort 时流式生成抛 AbortError（下方 catch 兜底）/ 非流式 fetch 取消。
     if (provider.streaming) {
-        return streamCall(client, payload, signal, onDelta, provider.model);
+        return streamCall(client, payload, signal, onDelta, provider.defaultModel);
     }
-    return nonStreamCall(client, payload, signal, provider.model);
+    return nonStreamCall(client, payload, signal, provider.defaultModel);
 }
 
 /** 从 CompletionUsage 取 prompt/completion tokens */

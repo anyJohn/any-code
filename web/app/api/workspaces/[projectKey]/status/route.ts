@@ -72,9 +72,11 @@ export async function GET(
         // 目录不存在 → 0 个技能
     }
 
+    const currentModel = provider.models.find((m) => m.id === provider.defaultModel);
     return NextResponse.json({
         provider: cfg.default,
-        model: provider.model,
+        model: provider.defaultModel,
+        modelName: currentModel?.name ?? provider.defaultModel,
         contextWindow: provider.contextWindow,
         skillCount: skillNames.length,
         skillNames,
