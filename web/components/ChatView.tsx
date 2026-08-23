@@ -50,6 +50,11 @@ interface CommandItem {
     body?: string;
 }
 
+interface FileEntry {
+    path: string;
+    name: string;
+}
+
 const BUILTIN_COMMANDS: CommandItem[] = [
     { name: "clear", desc: "清空当前对话" },
     { name: "new", desc: "新建对话" },
@@ -249,6 +254,9 @@ export function ChatView({
     const [openSubs, setOpenSubs] = useState<Record<string, boolean>>({});
     const [customCommands, setCustomCommands] = useState<CommandItem[]>([]);
     const [highlight, setHighlight] = useState(0);
+    const [chips, setChips] = useState<FileEntry[]>([]);
+    const [fileItems, setFileItems] = useState<FileEntry[]>([]);
+    const [fileHighlight, setFileHighlight] = useState(0);
     const scrollRef = useRef<HTMLDivElement>(null);
     const didInit = useRef(false);
 
@@ -288,6 +296,32 @@ export function ChatView({
         [commandMode, commandList, query]
     );
     const commandOpen = commandMode && filtered.length > 0;
+
+    // @file 引用：非斜杠指令模式下，draft 末尾匹配 @<token> 即触发文件检索弹层。
+    const atMatch = !commandMode ? draft.match(/@([^\s@]*)$/) : null;
+    const fileToken = atMatch ? atMatch[1] : "";
+    const filePopoverOpen = !commandMode && !!atMatch && fileItems.length > 0;
+
+    useEffect(() => {
+        setFileHighlight(0);
+    }, [fileItems]);
+
+    useEffect(() => {
+        if (!projectKey || commandMode || !atMatch) {
+            setFileItems([]);
+            return;
+        }
+        let cancelled = false;
+        void apiJson<FileEntry[]>(
+            `/api/workspaces/${projectKey}/files?q=${encodeURIComponent(fileToken)}`
+        ).then((list) => {
+            if (cancelled) return;
+            setFileItems(list ?? []);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [projectKey, commandMode, atMatch, fileToken]);
 
     useEffect(() => {
         setHighlight(0);
@@ -331,10 +365,23 @@ export function ChatView({
         if (nearBottom) el.scrollTop = el.scrollHeight;
     }, [events.length]);
 
-    const send = () => {
+    const selectFile = useCallback((item: FileEntry) => {
+        setChips((prev) =>
+            prev.some((c) => c.path === item.path) ? prev : [...prev, item]
+        );
+        setDraft((prev) => prev.replace(/@([^\s@]*)$/, ""));
+    }, []);
+
+    const send = async () => {
         const task = draft;
+        let message = task;
+        if (chips.length) {
+            message =
+                task + "\n\nFiles: " + chips.map((c) => c.path).join(", ");
+        }
+        setChips([]);
         setDraft("");
-        submit(task);
+        submit(message);
     };
 
     const buildHelpText = useCallback(() => {
@@ -625,11 +672,65 @@ export function ChatView({
                             ))}
                         </div>
                     )}
-                    <div className="flex items-center gap-2 rounded-lg border border-input bg-background px-2 py-1.5 focus-within:ring-1 focus-within:ring-ring">
+                    {filePopoverOpen && (
+                        <div className="absolute bottom-full left-0 right-0 mb-1 rounded-lg border border-border bg-popover shadow-md max-h-60 overflow-y-auto z-10">
+                            {fileItems.map((f, i) => (
+                                <button
+                                    key={f.path}
+                                    type="button"
+                                    className={cn(
+                                        "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm",
+                                        i === fileHighlight
+                                            ? "bg-accent"
+                                            : "hover:bg-accent/50"
+                                    )}
+                                    onMouseEnter={() => setFileHighlight(i)}
+                                    onClick={() => selectFile(f)}
+                                >
+                                    <span className="font-mono text-primary shrink-0 truncate">
+                                        {f.name}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground truncate">
+                                        {f.path}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    <div className="flex flex-col gap-1.5 rounded-lg border border-input bg-background px-2 py-1.5 focus-within:ring-1 focus-within:ring-ring">
+                        {chips.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                                {chips.map((c) => (
+                                    <span
+                                        key={c.path}
+                                        title={c.path}
+                                        className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-xs"
+                                    >
+                                        <span className="font-mono text-primary truncate max-w-[12rem]">
+                                            {c.name}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            className="text-muted-foreground hover:text-foreground"
+                                            onClick={() =>
+                                                setChips((prev) =>
+                                                    prev.filter(
+                                                        (x) => x.path !== c.path
+                                                    )
+                                                )
+                                            }
+                                        >
+                                            ×
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                        <div className="flex items-center gap-2">
                         <Input
                             value={draft}
                             disabled={pending}
-                            placeholder="输入任务... (Enter 发送，/ 指令)"
+                            placeholder="输入任务... (Enter 发送，/ 指令，@ 文件)"
                             className="border-0 focus-visible:ring-0 bg-transparent"
                             onChange={(e) => setDraft(e.target.value)}
                             onKeyDown={(e) => {
@@ -657,6 +758,37 @@ export function ChatView({
                                         setDraft("");
                                         return;
                                     }
+                                } else if (filePopoverOpen) {
+                                    if (e.key === "ArrowDown") {
+                                        e.preventDefault();
+                                        setFileHighlight((h) => (h + 1) % fileItems.length);
+                                        return;
+                                    }
+                                    if (e.key === "ArrowUp") {
+                                        e.preventDefault();
+                                        setFileHighlight(
+                                            (h) => (h - 1 + fileItems.length) % fileItems.length
+                                        );
+                                        return;
+                                    }
+                                    if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+                                        e.preventDefault();
+                                        const idx = Math.min(fileHighlight, fileItems.length - 1);
+                                        selectFile(fileItems[idx]);
+                                        return;
+                                    }
+                                    if (e.key === "Escape") {
+                                        e.preventDefault();
+                                        setFileItems([]);
+                                        return;
+                                    }
+                                } else if (
+                                    e.key === "Backspace" &&
+                                    draft === "" &&
+                                    chips.length > 0
+                                ) {
+                                    setChips((prev) => prev.slice(0, -1));
+                                    return;
                                 } else if (
                                     draft.startsWith("/") &&
                                     e.key === "Enter" &&
@@ -683,6 +815,7 @@ export function ChatView({
                         ) : (
                             <Button onClick={send}>发送</Button>
                         )}
+                        </div>
                     </div>
                 </div>
             </div>
