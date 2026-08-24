@@ -4,7 +4,9 @@ const { mockList } = vi.hoisted(() => ({ mockList: vi.fn() }));
 
 // mock openai：构造函数返回带 models.list 的 client
 vi.mock("openai", () => ({
-    default: vi.fn(() => ({ models: { list: mockList } })),
+    default: vi.fn(function () {
+        return { models: { list: mockList } };
+    }),
 }));
 
 import { detectContextWindow } from "../src/config";

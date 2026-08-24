@@ -4,9 +4,11 @@ const { mockCreate } = vi.hoisted(() => ({ mockCreate: vi.fn() }));
 
 // mock openai：构造函数返回带 chat.completions.create 的 client
 vi.mock("openai", () => ({
-    default: vi.fn(() => ({
-        chat: { completions: { create: mockCreate } },
-    })),
+    default: vi.fn(function () {
+        return {
+            chat: { completions: { create: mockCreate } },
+        };
+    }),
 }));
 
 import { callLLM } from "../src/llm";

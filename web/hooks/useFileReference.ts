@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiJson } from "@/lib/api";
+import { matchAtFileToken } from "@/lib/atFile";
 
 export interface FileEntry {
     path: string;
@@ -9,8 +10,14 @@ export interface FileEntry {
 }
 
 /**
- * @file 引用 hook：draft 末尾 @<token> 触发文件检索弹层。
+ * @file 引用 hook：draft 末尾 @<token>（@ 前须空格/行首）触发文件检索弹层。
  * 与 useCommand 配合：commandMode 时不触发。
+ *
+ * 3 个交互修复（SPEC-021 B-006/007/008）：
+ * - effect 依赖 fileToken（稳定 string）+ atActive（boolean），非 atMatch 引用——避免 setFileItems
+ *   触发 render → atMatch 新引用 → effect 重跑 → 循环调 /files。
+ * - 空 token（@ 单独）也检索（q=空 → 全量前 20）。
+ * - @ 前必须空格/行首（matchAtFileToken 正则）。
  */
 export function useFileReference({
     projectKey,
@@ -27,19 +34,19 @@ export function useFileReference({
     const [fileItems, setFileItems] = useState<FileEntry[]>([]);
     const [chips, setChips] = useState<FileEntry[]>([]);
 
-    // @file 引用：非斜杠指令模式下，draft 末尾匹配 @<token> 即触发文件检索弹层。
-    const atMatch = !commandMode ? draft.match(/@([^\s@]*)$/) : null;
-    const fileToken = atMatch ? atMatch[1] : "";
-    const filePopoverOpen = !commandMode && !!atMatch && fileItems.length > 0;
+    const token = !commandMode ? matchAtFileToken(draft) : null;
+    const atActive = token !== null;
+    const fileToken = token ?? "";
+    const filePopoverOpen = !commandMode && atActive && fileItems.length > 0;
 
     useEffect(() => {
         setFileHighlight(0);
     }, [fileItems]);
 
-    // 文件检索 debounce：停止输入 250ms 才发请求，避免每字符触发 /files（大量调用致卡顿）。
-    // 空 token（仅 @ 无字符）不检索；stale 响应经 cancelled flag 丢弃。
+    // 检索 debounce 250ms；依赖 fileToken（string）+ atActive（boolean）——稳定 primitive，
+    // setFileItems 触发的 render 不会重跑 effect（修循环）。atActive 为假时清空列表。
     useEffect(() => {
-        if (!projectKey || commandMode || !atMatch || !fileToken) {
+        if (!projectKey || commandMode || !atActive) {
             setFileItems([]);
             return;
         }
@@ -55,7 +62,7 @@ export function useFileReference({
             cancelled = true;
             clearTimeout(timer);
         };
-    }, [projectKey, commandMode, atMatch, fileToken]);
+    }, [projectKey, commandMode, atActive, fileToken]);
 
     const selectFile = useCallback(
         (item: FileEntry) => {
@@ -97,3 +104,4 @@ export function useFileReference({
         ]
     );
 }
+

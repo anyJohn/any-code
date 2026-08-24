@@ -39,17 +39,22 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
-    Client: vi.fn().mockImplementation(() => mocks.mkClient()),
+    Client: vi.fn().mockImplementation(function () {
+        return mocks.mkClient();
+    }),
 }));
 vi.mock("@modelcontextprotocol/sdk/client/stdio.js", () => ({
-    StdioClientTransport: vi.fn().mockImplementation((opts: unknown) => {
+    StdioClientTransport: vi.fn().mockImplementation(function (opts: unknown) {
         const t = { opts };
         mocks.state.stdioTransports.push(t);
         return t;
     }),
 }));
 vi.mock("@modelcontextprotocol/sdk/client/sse.js", () => ({
-    SSEClientTransport: vi.fn().mockImplementation((url: unknown, opts: unknown) => {
+    SSEClientTransport: vi.fn().mockImplementation(function (
+        url: unknown,
+        opts: unknown
+    ) {
         const t = { url, opts };
         mocks.state.sseTransports.push(t);
         return t;

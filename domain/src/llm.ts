@@ -23,7 +23,7 @@ function stripMeta(messages: ChatMessage[]): ChatMessage[] {
 /**
  * 调用 LLM。按传入 provider 的 streaming 决定流式 / 非流式（provider 粒度开关）。
  * 流式：消费 chunk 累积成完整 message（content 拼接 + tool_calls 按 index 拼装），onDelta 发增量；
- *       onThinkingDelta 发 reasoning_content 增量（部分模型如 DeepSeek R1 支持）；
+ *       onThinkingDelta 发 reasoning_content 增量（部分思考型模型支持）；
  *       abort 时返回已累积的截断 message（仅 content）不抛。
  * 非流式：整段返回 choices[0].message。
  * usage：捕获响应 token 用量（非流式 resp.usage；流式 stream_options.include_usage 末片）附在返回 message 上。
@@ -119,7 +119,7 @@ async function streamCall(
             if (chunk.usage) usage = toUsage(chunk.usage);
             const delta = chunk.choices[0]?.delta;
             if (!delta) continue;
-            // reasoning_content：部分模型（如 DeepSeek R1）在思考阶段输出，字段位于 delta 扩展。
+            // reasoning_content：部分思考型模型在思考阶段输出，字段位于 delta 扩展。
             // 累积进 reasoning（落盘用 _meta.reasoning），同时发实时 delta 回调（SSE 展示，不入盘）。
             if ((delta as Record<string, unknown>).reasoning_content) {
                 const reasoningDelta = (delta as Record<string, unknown>)

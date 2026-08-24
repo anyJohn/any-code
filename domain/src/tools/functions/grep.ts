@@ -1,6 +1,4 @@
-import fs from "fs/promises";
-import path from "path";
-import { glob } from "glob";
+import { runRipgrep } from "../../ripgrep";
 import type { ToolContext } from "../../context";
 import { resolvePath } from "../../workspace";
 
@@ -13,42 +11,13 @@ interface GrepArgs {
     case_insensitive?: boolean;
 }
 
-async function* walkDir(dir: string): AsyncGenerator<string> {
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-    for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-            yield* walkDir(fullPath);
-        } else {
-            yield fullPath;
-        }
-    }
-}
+const MAX_MATCHES = 250;
 
-async function searchFile(
-    filePath: string,
-    regex: RegExp
-): Promise<{ path: string; lines: { line: number; content: string }[] }> {
-    try {
-        const content = await fs.readFile(filePath, "utf-8");
-        const lines = content.split("\n");
-        const matches: { line: number; content: string }[] = [];
-
-        lines.forEach((line, index) => {
-            // 带 /g 标志的 regex.test 是有状态的：每次匹配后会更新 lastIndex，
-            // 下次 test 会从旧 lastIndex 处开始搜索，导致跨行漏匹配。每次重置。
-            regex.lastIndex = 0;
-            if (regex.test(line)) {
-                matches.push({ line: index + 1, content: line });
-            }
-        });
-
-        return { path: filePath, lines: matches };
-    } catch {
-        return { path: filePath, lines: [] };
-    }
-}
-
+/**
+ * 内容搜索。用 ripgrep `rg --regexp=PATTERN`——尊重 .gitignore、默认跳 VCS/node_modules。
+ * SPEC-021 B-003。
+ * rg 退出码：0=有匹配，1=无匹配，2=错误。
+ */
 export const grepFunc = async (
     args: GrepArgs,
     ctx: ToolContext
@@ -62,72 +31,76 @@ export const grepFunc = async (
             multiline = false,
             case_insensitive = false,
         } = args;
-        // 默认在工作区根搜；用户给路径则经 resolvePath 锚定（防越界读 workspace 外）
-        const searchPath = args.path
+        const cwd = args.path
             ? resolvePath(workspace, args.path)
             : workspace.rootPath;
-        let flags = "g";
-        if (multiline) flags += "m";
-        if (case_insensitive) flags += "i";
 
-        const regex = new RegExp(pattern, flags);
-
-        let files: string[];
-        if (globPattern) {
-            files = await glob(globPattern, { cwd: searchPath });
-            files = files.map((f) => path.join(searchPath, f));
-        } else {
-            const stat = await fs.stat(searchPath);
-            if (stat.isDirectory()) {
-                files = [];
-                for await (const file of walkDir(searchPath)) {
-                    files.push(file);
-                }
-            } else {
-                files = [searchPath];
-            }
-        }
-
-        const results: {
-            path: string;
-            lines: { line: number; content: string }[];
-        }[] = [];
-
-        for (const file of files) {
-            const result = await searchFile(file, regex);
-            if (result.lines.length > 0) {
-                results.push(result);
-            }
-        }
+        const rgArgs: string[] = [];
+        if (case_insensitive) rgArgs.push("-i");
+        if (multiline) rgArgs.push("--multiline");
+        if (globPattern) rgArgs.push("--glob", globPattern);
 
         if (output_mode === "files_with_matches") {
-            if (results.length === 0) {
+            rgArgs.push("--files-with-matches");
+        } else if (output_mode === "count") {
+            rgArgs.push("--count");
+        } else {
+            rgArgs.push("--with-filename", "--line-number", "--no-heading");
+        }
+        rgArgs.push("--regexp", pattern);
+        // 显式传 path：rg 无 path 且 stdin 非 tty 时会读 stdin 阻塞，故显式给搜索路径
+        rgArgs.push(cwd);
+
+        const { stdout, stderr, code } = await runRipgrep(rgArgs, { cwd });
+
+        // code 1 = 无匹配（正常），code 2 = 错误
+        if (code === 2) {
+            return `Error: ${stderr.trim() || "ripgrep error"}`;
+        }
+
+        const lines = stdout.split("\n").filter((l) => l !== "");
+
+        if (output_mode === "files_with_matches") {
+            if (lines.length === 0)
                 return `No files found matching pattern: ${pattern}`;
-            }
-            return results.map((r) => r.path).join("\n");
+            return lines.join("\n");
         }
 
         if (output_mode === "count") {
-            if (results.length === 0) {
+            if (lines.length === 0)
                 return `No matches found for pattern: ${pattern}`;
-            }
-            return results
-                .map((r) => `${r.path}: ${r.lines.length} matches`)
+            return lines
+                .map((l) => {
+                    // rg -c 输出 "file:count"
+                    const idx = l.lastIndexOf(":");
+                    const file = l.slice(0, idx);
+                    const count = l.slice(idx + 1);
+                    return `${file}: ${count} matches`;
+                })
                 .join("\n");
         }
 
-        if (results.length === 0) {
+        // content 模式：解析 "file:line:content"
+        if (lines.length === 0) {
             return `No matches found for pattern: ${pattern}`;
         }
-
+        const byFile = new Map<string, { line: number; content: string }[]>();
+        for (const l of lines.slice(0, MAX_MATCHES)) {
+            // 路径不含冒号（Linux），按前两个冒号拆 file:line:content
+            const m = l.match(/^(.+?):(\d+):(.*)$/);
+            if (!m) continue;
+            const [, file, lineStr, content] = m;
+            const line = Number(lineStr);
+            if (!byFile.has(file)) byFile.set(file, []);
+            byFile.get(file)!.push({ line, content });
+        }
         const output: string[] = [];
-        for (const result of results) {
-            output.push(`\n${result.path}:`);
-            for (const line of result.lines) {
-                output.push(`  ${line.line}: ${line.content}`);
+        for (const [file, hits] of byFile) {
+            output.push(`\n${file}:`);
+            for (const h of hits) {
+                output.push(`  ${h.line}: ${h.content}`);
             }
         }
-
         return output.join("\n").trim();
     } catch (error) {
         if (error instanceof Error) {
