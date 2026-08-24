@@ -16,7 +16,9 @@ export interface LlmModel {
 /**
  * 一个 LLM provider 的连接设置。支持多模型：models 列表 + defaultModel（当前生效 id）。
  * 配置全局：~/.anycode/config.yaml（跨工作区共享）。
- * contextWindow optional：undefined = 用户未配，由 resolveContextWindow 探测/模型表/128000 兜底。
+ * contextWindow optional：undefined=用户未配，由 resolveContextWindow 探测/表/128000 兜底。
+ * maxOutputTokens optional：undefined=用户未配 → callLLM 不传 max_tokens（provider 默认）。
+ *   纯用户覆盖项，不探测/不取 min（照业界主流 harness 保守做法：不拿无人选的数 cap 每次请求）。SPEC-023。
  */
 export interface LlmProvider {
     apiKey: string;
@@ -25,38 +27,18 @@ export interface LlmProvider {
     defaultModel: string;
     streaming: boolean;
     contextWindow?: number;
-}
-
-/**
- * 一个 LLM provider 的连接设置。支持多模型：models 列表 + defaultModel（当前生效 id）。
- * 配置全局：~/.anycode/config.yaml（跨工作区共享）。
- * contextWindow / maxOutputTokens optional：undefined = 用户未配，由 resolveXxx 探测/表/兜底。
- */
-export interface LlmProvider {
-    apiKey: string;
-    baseURL?: string;
-    models: LlmModel[];
-    defaultModel: string;
-    streaming: boolean;
-    contextWindow?: number;
-    /** 最大输出 token 上限；undefined=未配（探测/表/不传 max_tokens）。SPEC-023 */
+    /** 最大输出 token；用户配则传 max_tokens，undefined 不传（provider 默认）。SPEC-023 */
     maxOutputTokens?: number;
 }
 
 /**
- * 内置模型规格表（仅确信值，公开规格）。probe 与用户配置优先于表（resolve 取 min）。
+ * 内置模型上下文表（仅确信值，公开规格）。probe 与用户配置优先于表（resolve 取 min）。
  */
 const MODEL_CONTEXT_TABLE: Record<string, number> = {
     "gpt-4o": 128000,
     "gpt-4o-mini": 128000,
     "gpt-4-turbo": 128000,
     "gpt-3.5-turbo": 16385,
-};
-const MODEL_MAX_OUTPUT_TABLE: Record<string, number> = {
-    "gpt-4o": 16384,
-    "gpt-4o-mini": 16384,
-    "gpt-4-turbo": 4096,
-    "gpt-3.5-turbo": 4096,
 };
 
 /**
@@ -76,53 +58,29 @@ export function resolveContextWindow(
     return cands.length ? Math.min(...cands) : 128000;
 }
 
-/**
- * 解析最终 maxOutputTokens：candidates = [探测值, 模型表值, 用户配置] 去空 → Math.min；全空 → undefined（不传 max_tokens，用 provider 默认）。
- * 取 min 保证不超模型真实输出上限。SPEC-023 B-003 / DEC-081。
- */
-export function resolveMaxOutputTokens(
-    provider: LlmProvider,
-    detected?: number
-): number | undefined {
-    const cands: number[] = [];
-    if (typeof detected === "number") cands.push(detected);
-    const tableVal = MODEL_MAX_OUTPUT_TABLE[provider.defaultModel];
-    if (typeof tableVal === "number") cands.push(tableVal);
-    if (typeof provider.maxOutputTokens === "number")
-        cands.push(provider.maxOutputTokens);
-    return cands.length ? Math.min(...cands) : undefined;
-}
+const detectCache = new Map<string, { value: number | undefined; ts: number }>();
+const DETECT_CACHE_TTL = 3600_000; // 1h——模型 context 基本不变
 
-const detectCache = new Map<
-    string,
-    { contextWindow?: number; maxOutputTokens?: number; ts: number }
->();
-const DETECT_CACHE_TTL = 3600_000; // 1h——模型规格基本不变
-
-function extractLimits(m: unknown): {
-    contextWindow?: number;
-    maxOutputTokens?: number;
-} {
-    if (!m || typeof m !== "object") return {};
+function extractContext(m: unknown): number | undefined {
+    if (!m || typeof m !== "object") return undefined;
     const rec = m as Record<string, unknown>;
-    const ctx = rec.context_window ?? rec.context_length ?? rec.max_context_length;
-    const maxOut =
-        rec.max_output_tokens ?? rec.max_tokens ?? rec.max_completion_tokens;
-    return {
-        contextWindow: typeof ctx === "number" ? ctx : undefined,
-        maxOutputTokens: typeof maxOut === "number" ? maxOut : undefined,
-    };
+    const v = rec.context_window ?? rec.context_length ?? rec.max_context_length;
+    return typeof v === "number" ? v : undefined;
 }
 
-/** 取模型规格（contextWindow + maxOutputTokens），命中缓存直返；miss 则 GET /models 一次取两字段。 */
-async function detectModelLimits(
+/**
+ * 探测 provider 的 GET /models 是否返回真实 context window（仅 contextWindow，不取 max_output_tokens）。
+ * OpenAI 官方新版 API 返回 context_window；多数兼容 provider 不返回 → undefined，回退到表/用户/128000。
+ * SPEC-019 B-002。带 module-level 缓存（1h TTL）。maxOutputTokens 不探测（照业界主流 harness，探测不进请求路径）。
+ */
+export async function detectContextWindow(
     provider: LlmProvider
-): Promise<{ contextWindow?: number; maxOutputTokens?: number }> {
-    if (!provider.apiKey || !provider.defaultModel) return {};
+): Promise<number | undefined> {
+    if (!provider.apiKey || !provider.defaultModel) return undefined;
     const key = `${provider.baseURL ?? "default"}|${provider.defaultModel}`;
     const hit = detectCache.get(key);
-    if (hit && Date.now() - hit.ts < DETECT_CACHE_TTL) return hit;
-    let limits: { contextWindow?: number; maxOutputTokens?: number } = {};
+    if (hit && Date.now() - hit.ts < DETECT_CACHE_TTL) return hit.value;
+    let value: number | undefined;
     try {
         const client = new OpenAI({
             apiKey: provider.apiKey,
@@ -133,31 +91,12 @@ async function detectModelLimits(
         const m = arr.find(
             (x) => (x as { id?: string })?.id === provider.defaultModel
         );
-        limits = extractLimits(m);
+        value = extractContext(m);
     } catch {
-        limits = {};
+        value = undefined;
     }
-    detectCache.set(key, { ...limits, ts: Date.now() });
-    return limits;
-}
-
-/**
- * 探测 contextWindow（命中缓存无网络）。OpenAI 官方新版 API 返回 context_window；
- * 多数兼容 provider 不返回 → undefined，回退到表/用户/128000。SPEC-019 B-002。
- */
-export async function detectContextWindow(
-    provider: LlmProvider
-): Promise<number | undefined> {
-    return (await detectModelLimits(provider)).contextWindow;
-}
-
-/**
- * 探测 maxOutputTokens（命中缓存无网络）。SPEC-023 B-002。
- */
-export async function detectMaxOutputTokens(
-    provider: LlmProvider
-): Promise<number | undefined> {
-    return (await detectModelLimits(provider)).maxOutputTokens;
+    detectCache.set(key, { value, ts: Date.now() });
+    return value;
 }
 
 export interface ConfigShape {

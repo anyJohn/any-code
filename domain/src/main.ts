@@ -19,9 +19,7 @@ import { loadMcpTools, loadProjectMcp } from "./mcp";
 import { Config, type LlmProvider } from "./config";
 import {
     detectContextWindow,
-    detectMaxOutputTokens,
     resolveContextWindow,
-    resolveMaxOutputTokens,
 } from "./config";
 import {
     BehaviorSubject,
@@ -93,30 +91,23 @@ class AnyAgent {
         return agent;
     }
 
-    /** 加载配置（全局 ~/.anycode/config.yaml），探测当前 provider 真实 context window / maxOutputTokens，
-     *  与用户配置取 min 写回（resolved）。SPEC-019 B-004 / SPEC-023 B-004。 */
+    /** 加载配置（全局 ~/.anycode/config.yaml），探测当前 provider 真实 context window，
+     *  与用户配置取 min 写回（resolved）。maxOutputTokens 不探测/不 resolve——纯用户配置，
+     *  callLLM 直接用（配则传 max_tokens，不配则不传，provider 默认）。SPEC-019 B-004 / SPEC-023。 */
     private async initConfig(): Promise<void> {
         this.config = Config.load();
         const provider = this.config.getCurrentProvider();
-        const [ctx, maxOut] = await Promise.all([
-            detectContextWindow(provider),
-            detectMaxOutputTokens(provider),
-        ]);
+        const ctx = await detectContextWindow(provider);
         provider.contextWindow = resolveContextWindow(provider, ctx);
-        provider.maxOutputTokens = resolveMaxOutputTokens(provider, maxOut);
     }
 
-    /** 热更新配置：重读 config.yaml + 重新探测 context window / maxOutputTokens（命中缓存则无网络）。
-     *  新 default/provider 生效（下次 callLLM 用新值）。 */
+    /** 热更新配置：重读 config.yaml + 重新探测 context window（命中缓存则无网络）。
+     *  新 default/provider 生效（下次 callLLM 用新值）。maxOutputTokens 纯用户配置不探测。 */
     async reloadConfig(): Promise<void> {
         this.config.reload();
         const provider = this.config.getCurrentProvider();
-        const [ctx, maxOut] = await Promise.all([
-            detectContextWindow(provider),
-            detectMaxOutputTokens(provider),
-        ]);
+        const ctx = await detectContextWindow(provider);
         provider.contextWindow = resolveContextWindow(provider, ctx);
-        provider.maxOutputTokens = resolveMaxOutputTokens(provider, maxOut);
     }
 
     /** 当前生效 provider（供 web 状态面板读 model/provider） */

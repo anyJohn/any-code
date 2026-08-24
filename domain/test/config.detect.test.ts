@@ -9,7 +9,7 @@ vi.mock("openai", () => ({
     }),
 }));
 
-import { detectContextWindow, detectMaxOutputTokens } from "../src/config";
+import { detectContextWindow } from "../src/config";
 import type { LlmProvider } from "../src/config";
 
 const P = (model: string, over: Partial<LlmProvider> = {}): LlmProvider => ({
@@ -51,29 +51,5 @@ describe("detectContextWindow（SPEC-019 AC-002）", () => {
         const before = mockList.mock.calls.length;
         expect(await detectContextWindow(P("d6", { apiKey: "" }))).toBeUndefined();
         expect(mockList.mock.calls.length).toBe(before);
-    });
-});
-
-describe("detectMaxOutputTokens（SPEC-023）", () => {
-    it("/models 返回 max_output_tokens → 取值", async () => {
-        mockList.mockResolvedValue({ data: [{ id: "m1", max_output_tokens: 16384 }] });
-        expect(await detectMaxOutputTokens(P("m1"))).toBe(16384);
-    });
-    it("无字段 → undefined", async () => {
-        mockList.mockResolvedValue({ data: [{ id: "m2" }] });
-        expect(await detectMaxOutputTokens(P("m2"))).toBeUndefined();
-    });
-    it("max_completion_tokens 字段兼容", async () => {
-        mockList.mockResolvedValue({ data: [{ id: "m3", max_completion_tokens: 8192 }] });
-        expect(await detectMaxOutputTokens(P("m3"))).toBe(8192);
-    });
-    it("与 detectContextWindow 共享缓存（一次 list 取两字段）", async () => {
-        mockList.mockResolvedValue({
-            data: [{ id: "m4", context_window: 200000, max_output_tokens: 16384 }],
-        });
-        const before = mockList.mock.calls.length;
-        await detectContextWindow(P("m4"));
-        await detectMaxOutputTokens(P("m4"));
-        expect(mockList.mock.calls.length - before).toBe(1);
     });
 });

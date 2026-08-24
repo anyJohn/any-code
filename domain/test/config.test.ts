@@ -2,11 +2,7 @@ import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import {
-    Config,
-    resolveContextWindow,
-    resolveMaxOutputTokens,
-} from "../src/config";
+import { Config, resolveContextWindow } from "../src/config";
 import type { LlmProvider } from "../src/config";
 
 // Config 读全局 ~/.anycode/config.yaml；测试用临时 HOME 隔离
@@ -63,7 +59,7 @@ describe("resolveContextWindow（SPEC-019 AC-001）", () => {
     });
 });
 
-describe("resolveMaxOutputTokens（SPEC-023）", () => {
+describe("maxOutputTokens（SPEC-023，纯用户配置不探测/不取 min）", () => {
     const P = (over: Partial<LlmProvider> = {}): LlmProvider => ({
         apiKey: "k",
         models: [{ id: "m" }],
@@ -71,28 +67,12 @@ describe("resolveMaxOutputTokens（SPEC-023）", () => {
         streaming: true,
         ...over,
     });
-    it("detected + user 取 min", () => {
-        expect(resolveMaxOutputTokens(P({ maxOutputTokens: 4096 }), 16384)).toBe(4096);
+    // maxOutputTokens 不 resolve：normalize 透传用户值（或 undefined），callLLM 据此决定传不传 max_tokens
+    it("用户配 → 透传", () => {
+        expect(P({ maxOutputTokens: 8192 }).maxOutputTokens).toBe(8192);
     });
-    it("仅 detected → detected", () => {
-        expect(resolveMaxOutputTokens(P(), 16384)).toBe(16384);
-    });
-    it("仅 user → user", () => {
-        expect(resolveMaxOutputTokens(P({ maxOutputTokens: 4096 }))).toBe(4096);
-    });
-    it("模型表值参与 min（gpt-4o=16384 截 detected 32768）", () => {
-        expect(resolveMaxOutputTokens(P({ defaultModel: "gpt-4o" }), 32768)).toBe(16384);
-    });
-    it("全无 → undefined（不传 max_tokens）", () => {
-        expect(resolveMaxOutputTokens(P())).toBeUndefined();
-    });
-    it("用户配更小（gpt-4o user 4096 → 4096）", () => {
-        expect(
-            resolveMaxOutputTokens(
-                P({ defaultModel: "gpt-4o", maxOutputTokens: 4096 }),
-                32768
-            )
-        ).toBe(4096);
+    it("用户未配 → undefined", () => {
+        expect(P().maxOutputTokens).toBeUndefined();
     });
 });
 
