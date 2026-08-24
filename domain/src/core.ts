@@ -61,6 +61,15 @@ export async function agentLoop(
                         type: EventType.THINKING,
                         message: delta,
                         turnId,
+                    }),
+                // tool_call arguments 流式心跳：每 4KB 发 TOOL_ARG_PROGRESS（只 bytes+name），
+                // 避免 LLM 流式输出大 write content 时事件流静默冻屏。SPEC-022 B-003 / DEC-076
+                (info) =>
+                    ctx.eventStream.submit({
+                        type: EventType.TOOL_ARG_PROGRESS,
+                        message: info.name ?? "tool",
+                        data: { bytes: info.bytes, name: info.name },
+                        turnId,
                     })
             );
         } catch (err) {

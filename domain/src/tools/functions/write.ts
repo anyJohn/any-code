@@ -1,5 +1,7 @@
 import fs from "fs/promises";
-import path from "path";
+import { statSync } from "node:fs";
+import path from "node:path";
+import { randomBytes } from "node:crypto";
 import type { ToolContext } from "../../context";
 import { resolvePath } from "../../workspace";
 
@@ -8,17 +10,62 @@ interface WriteArgs {
     content: string;
 }
 
+const mtimeOf = (p: string): number | undefined => {
+    try {
+        return statSync(p).mtimeMs;
+    } catch {
+        return undefined;
+    }
+};
+
+/**
+ * 整文件写入。原子写（同目录 temp + rename，崩溃不留半写）。
+ * staleness：read 记过 mtime 且当前 mtime 漂移 → result 警告（不阻断）。SPEC-022 B-005/B-006。
+ */
 export const writeFunc = async (
     args: WriteArgs,
     ctx: ToolContext
 ): Promise<string> => {
     const { workspace } = ctx;
+    let tmp: string | null = null;
     try {
         const filePath = resolvePath(workspace, args.filePath);
         await fs.mkdir(path.dirname(filePath), { recursive: true });
-        await fs.writeFile(filePath, args.content, "utf-8");
-        return `Successfully wrote ${args.content.length} characters to ${args.filePath}`;
+
+        // staleness：read 记过 mtime 且当前漂移 → 警告（不阻断写入）
+        const fileState = ctx.fileState;
+        let stalenessWarn = "";
+        if (fileState) {
+            const recorded = fileState.get(filePath);
+            if (recorded !== undefined) {
+                const cur = mtimeOf(filePath);
+                if (cur !== undefined && Math.abs(cur - recorded) > 1) {
+                    stalenessWarn =
+                        " [警告: 文件自上次 read 后被外部改动，已覆写]";
+                }
+            }
+        }
+
+        // 原子写：同目录 temp + rename，同文件系统原子发布，崩溃不留半写
+        tmp = `${filePath}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+        await fs.writeFile(tmp, args.content, "utf-8");
+        await fs.rename(tmp, filePath);
+        tmp = null; // rename 成功，无需清理
+
+        // 记录新 mtime（供后续 write/edit staleness）
+        if (fileState) {
+            const nm = mtimeOf(filePath);
+            if (nm !== undefined) fileState.set(filePath, nm);
+        }
+        return `Successfully wrote ${args.content.length} characters to ${args.filePath}${stalenessWarn}`;
     } catch (error) {
+        if (tmp) {
+            try {
+                await fs.unlink(tmp);
+            } catch {
+                // 清理失败忽略
+            }
+        }
         if (error instanceof Error) {
             return `Error: ${error.message}`;
         }

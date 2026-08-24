@@ -12,6 +12,7 @@ const tagClass: Record<AgentEvent["type"], string> = {
     Tool: "text-muted-foreground",
     ToolStart: "text-amber-600 dark:text-amber-400",
     ToolProgress: "text-muted-foreground",
+    ToolArgProgress: "text-amber-600 dark:text-amber-400",
     Iteration: "text-muted-foreground/70",
     AssistantDelta: "text-primary",
     Assistant: "text-primary",
@@ -59,6 +60,7 @@ export function MessageList({
         "Tool",
         "ToolStart",
         "ToolProgress",
+        "ToolArgProgress",
     ]);
     const showTyping = (() => {
         if (!pending) return false;
@@ -75,16 +77,22 @@ export function MessageList({
             .every((e) => !OUTPUT_STARTED.has(e.type));
     })();
 
-    // 活动工具：扫描事件找最后一个未关闭的 ToolStart（同序列内 Tool 末事件关闭它）。
-    // 存在 → 工具运行中，渲染实时输出卡片（累积其后的 ToolProgress chunk）。SPEC-018 B-007
+    // 活动工具：覆盖两阶段——arguments 流式生成（ToolArgProgress，未到 ToolStart）
+    // 与工具执行（ToolStart..Tool）。ToolArgProgress 期间显"正在生成… N bytes"防冻屏。SPEC-022 B-008。
     const activeTool = (() => {
-        let active: { name: string; progress: string } | null = null;
+        let active:
+            | { phase: "generating"; name: string; bytes: number }
+            | { phase: "running"; name: string; progress: string }
+            | null = null;
         for (const e of events) {
-            if (e.type === "ToolStart") {
-                active = { name: e.message, progress: "" };
-            } else if (e.type === "ToolProgress" && active) {
+            if (e.type === "ToolArgProgress") {
+                const bytes = (e.data as { bytes?: number } | undefined)?.bytes ?? 0;
+                active = { phase: "generating", name: e.message, bytes };
+            } else if (e.type === "ToolStart") {
+                active = { phase: "running", name: e.message, progress: "" };
+            } else if (e.type === "ToolProgress" && active?.phase === "running") {
                 active.progress += e.message;
-            } else if (e.type === "Tool" && active) {
+            } else if (e.type === "Tool") {
                 active = null; // 工具完成，关闭活动卡片（最终 result 由 ToolRow 渲染）
             }
         }
@@ -171,14 +179,23 @@ export function MessageList({
                 })}
                 {activeTool && (
                     <div className="flex flex-col gap-1 py-2 border-b border-border/60">
-                        <span className="text-[11px] font-mono uppercase text-muted-foreground flex items-center gap-1.5">
-                            <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
-                            {activeTool.name} · 执行中
-                        </span>
-                        {activeTool.progress && (
-                            <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-y-auto max-h-60 ml-4 border-l border-border pl-3">
-                                {activeTool.progress}
-                            </pre>
+                        {activeTool.phase === "generating" ? (
+                            <span className="text-[11px] font-mono uppercase text-muted-foreground flex items-center gap-1.5">
+                                <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                {activeTool.name} · 正在生成… {activeTool.bytes} bytes
+                            </span>
+                        ) : (
+                            <>
+                                <span className="text-[11px] font-mono uppercase text-muted-foreground flex items-center gap-1.5">
+                                    <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                    {activeTool.name} · 执行中
+                                </span>
+                                {activeTool.progress && (
+                                    <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-y-auto max-h-60 ml-4 border-l border-border pl-3">
+                                        {activeTool.progress}
+                                    </pre>
+                                )}
+                            </>
                         )}
                     </div>
                 )}

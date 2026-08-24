@@ -220,4 +220,42 @@ describe("callLLM 流式（llm.ts）", () => {
         const msg = await callLLM([], undefined, undefined, undefined, PROVIDER);
         expect(msg._meta).toBeUndefined();
     });
+
+    it("AC-001 SPEC-022 tool_call arguments 流式 >2KB → 发 TOOL_ARG_PROGRESS 心跳（只 bytes+name）", async () => {
+        const big = "x".repeat(4500);
+        mockCreate.mockResolvedValue(
+            makeStream([
+                {
+                    choices: [
+                        {
+                            delta: {
+                                tool_calls: [
+                                    {
+                                        index: 0,
+                                        id: "tc1",
+                                        function: { name: "write", arguments: big },
+                                    },
+                                ],
+                            },
+                        },
+                    ],
+                },
+                { choices: [{ delta: {} }] },
+            ])
+        );
+        const onArg = vi.fn();
+        await callLLM(
+            [],
+            undefined,
+            undefined,
+            undefined,
+            PROVIDER,
+            undefined,
+            onArg
+        );
+        expect(onArg).toHaveBeenCalled();
+        expect(onArg).toHaveBeenCalledWith(
+            expect.objectContaining({ name: "write", bytes: 4500 })
+        );
+    });
 });

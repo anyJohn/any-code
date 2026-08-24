@@ -35,7 +35,8 @@ export async function callLLM(
     signal?: AbortSignal,
     onDelta?: (delta: string) => void,
     llm?: LlmProvider,
-    onThinkingDelta?: (delta: string) => void
+    onThinkingDelta?: (delta: string) => void,
+    onToolArgProgress?: (info: { name?: string; bytes: number }) => void
 ): Promise<LlmResult> {
     if (!llm) {
         throw new Error("callLLM 需要 provider 配置（由 AnyAgent 从 config.yaml 解析传入）");
@@ -58,7 +59,7 @@ export async function callLLM(
     };
     // signal 透传：stop() abort 时流式生成抛 AbortError（下方 catch 兜底）/ 非流式 fetch 取消。
     if (provider.streaming) {
-        return streamCall(client, payload, signal, onDelta, onThinkingDelta, provider.defaultModel);
+        return streamCall(client, payload, signal, onDelta, onThinkingDelta, onToolArgProgress, provider.defaultModel);
     }
     return nonStreamCall(client, payload, signal, provider.defaultModel);
 }
@@ -99,6 +100,7 @@ async function streamCall(
     signal: AbortSignal | undefined,
     onDelta: ((delta: string) => void) | undefined,
     onThinkingDelta: ((delta: string) => void) | undefined,
+    onToolArgProgress: ((info: { name?: string; bytes: number }) => void) | undefined,
     model: string
 ): Promise<LlmResult> {
     // include_usage：末片 chunk.usage 带 token 用量
@@ -114,6 +116,8 @@ async function streamCall(
         type: "function";
         function: { name: string; arguments: string };
     }> = [];
+    const argBytes: number[] = []; // 每个 tool_call 累积的 arguments 字节数（心跳用）
+    const argEmitted: number[] = []; // 上次发心跳时的字节数
     try {
         for await (const chunk of stream) {
             if (chunk.usage) usage = toUsage(chunk.usage);
@@ -134,6 +138,8 @@ async function streamCall(
             if (delta.tool_calls) {
                 // streaming tool_calls 是分片 delta，按 index 拼装：首片含 id+name，后续片含 arguments 片段。
                 // 联合类型里 custom 变体无 function 字段，cast 成带可选 function 的形态访问。
+                // 同时按 4KB 发 TOOL_ARG_PROGRESS 心跳（只带 bytes+name，不带 content）——
+                // 避免 LLM 流式输出大 tool_call.arguments（如大文件 write content）时事件流静默冻屏。SPEC-022 B-002。
                 for (const tcRaw of delta.tool_calls) {
                     const tc = tcRaw as {
                         index?: number;
@@ -147,11 +153,28 @@ async function streamCall(
                             type: "function",
                             function: { name: "", arguments: "" },
                         };
+                        argBytes[idx] = 0;
+                        argEmitted[idx] = 0;
                     }
                     if (tc.id) toolCalls[idx].id = tc.id;
                     if (tc.function?.name) toolCalls[idx].function.name = tc.function.name;
-                    if (tc.function?.arguments)
+                    if (tc.function?.arguments) {
                         toolCalls[idx].function.arguments += tc.function.arguments;
+                        argBytes[idx] += tc.function.arguments.length;
+                        // 每 2KB 发一次心跳（只 bytes+name，不带 content）——
+                        // 避免 LLM 流式输出大 tool_call.arguments（如大文件 write content）时事件流静默冻屏。
+                        // 2KB 阈值：大 write 多次心跳、中等 write 也覆盖；小 write 流式快不冻屏本就不需。SPEC-022 B-002 / DEC-076。
+                        if (
+                            onToolArgProgress &&
+                            argBytes[idx] - argEmitted[idx] >= 2048
+                        ) {
+                            argEmitted[idx] = argBytes[idx];
+                            onToolArgProgress({
+                                name: toolCalls[idx].function.name || undefined,
+                                bytes: argBytes[idx],
+                            });
+                        }
+                    }
                 }
             }
         }

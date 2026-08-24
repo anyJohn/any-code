@@ -98,4 +98,32 @@ describe("MessageList typing（SPEC-018 AC-004）", () => {
         );
         expect(container.querySelectorAll(".animate-bounce")).toHaveLength(0);
     });
+
+    it("SPEC-022 ToolArgProgress → 正在生成… N bytes 指示器", () => {
+        const events: AgentEvent[] = [
+            ev("User", "write big"),
+            ev("Iteration", "i1", { turnId: "t1" }),
+            ev("ToolArgProgress", "write", {
+                turnId: "t1",
+                data: { bytes: 4096, name: "write" },
+            }),
+        ];
+        render(<MessageList {...baseProps(events, true)} />);
+        expect(screen.getByText(/正在生成/)).toBeTruthy();
+        expect(screen.getByText(/4096 bytes/)).toBeTruthy();
+        expect(screen.queryByText(/执行中/)).toBeNull();
+    });
+
+    it("SPEC-022 ToolArgProgress 后 ToolStart → 切执行中", () => {
+        const events: AgentEvent[] = [
+            ev("ToolArgProgress", "write", {
+                turnId: "t1",
+                data: { bytes: 4096 },
+            }),
+            ev("ToolStart", "write", { turnId: "t1", data: { name: "write" } }),
+        ];
+        render(<MessageList {...baseProps(events, true)} />);
+        expect(screen.queryByText(/正在生成/)).toBeNull();
+        expect(screen.getByText(/执行中/)).toBeTruthy();
+    });
 });

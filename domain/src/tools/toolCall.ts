@@ -4,6 +4,21 @@ import { EventType } from "../type";
 import type { ToolContext } from "../context";
 import type { Tool } from "./index";
 
+/** 截断 args 里的长字符串值（>maxLen → 前 maxLen + "[truncated, N total]"）。
+ * 防 TOOL 事件 data.args.content（大文件 write）致 SSE 大 payload + 前端 parse 卡。SPEC-022 B-004 / DEC-077。 */
+const ARG_TRUNCATE_LEN = 500;
+function truncateArgs(args: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(args)) {
+        if (typeof v === "string" && v.length > ARG_TRUNCATE_LEN) {
+            out[k] = v.slice(0, ARG_TRUNCATE_LEN) + `[truncated, ${v.length} total]`;
+        } else {
+            out[k] = v;
+        }
+    }
+    return out;
+}
+
 /**
  * 工具调用分发。在传入的 tools 列表里按名查 handler。
  * tools 列表本身就是该 agent 的可用工具集——不在列表里 = 不可用。
@@ -66,7 +81,7 @@ export async function toolCall(
         ctx.eventStream.submit({
             type: EventType.TOOL_START,
             message: funcName,
-            data: { name: funcName, args },
+            data: { name: funcName, args: truncateArgs(args) },
             turnId,
         });
 
@@ -82,7 +97,7 @@ export async function toolCall(
         ctx.eventStream.submit({
             type: EventType.TOOL,
             message: funcName,
-            data: { name: funcName, args, result: toolOutput },
+            data: { name: funcName, args: truncateArgs(args), result: toolOutput },
             turnId,
         });
         result.push({

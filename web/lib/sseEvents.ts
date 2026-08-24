@@ -10,6 +10,7 @@ export interface AgentEvent {
         | "Tool"
         | "ToolStart"
         | "ToolProgress"
+        | "ToolArgProgress"
         | "Iteration"
         | "AssistantDelta"
         | "Assistant"

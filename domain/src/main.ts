@@ -281,6 +281,7 @@ class AnyAgent {
             eventStream: this.eventStream,
             signal: abortController.signal,
             llm: this.config.getCurrentProvider(),
+            fileState: new Map<string, number>(),
         };
         await agentLoop(
             task,

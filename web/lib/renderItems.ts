@@ -79,10 +79,10 @@ export function groupByTurn(events: AgentEvent[]): TurnItem[] {
         } else if (e.type === "Usage") {
             // 状态元数据，落在 Assistant 与 Tool 之间：不打断当前回合，也不入盘。
             continue;
-        } else if (e.type === "ToolStart" || e.type === "ToolProgress") {
+        } else if (e.type === "ToolStart" || e.type === "ToolProgress" || e.type === "ToolArgProgress") {
             // 流式工具实时事件（不入盘，仅 SSE）：不打断回合分组；
             // 活动工具卡片由 MessageList 从原始 events 直接算（见 activeTool）。
-            // 但它标志思考已结束（思考完→调工具）→ 标记 thinkingFinished。
+            // ToolArgProgress 也算思考结束（思考完→调工具的 arguments 流式）→ 标记 thinkingFinished。
             markThinkingDone(cur);
             continue;
         } else if (e.type === "Tool") {

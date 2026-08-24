@@ -120,4 +120,35 @@ describe("toolCall（tools/toolCall.ts）", () => {
         // 未知工具走 continue，不提交 TOOL 事件
         expect(ctx.eventStream.submit).not.toHaveBeenCalled();
     });
+
+    it("AC-002 SPEC-022 TOOL 事件 args 长 content 截断（>500）；handler 收原始", async () => {
+        const big = "a".repeat(10000);
+        const handler = vi.fn().mockResolvedValue("done");
+        const tools = [mkTool("write", handler)];
+        const ctx = mkCtx();
+        await toolCall(
+            [
+                mkCall(
+                    "write",
+                    "tc1",
+                    JSON.stringify({ filePath: "/x", content: big })
+                ),
+            ],
+            ctx,
+            tools,
+            "t1"
+        );
+        const calls = (ctx.eventStream.submit as ReturnType<typeof vi.fn>).mock.calls.map(
+            (c) => c[0]
+        );
+        const toolEvt = calls.find((e) => e.type === EventType.TOOL);
+        expect(toolEvt.data.args.content).toBe(
+            "a".repeat(500) + "[truncated, 10000 total]"
+        );
+        // handler 收到的是原始未截断 args
+        expect(handler).toHaveBeenCalledWith(
+            { filePath: "/x", content: big },
+            ctx
+        );
+    });
 });

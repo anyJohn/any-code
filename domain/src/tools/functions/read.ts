@@ -1,4 +1,5 @@
 import fs from "fs/promises";
+import { statSync } from "node:fs";
 import type { ToolContext } from "../../context";
 import { resolvePath } from "../../workspace";
 
@@ -17,6 +18,17 @@ export const readFunc = async (
         const { offset = 0, limit = 8000 } = args;
         const filePath = resolvePath(workspace, args.filePath);
         const content = await fs.readFile(filePath, "utf-8");
+
+        // 记录 mtime 供 write/edit staleness 校验（SPEC-022 B-006）。整文件读才记，
+        // 偏移读（offset>0）不记基线（partial 读后整写本就该警告）。
+        if (ctx.fileState && offset === 0) {
+            try {
+                ctx.fileState.set(filePath, statSync(filePath).mtimeMs);
+            } catch {
+                // stat 失败忽略
+            }
+        }
+
         const totalLength = content.length;
         const start = Math.max(0, offset);
         const end = Math.min(start + limit, totalLength);

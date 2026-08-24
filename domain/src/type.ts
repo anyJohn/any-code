@@ -13,6 +13,7 @@ export enum EventType {
     TOOL = "Tool",
     TOOL_START = "ToolStart",
     TOOL_PROGRESS = "ToolProgress",
+    TOOL_ARG_PROGRESS = "ToolArgProgress",
     ITERATION = "Iteration",
     ASSISTANT_DELTA = "AssistantDelta",
     ASSISTANT = "Assistant",
