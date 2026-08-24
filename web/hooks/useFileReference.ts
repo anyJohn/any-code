@@ -36,20 +36,24 @@ export function useFileReference({
         setFileHighlight(0);
     }, [fileItems]);
 
+    // 文件检索 debounce：停止输入 250ms 才发请求，避免每字符触发 /files（大量调用致卡顿）。
+    // 空 token（仅 @ 无字符）不检索；stale 响应经 cancelled flag 丢弃。
     useEffect(() => {
-        if (!projectKey || commandMode || !atMatch) {
+        if (!projectKey || commandMode || !atMatch || !fileToken) {
             setFileItems([]);
             return;
         }
         let cancelled = false;
-        void apiJson<FileEntry[]>(
-            `/api/workspaces/${projectKey}/files?q=${encodeURIComponent(fileToken)}`
-        ).then((list) => {
-            if (cancelled) return;
-            setFileItems(list ?? []);
-        });
+        const timer = setTimeout(() => {
+            void apiJson<FileEntry[]>(
+                `/api/workspaces/${projectKey}/files?q=${encodeURIComponent(fileToken)}`
+            ).then((list) => {
+                if (!cancelled) setFileItems(list ?? []);
+            });
+        }, 250);
         return () => {
             cancelled = true;
+            clearTimeout(timer);
         };
     }, [projectKey, commandMode, atMatch, fileToken]);
 
