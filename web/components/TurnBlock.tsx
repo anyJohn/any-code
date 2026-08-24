@@ -27,7 +27,7 @@ export function TurnBlock({
             {item.thinking && (
                 <ThinkingBlock
                     content={item.thinking}
-                    finished={!!item.assistant}
+                    finished={item.thinkingFinished}
                 />
             )}
             {item.assistant && (

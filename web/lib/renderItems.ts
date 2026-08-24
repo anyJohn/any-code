@@ -7,6 +7,10 @@ export interface TurnItem {
     iteration?: AgentEvent;
     assistant?: AgentEvent;
     thinking?: string; // 思考内容累积（Thinking 事件的 message 拼接）
+    /** 思考已结束：thinking 之后出现首个非 thinking 事件（文本/工具）即置 true。
+     *  驱动 ThinkingBlock 计时器停止——避免"思考后直接调工具无 content"或"长 bash 执行期"
+     *  里 assistant/tools 未就位导致计时器空跑到 30s。 */
+    thinkingFinished?: boolean;
     tools: AgentEvent[];
 }
 export interface SubagentItem {
@@ -35,6 +39,11 @@ export function groupByTurn(events: AgentEvent[]): TurnItem[] {
         }
         cur = null;
     };
+    // 思考结束信号：thinking 之后出现任何实质事件（文本增量/定稿/工具）即标记，
+    // 供 ThinkingBlock 计时器停止。ToolStart/ToolProgress 也算（思考完→直接调工具）。
+    const markThinkingDone = (t: TurnItem | null) => {
+        if (t && t.thinking && !t.thinkingFinished) t.thinkingFinished = true;
+    };
     for (const e of events) {
         if (e.type === "Iteration") {
             flush();
@@ -47,6 +56,7 @@ export function groupByTurn(events: AgentEvent[]): TurnItem[] {
             // 流式增量：累积进当前回合的 assistant 文本（实时态，不入盘）。
             // 到 ASSISTANT 定稿时由同回合替换，内容一致。
             if (!cur) cur = { kind: "turn", turnId: e.turnId ?? "", tools: [] };
+            markThinkingDone(cur);
             if (!cur.assistant) {
                 cur.assistant = { ...e, type: "Assistant" } as AgentEvent;
             } else {
@@ -57,6 +67,7 @@ export function groupByTurn(events: AgentEvent[]): TurnItem[] {
             }
         } else if (e.type === "Assistant") {
             // 定稿：同回合则替换累积的 delta 文本（内容一致），否则正常归位
+            markThinkingDone(cur);
             if (cur && cur.turnId === (e.turnId ?? "")) {
                 cur.assistant = e;
             } else if (cur && !cur.assistant && !cur.tools.length) {
@@ -71,9 +82,12 @@ export function groupByTurn(events: AgentEvent[]): TurnItem[] {
         } else if (e.type === "ToolStart" || e.type === "ToolProgress") {
             // 流式工具实时事件（不入盘，仅 SSE）：不打断回合分组；
             // 活动工具卡片由 MessageList 从原始 events 直接算（见 activeTool）。
+            // 但它标志思考已结束（思考完→调工具）→ 标记 thinkingFinished。
+            markThinkingDone(cur);
             continue;
         } else if (e.type === "Tool") {
             if (!cur) cur = { kind: "turn", turnId: e.turnId ?? "", tools: [] };
+            markThinkingDone(cur);
             cur.tools.push(e);
         } else {
             flush();

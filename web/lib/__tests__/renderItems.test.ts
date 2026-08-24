@@ -206,6 +206,38 @@ describe("groupByTurn Thinking 累积（SPEC-015 AC-003/005）", () => {
         const turns = groupByTurn(events);
         expect(turns[0].thinking).toBeUndefined();
     });
+
+    it("思考后跟 ToolStart → thinkingFinished=true（思考完直接调工具，无 content）", () => {
+        const events: AgentEvent[] = [
+            ev("Iteration", "i1", { turnId: "t1" }),
+            ev("Thinking", "reasoning", { turnId: "t1" }),
+            ev("ToolStart", "bash", { turnId: "t1", data: { name: "bash" } }),
+            ev("ToolProgress", "out", { turnId: "t1" }),
+        ];
+        const turns = groupByTurn(events);
+        expect(turns[0].thinkingFinished).toBe(true);
+        // 未收尾的 Tool：tools 仍空（ToolStart 不入 tools）
+        expect(turns[0].tools).toHaveLength(0);
+    });
+
+    it("思考后跟 Assistant → thinkingFinished=true", () => {
+        const events: AgentEvent[] = [
+            ev("Iteration", "i1", { turnId: "t1" }),
+            ev("Thinking", "reasoning", { turnId: "t1" }),
+            ev("Assistant", "answer", { turnId: "t1" }),
+        ];
+        const turns = groupByTurn(events);
+        expect(turns[0].thinkingFinished).toBe(true);
+    });
+
+    it("只 Thinking 无后续 → thinkingFinished undefined（计时器继续，正确）", () => {
+        const events: AgentEvent[] = [
+            ev("Iteration", "i1", { turnId: "t1" }),
+            ev("Thinking", "reasoning", { turnId: "t1" }),
+        ];
+        const turns = groupByTurn(events);
+        expect(turns[0].thinkingFinished).toBeUndefined();
+    });
 });
 
 describe("groupByTurn 流式 delta 累积", () => {
