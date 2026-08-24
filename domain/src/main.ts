@@ -18,6 +18,10 @@ import type { Tool } from "./tools";
 import { loadMcpTools, loadProjectMcp } from "./mcp";
 import { Config, type LlmProvider } from "./config";
 import {
+    detectContextWindow,
+    resolveContextWindow,
+} from "./config";
+import {
     BehaviorSubject,
     catchError,
     concatMap,
@@ -82,19 +86,27 @@ class AnyAgent {
     static async create(opts: AnyAgentOptions): Promise<AnyAgent> {
         const agent = new AnyAgent(opts);
         await agent.initSession(opts.sessionId);
-        agent.initConfig();
+        await agent.initConfig();
         await agent.initMcp();
         return agent;
     }
 
-    /** 加载配置文件（全局 ~/.anycode/config.yaml，多 provider + 流式开关），解析当前 provider */
-    private initConfig(): void {
+    /** 加载配置（全局 ~/.anycode/config.yaml），探测当前 provider 真实 context window，
+     *  与用户配置取 min 写回 provider.contextWindow（resolved）。SPEC-019 B-004。 */
+    private async initConfig(): Promise<void> {
         this.config = Config.load();
+        const provider = this.config.getCurrentProvider();
+        const detected = await detectContextWindow(provider);
+        provider.contextWindow = resolveContextWindow(provider, detected);
     }
 
-    /** 热更新配置：重读 config.yaml，新 default/provider 生效（供 web 改配置后触发） */
-    reloadConfig(): void {
+    /** 热更新配置：重读 config.yaml + 重新探测 context window（命中缓存则无网络）。
+     *  新 default/provider 生效（下次 callLLM 用新值）。 */
+    async reloadConfig(): Promise<void> {
         this.config.reload();
+        const provider = this.config.getCurrentProvider();
+        const detected = await detectContextWindow(provider);
+        provider.contextWindow = resolveContextWindow(provider, detected);
     }
 
     /** 当前生效 provider（供 web 状态面板读 model/provider） */

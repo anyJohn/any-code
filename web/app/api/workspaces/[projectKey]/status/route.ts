@@ -4,6 +4,7 @@ import {
     Config,
     createWorkspace,
     workspaceConfigDir,
+    resolveContextWindow,
     type Workspace,
 } from "@any-code/domain";
 import { readdirSync } from "node:fs";
@@ -77,7 +78,9 @@ export async function GET(
         provider: cfg.default,
         model: provider.defaultModel,
         modelName: currentModel?.name ?? provider.defaultModel,
-        contextWindow: provider.contextWindow,
+        // status 端点不探测（避免每次请求网络）；用模型表+用户配置+128000 resolve。
+        // 探测值经 agent initConfig → Usage 事件 → StatusBar 实时覆盖。SPEC-019 B-005
+        contextWindow: resolveContextWindow(provider),
         skillCount: skillNames.length,
         skillNames,
         mcpServers,

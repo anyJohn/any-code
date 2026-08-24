@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import * as yaml from "js-yaml";
+import OpenAI from "openai";
 import { globalConfigDir } from "./workspace";
 import type { McpServerConfig } from "./mcp";
 
@@ -15,6 +16,7 @@ export interface LlmModel {
 /**
  * 一个 LLM provider 的连接设置。支持多模型：models 列表 + defaultModel（当前生效 id）。
  * 配置全局：~/.anycode/config.yaml（跨工作区共享）。
+ * contextWindow optional：undefined = 用户未配，由 resolveContextWindow 探测/模型表/128000 兜底。
  */
 export interface LlmProvider {
     apiKey: string;
@@ -22,7 +24,76 @@ export interface LlmProvider {
     models: LlmModel[];
     defaultModel: string;
     streaming: boolean;
-    contextWindow: number;
+    contextWindow?: number;
+}
+
+/**
+ * 内置模型上下文表（仅确信值，公开规格）。probe 与用户配置优先于表（resolve 取 min）。
+ * 不在表中的模型 → 探测或用户配置或 128000。
+ */
+const MODEL_CONTEXT_TABLE: Record<string, number> = {
+    "gpt-4o": 128000,
+    "gpt-4o-mini": 128000,
+    "gpt-4-turbo": 128000,
+    "gpt-3.5-turbo": 16385,
+};
+
+/**
+ * 解析最终 contextWindow：candidates = [探测值, 模型表值, 用户配置] 去空 → Math.min；全空 → 128000。
+ * 取 min 保证不超真实窗口（用户配更小则用更小）。SPEC-019 B-003 / DEC-063。
+ */
+export function resolveContextWindow(
+    provider: LlmProvider,
+    detected?: number
+): number {
+    const cands: number[] = [];
+    if (typeof detected === "number") cands.push(detected);
+    const tableVal = MODEL_CONTEXT_TABLE[provider.defaultModel];
+    if (typeof tableVal === "number") cands.push(tableVal);
+    if (typeof provider.contextWindow === "number")
+        cands.push(provider.contextWindow);
+    return cands.length ? Math.min(...cands) : 128000;
+}
+
+const detectCache = new Map<string, { value: number | undefined; ts: number }>();
+const DETECT_CACHE_TTL = 3600_000; // 1h——模型 context 基本不变
+
+function extractContext(m: unknown): number | undefined {
+    if (!m || typeof m !== "object") return undefined;
+    const rec = m as Record<string, unknown>;
+    const v = rec.context_window ?? rec.context_length ?? rec.max_context_length;
+    return typeof v === "number" ? v : undefined;
+}
+
+/**
+ * 探测 provider 的 GET /models 是否返回真实 context window。OpenAI 官方新版 API 返回 context_window；
+ * 多数兼容 provider（如 dashscope）不返回 → undefined，回退到表/用户/128000。SPEC-019 B-002。
+ * 带 module-level 缓存（1h TTL），避免重复网络调用。
+ */
+export async function detectContextWindow(
+    provider: LlmProvider
+): Promise<number | undefined> {
+    if (!provider.apiKey || !provider.defaultModel) return undefined;
+    const key = `${provider.baseURL ?? "default"}|${provider.defaultModel}`;
+    const hit = detectCache.get(key);
+    if (hit && Date.now() - hit.ts < DETECT_CACHE_TTL) return hit.value;
+    let value: number | undefined;
+    try {
+        const client = new OpenAI({
+            apiKey: provider.apiKey,
+            baseURL: provider.baseURL,
+        });
+        const list = await client.models.list();
+        const arr = (list as unknown as { data?: unknown[] }).data ?? [];
+        const m = arr.find(
+            (x) => (x as { id?: string })?.id === provider.defaultModel
+        );
+        value = extractContext(m);
+    } catch {
+        value = undefined;
+    }
+    detectCache.set(key, { value, ts: Date.now() });
+    return value;
 }
 
 export interface ConfigShape {
@@ -51,7 +122,7 @@ function normalize(
             models,
             defaultModel: p.defaultModel ?? models[0]?.id ?? "",
             streaming: p.streaming ?? true,
-            contextWindow: p.contextWindow ?? 128000,
+            contextWindow: p.contextWindow,
         };
     }
     return out;
@@ -93,7 +164,6 @@ export class Config {
                         models: [{ id: "gpt-4o", name: "GPT-4o" }],
                         defaultModel: "gpt-4o",
                         streaming: true,
-                        contextWindow: 128000,
                     },
                 },
                 default: "default",

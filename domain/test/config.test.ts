@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { Config } from "../src/config";
+import { Config, resolveContextWindow } from "../src/config";
+import type { LlmProvider } from "../src/config";
 
 // Config 读全局 ~/.anycode/config.yaml；测试用临时 HOME 隔离
 const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "anycode-cfg-home-"));
@@ -20,6 +21,42 @@ beforeEach(() => {
 
 afterAll(() => {
     fs.rmSync(tmpHome, { recursive: true, force: true });
+});
+
+describe("resolveContextWindow（SPEC-019 AC-001）", () => {
+    const P = (over: Partial<LlmProvider> = {}): LlmProvider => ({
+        apiKey: "k",
+        models: [{ id: "m" }],
+        defaultModel: "m",
+        streaming: true,
+        ...over,
+    });
+    it("detected + user 取 min（用户更小则用用户）", () => {
+        expect(resolveContextWindow(P({ contextWindow: 50000 }), 200000)).toBe(50000);
+    });
+    it("detected + user，detected 更小则用 detected", () => {
+        expect(resolveContextWindow(P({ contextWindow: 200000 }), 50000)).toBe(50000);
+    });
+    it("仅 detected（无 user）→ detected", () => {
+        expect(resolveContextWindow(P(), 200000)).toBe(200000);
+    });
+    it("仅 user（无 detected）→ user", () => {
+        expect(resolveContextWindow(P({ contextWindow: 50000 }))).toBe(50000);
+    });
+    it("全无 → 128000", () => {
+        expect(resolveContextWindow(P())).toBe(128000);
+    });
+    it("模型表值参与 min（gpt-4o=128000 截 detected 200000）", () => {
+        expect(resolveContextWindow(P({ defaultModel: "gpt-4o" }), 200000)).toBe(128000);
+    });
+    it("用户配更小（gpt-4o user 50000 → 50000）", () => {
+        expect(
+            resolveContextWindow(
+                P({ defaultModel: "gpt-4o", contextWindow: 50000 }),
+                200000
+            )
+        ).toBe(50000);
+    });
 });
 
 describe("Config（SPEC-014，多模型 models+defaultModel）", () => {
@@ -97,7 +134,7 @@ mcp:
         expect(Object.keys(Config.load().mcpServers)).toHaveLength(0);
     });
 
-    it("AC-003 contextWindow：per-provider 可配，缺省 128000", () => {
+    it("AC-003 contextWindow optional：未配 → undefined（resolved 由探测/表/128000 兜底）", () => {
         writeConfig(`
 providers:
   p1:
@@ -112,7 +149,7 @@ providers:
 default: p1
 `);
         const cfg = Config.load();
-        expect(cfg.providers.p1.contextWindow).toBe(128000);
+        expect(cfg.providers.p1.contextWindow).toBeUndefined();
         expect(cfg.providers.p2.contextWindow).toBe(200000);
     });
 

@@ -20,7 +20,7 @@ interface ConfigResponse {
             models: { id: string; name?: string }[];
             defaultModel: string;
             streaming: boolean;
-            contextWindow: number;
+            contextWindow?: number;
         }
     >;
     default?: string;
@@ -34,6 +34,8 @@ interface ProviderForm {
     models: { id: string; name: string }[];
     defaultModel: string;
     streaming: boolean;
+    /** contextWindow 输入（字符串，空=auto：探测/模型表/128000） */
+    contextWindow: string;
     maskedKey: string;
 }
 
@@ -54,6 +56,7 @@ const emptyProvider = (): ProviderForm => ({
     models: [{ id: "", name: "" }],
     defaultModel: "",
     streaming: true,
+    contextWindow: "",
     maskedKey: "",
 });
 
@@ -106,6 +109,7 @@ function fromResponse(res: ConfigResponse): {
                 models,
                 defaultModel,
                 streaming: p.streaming ?? true,
+                contextWindow: p.contextWindow ? String(p.contextWindow) : "",
                 maskedKey: p.apiKey ?? "",
             };
         }
@@ -166,6 +170,11 @@ function toConfigShape(
             streaming: p.streaming,
         };
         if (p.baseURL.trim()) entry.baseURL = p.baseURL.trim();
+        // contextWindow：空=auto（不写 yaml，由探测/表/128000 兜底）；填了才写
+        if (p.contextWindow.trim()) {
+            const n = Number(p.contextWindow);
+            if (Number.isFinite(n) && n > 0) entry.contextWindow = n;
+        }
         pOut[name] = entry;
     }
     const mOut: Record<string, Record<string, unknown>> = {};
@@ -357,6 +366,23 @@ export default function SettingsPage() {
                                                     onChange={(e) =>
                                                         patchProvider(i, {
                                                             baseURL:
+                                                                e.target.value,
+                                                        })
+                                                    }
+                                                />
+                                            </label>
+                                            <label className="flex flex-col gap-1">
+                                                <span className="text-xs text-muted-foreground">
+                                                    上下文窗口（留空=自动探测）
+                                                </span>
+                                                <Input
+                                                    className="h-8 font-mono"
+                                                    type="number"
+                                                    placeholder="留空自动，或填上限（与探测取最小）"
+                                                    value={p.contextWindow}
+                                                    onChange={(e) =>
+                                                        patchProvider(i, {
+                                                            contextWindow:
                                                                 e.target.value,
                                                         })
                                                     }
