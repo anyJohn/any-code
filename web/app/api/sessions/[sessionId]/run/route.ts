@@ -87,6 +87,7 @@ export async function POST(
             const finish = () => {
                 if (closed) return;
                 closed = true;
+                clearInterval(keepalive);
                 sub?.unsubscribe();
                 running.delete(sessionId);
                 agent.destroy(); // 关连接=destroy=abort 在途 LLM + 拆订阅
@@ -96,6 +97,18 @@ export async function POST(
                     // 已关
                 }
             };
+
+            // SSE keepalive：静默期（如 bash 跑长命令无输出、LLM 长思考）每 15s 注入
+            // comment frame（": keepalive\n\n"），前端 parseSSE 忽略非 data: 行，天然兼容。
+            // 防 proxy/浏览器因无数据断连，也保"连接活着"的视觉信号。SPEC-018 B-005
+            const keepalive = setInterval(() => {
+                if (closed) return;
+                try {
+                    controller.enqueue(enc.encode(": keepalive\n\n"));
+                } catch {
+                    // controller 已关
+                }
+            }, 15000);
 
             // 1) 回灌历史（per-task agent 通常为空，历史由 /history 单独读盘；保留防御）
             for (const e of agent.eventHistory$.value) send(e);

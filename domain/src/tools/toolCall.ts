@@ -54,7 +54,29 @@ export async function toolCall(
             continue;
         }
 
-        const toolOutput = await tool.handler(args, ctx);
+        // TOOL_START：handler 执行前立即发（前端显"执行中"卡片，消除假死）。
+        // emitProgress：注入流式回调，bash 等工具逐 chunk 上抛 TOOL_PROGRESS（turnId 闭包绑定）。
+        ctx.emitProgress = (chunk: string) => {
+            ctx.eventStream.submit({
+                type: EventType.TOOL_PROGRESS,
+                message: chunk,
+                turnId,
+            });
+        };
+        ctx.eventStream.submit({
+            type: EventType.TOOL_START,
+            message: funcName,
+            data: { name: funcName, args },
+            turnId,
+        });
+
+        let toolOutput: string;
+        try {
+            toolOutput = await tool.handler(args, ctx);
+        } finally {
+            // 清理注入的回调，避免后续 tool 复用泄漏 / 误发 progress
+            ctx.emitProgress = undefined;
+        }
         // 一次工具调用的完整画像：name + args + result 都进事件流。
         // 这是未来权限/黑白名单/bypass 的天然拦截点——在此处做策略决策即可。
         ctx.eventStream.submit({

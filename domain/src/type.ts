@@ -11,6 +11,8 @@ export enum EventType {
     SYSTEM = "System",
     USER = "User",
     TOOL = "Tool",
+    TOOL_START = "ToolStart",
+    TOOL_PROGRESS = "ToolProgress",
     ITERATION = "Iteration",
     ASSISTANT_DELTA = "AssistantDelta",
     ASSISTANT = "Assistant",
@@ -20,6 +22,15 @@ export enum EventType {
     ERROR = "Error",
     DONE = "Done",
     STOPPED = "Stopped",
+}
+
+/**
+ * assistant message 的非标准 sidecar（命名空间化，避免和 provider 的 reasoning_content 字段撞）。
+ * reasoning：思考内容全文，随 message 落盘，回放时重建 Thinking 事件（SPEC-017）。
+ * callLLM 入口剥离 _meta，发给 provider 的 messages 不含此字段。
+ */
+export interface MessageMeta {
+    reasoning?: string;
 }
 
 /** LLM API 响应里的 token 用量（OpenAI 兼容 shape） */

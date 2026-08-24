@@ -10,6 +10,8 @@ const tagClass: Record<AgentEvent["type"], string> = {
     System: "text-muted-foreground",
     User: "text-primary-foreground",
     Tool: "text-muted-foreground",
+    ToolStart: "text-amber-600 dark:text-amber-400",
+    ToolProgress: "text-muted-foreground",
     Iteration: "text-muted-foreground/70",
     AssistantDelta: "text-primary",
     Assistant: "text-primary",
@@ -47,8 +49,17 @@ export function MessageList({
     toggleSub,
     scrollRef,
 }: MessageListProps) {
-    // pending 且本轮助手尚未回实质内容（Assistant 文本 / Tool 调用）→ 显示 typing。
-    // 放宽为「上一条 User 之后无 Assistant/Tool 事件」= 仍在思考。
+    // pending 且本轮尚未产出实质内容（Assistant 文本 / 思考 / 工具）→ 显示 typing dots。
+    // 一旦出现 Assistant/AssistantDelta/Thinking/Tool/ToolStart/ToolProgress 即"有反馈"→ 隐藏 dots
+    // （工具运行期改由活动工具卡片显实时输出，不再靠 dots）。SPEC-018 B-006
+    const OUTPUT_STARTED: ReadonlySet<string> = new Set([
+        "Assistant",
+        "AssistantDelta",
+        "Thinking",
+        "Tool",
+        "ToolStart",
+        "ToolProgress",
+    ]);
     const showTyping = (() => {
         if (!pending) return false;
         let lastUser = -1;
@@ -61,7 +72,23 @@ export function MessageList({
         if (lastUser < 0) return false;
         return events
             .slice(lastUser + 1)
-            .every((e) => e.type !== "Assistant" && e.type !== "Tool");
+            .every((e) => !OUTPUT_STARTED.has(e.type));
+    })();
+
+    // 活动工具：扫描事件找最后一个未关闭的 ToolStart（同序列内 Tool 末事件关闭它）。
+    // 存在 → 工具运行中，渲染实时输出卡片（累积其后的 ToolProgress chunk）。SPEC-018 B-007
+    const activeTool = (() => {
+        let active: { name: string; progress: string } | null = null;
+        for (const e of events) {
+            if (e.type === "ToolStart") {
+                active = { name: e.message, progress: "" };
+            } else if (e.type === "ToolProgress" && active) {
+                active.progress += e.message;
+            } else if (e.type === "Tool" && active) {
+                active = null; // 工具完成，关闭活动卡片（最终 result 由 ToolRow 渲染）
+            }
+        }
+        return active;
     })();
 
     return (
@@ -142,6 +169,19 @@ export function MessageList({
                         </div>
                     );
                 })}
+                {activeTool && (
+                    <div className="flex flex-col gap-1 py-2 border-b border-border/60">
+                        <span className="text-[11px] font-mono uppercase text-muted-foreground flex items-center gap-1.5">
+                            <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            {activeTool.name} · 执行中
+                        </span>
+                        {activeTool.progress && (
+                            <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-y-auto max-h-60 ml-4 border-l border-border pl-3">
+                                {activeTool.progress}
+                            </pre>
+                        )}
+                    </div>
+                )}
                 {showTyping && (
                     <div className="flex py-1">
                         <div className="rounded-2xl rounded-bl-sm bg-muted px-3 py-2.5 flex items-center gap-1">

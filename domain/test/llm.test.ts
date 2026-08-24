@@ -167,4 +167,55 @@ describe("callLLM 流式（llm.ts）", () => {
         await callLLM([], undefined, undefined, undefined, PROVIDER, onThinking);
         expect(onThinking).not.toHaveBeenCalled();
     });
+
+    it("AC-001 SPEC-017 累积 reasoning 进返回 message._meta.reasoning", async () => {
+        mockCreate.mockResolvedValue(
+            makeStream([
+                { choices: [{ delta: { reasoning_content: "think-1" } }] },
+                { choices: [{ delta: { reasoning_content: "think-2" } }] },
+                { choices: [{ delta: { content: "answer" } }] },
+            ])
+        );
+        const msg = await callLLM(
+            [],
+            undefined,
+            undefined,
+            undefined,
+            PROVIDER,
+            vi.fn()
+        );
+        expect(msg._meta?.reasoning).toBe("think-1think-2");
+    });
+
+    it("AC-002 SPEC-017 callLLM 剥离 _meta，payload.messages 不含 _meta", async () => {
+        mockCreate.mockResolvedValue(
+            makeStream([{ choices: [{ delta: { content: "answer" } }] }])
+        );
+        await callLLM(
+            [
+                {
+                    role: "user",
+                    content: "hi",
+                    _meta: { reasoning: "leak" },
+                } as never,
+            ],
+            undefined,
+            undefined,
+            undefined,
+            PROVIDER
+        );
+        const sentMessages = mockCreate.mock.calls[0][0].messages as Array<
+            Record<string, unknown>
+        >;
+        expect(sentMessages[0]).not.toHaveProperty("_meta");
+        expect(sentMessages[0].content).toBe("hi");
+    });
+
+    it("无 reasoning_content 时 _meta 不挂载", async () => {
+        mockCreate.mockResolvedValue(
+            makeStream([{ choices: [{ delta: { content: "answer" } }] }])
+        );
+        const msg = await callLLM([], undefined, undefined, undefined, PROVIDER);
+        expect(msg._meta).toBeUndefined();
+    });
 });

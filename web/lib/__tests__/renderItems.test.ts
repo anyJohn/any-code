@@ -144,6 +144,36 @@ describe("toRenderItems (TEST-005 TC-005.4, B-003 sub-agent)", () => {
     });
 });
 
+describe("messagesToEvents 思考落盘回放（SPEC-017 AC-003/005）", () => {
+    it("AC-003 assistant 带 _meta.reasoning → 产 Thinking 事件（在 ASSISTANT 前，同 turnId）", () => {
+        const msgs: HistoryMessage[] = [
+            { role: "user", content: "hi" },
+            {
+                role: "assistant",
+                content: "answer",
+                _meta: { reasoning: "think-full" },
+            },
+        ];
+        const events = messagesToEvents(msgs);
+        const types = events.map((e) => e.type);
+        // Iteration, Thinking, Assistant
+        expect(types).toEqual(["User", "Iteration", "Thinking", "Assistant"]);
+        const turn = events.find((e) => e.type === "Iteration")!.turnId;
+        const thinking = events.find((e) => e.type === "Thinking")!;
+        expect(thinking.message).toBe("think-full");
+        expect(thinking.turnId).toBe(turn);
+        expect(events.find((e) => e.type === "Assistant")!.turnId).toBe(turn);
+    });
+
+    it("AC-005 历史 assistant 无 _meta → 不产 Thinking（向后兼容）", () => {
+        const msgs: HistoryMessage[] = [
+            { role: "assistant", content: "answer" },
+        ];
+        const types = messagesToEvents(msgs).map((e) => e.type);
+        expect(types).not.toContain("Thinking");
+    });
+});
+
 describe("groupByTurn Thinking 累积（SPEC-015 AC-003/005）", () => {
     it("AC-003 同回合多个 Thinking 事件累积进 TurnItem.thinking", () => {
         const events: AgentEvent[] = [

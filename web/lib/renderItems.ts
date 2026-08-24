@@ -68,6 +68,10 @@ export function groupByTurn(events: AgentEvent[]): TurnItem[] {
         } else if (e.type === "Usage") {
             // 状态元数据，落在 Assistant 与 Tool 之间：不打断当前回合，也不入盘。
             continue;
+        } else if (e.type === "ToolStart" || e.type === "ToolProgress") {
+            // 流式工具实时事件（不入盘，仅 SSE）：不打断回合分组；
+            // 活动工具卡片由 MessageList 从原始 events 直接算（见 activeTool）。
+            continue;
         } else if (e.type === "Tool") {
             if (!cur) cur = { kind: "turn", turnId: e.turnId ?? "", tools: [] };
             cur.tools.push(e);

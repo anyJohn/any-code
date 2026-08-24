@@ -24,7 +24,7 @@ scope: web 展示模型思考过程（reasoning_content）—— 浅色小字体
 - C-001: reasoning_content 经 delta 扩展字段读取（非 OpenAI 标准字段，需 Record cast 访问）— status: confirmed
 - C-002: THINKING 事件复用 turnId，不引入新分组维度 — status: confirmed
 - C-003: 计时器上限 30s（DEC-051）— status: confirmed
-- C-004: 思考内容不入盘（与 AssistantDelta 同：实时态，仅 THINKING 事件流，messages 不存 reasoning）— status: confirmed
+- C-004: ~~思考内容不入盘~~ → **superseded by SPEC-017 C-001**（思考随 assistant message `_meta.reasoning` 落盘，回放重建 Thinking）— status: superseded
 
 ## invariants
 - I-001: THINKING 事件仅在流式 provider 且模型发 reasoning_content 时产生；非流式 / 无思考模型无 THINKING 事件

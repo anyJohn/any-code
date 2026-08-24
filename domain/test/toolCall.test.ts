@@ -61,15 +61,50 @@ describe("toolCall（tools/toolCall.ts）", () => {
             "t1"
         );
 
-        expect(ctx.eventStream.submit).toHaveBeenCalledOnce();
-        const evt = (ctx.eventStream.submit as ReturnType<typeof vi.fn>).mock
-            .calls[0][0];
-        expect(evt).toMatchObject({
+        // SPEC-018：先发 TOOL_START（执行前）+ 后发 TOOL（完成）→ 两次 submit
+        expect(ctx.eventStream.submit).toHaveBeenCalledTimes(2);
+        const calls = (ctx.eventStream.submit as ReturnType<typeof vi.fn>).mock
+            .calls;
+        const startEvt = calls[0][0];
+        const toolEvt = calls[1][0];
+        expect(startEvt).toMatchObject({
+            type: EventType.TOOL_START,
+            message: "fakeTool",
+            data: { name: "fakeTool", args: { x: 1 } },
+            turnId: "t1",
+        });
+        expect(toolEvt).toMatchObject({
             type: EventType.TOOL,
             message: "fakeTool",
             data: { name: "fakeTool", args: { x: 1 }, result: "tool-output" },
             turnId: "t1",
         });
+    });
+
+    it("AC-002 SPEC-018 注入 emitProgress → 经其发 TOOL_PROGRESS（turnId 绑定）", async () => {
+        // handler 调用 ctx.emitProgress 上抛流式 chunk
+        const handler = vi.fn(async (_args: unknown, ctx: ToolContext) => {
+            ctx.emitProgress?.("chunk-1");
+            ctx.emitProgress?.("chunk-2");
+            return "done";
+        });
+        const tools = [mkTool("streamTool", handler)];
+        const ctx = mkCtx();
+        await toolCall([mkCall("streamTool", "tc1", "{}")], ctx, tools, "t9");
+
+        const calls = (ctx.eventStream.submit as ReturnType<typeof vi.fn>).mock
+            .calls.map((c) => c[0]);
+        const progressEvts = calls.filter(
+            (e) => e.type === EventType.TOOL_PROGRESS
+        );
+        expect(progressEvts).toHaveLength(2);
+        expect(progressEvts[0]).toMatchObject({
+            message: "chunk-1",
+            turnId: "t9",
+        });
+        expect(progressEvts[1]).toMatchObject({ message: "chunk-2", turnId: "t9" });
+        // handler 执行后 emitProgress 清理（不影响后续）
+        expect(ctx.emitProgress).toBeUndefined();
     });
 
     it("AC-007 未知工具名 → [Error] Function not found，不抛异常", async () => {

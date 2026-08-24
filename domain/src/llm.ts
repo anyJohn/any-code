@@ -2,12 +2,23 @@ import {
     ChatCompletionCreateParamsNonStreaming,
     ChatCompletionMessage,
 } from "openai/resources/index";
-import { ChatMessage, type LlmUsage } from "./type";
+import { ChatMessage, type LlmUsage, type MessageMeta } from "./type";
 import type { LlmProvider } from "./config";
 import OpenAI from "openai";
 import { ToolKit } from "./tools";
 
-type LlmResult = ChatCompletionMessage & { usage?: LlmUsage };
+type LlmResult = ChatCompletionMessage & { usage?: LlmUsage; _meta?: MessageMeta };
+
+/** 剥离 assistant message 上的非标准 _meta sidecar，避免发给 provider（部分 provider 会 400）。SPEC-017 C-002 */
+function stripMeta(messages: ChatMessage[]): ChatMessage[] {
+    return messages.map((m) => {
+        const rec = m as unknown as Record<string, unknown>;
+        if (!("_meta" in rec)) return m;
+        const { _meta, ...rest } = rec;
+        void _meta;
+        return rest as unknown as ChatMessage;
+    });
+}
 
 /**
  * 调用 LLM。按传入 provider 的 streaming 决定流式 / 非流式（provider 粒度开关）。
@@ -38,9 +49,10 @@ export async function callLLM(
         apiKey: provider.apiKey,
         baseURL: provider.baseURL,
     });
+    // 剥离 _meta sidecar：发给 provider 的 messages 不得含非标准字段（SPEC-017 C-002）
     const payload: ChatCompletionCreateParamsNonStreaming = {
         model: provider.defaultModel,
-        messages,
+        messages: stripMeta(messages),
         tools: ToolKit.readOnlyTools.map((t) => t.schema), // 默认只读权限（schema）
         ...params,
     };
@@ -73,7 +85,11 @@ async function nonStreamCall(
             })`
         );
     }
-    return { ...message, usage: toUsage(resp.usage) } as LlmResult;
+    // 非流式也可能带 reasoning_content（部分 provider 在 message 顶层）→ 累积进 _meta 落盘
+    const reasoning = (message as unknown as Record<string, unknown>).reasoning_content;
+    const _meta: MessageMeta | undefined =
+        typeof reasoning === "string" && reasoning ? { reasoning } : undefined;
+    return { ...message, usage: toUsage(resp.usage), _meta } as LlmResult;
 }
 
 /** 流式调用：累积 chunk 成完整 message，onDelta 发增量，abort 返回截断；末片带 usage */
@@ -91,6 +107,7 @@ async function streamCall(
         { signal }
     );
     let content = "";
+    let reasoning = "";
     let usage: LlmUsage | undefined;
     const toolCalls: Array<{
         id: string;
@@ -102,10 +119,12 @@ async function streamCall(
             if (chunk.usage) usage = toUsage(chunk.usage);
             const delta = chunk.choices[0]?.delta;
             if (!delta) continue;
-            // reasoning_content：部分模型（如 DeepSeek R1）在思考阶段输出，字段位于 delta 扩展
+            // reasoning_content：部分模型（如 DeepSeek R1）在思考阶段输出，字段位于 delta 扩展。
+            // 累积进 reasoning（落盘用 _meta.reasoning），同时发实时 delta 回调（SSE 展示，不入盘）。
             if ((delta as Record<string, unknown>).reasoning_content) {
                 const reasoningDelta = (delta as Record<string, unknown>)
                     .reasoning_content as string;
+                reasoning += reasoningDelta;
                 onThinkingDelta?.(reasoningDelta);
             }
             if (delta.content) {
@@ -137,11 +156,12 @@ async function streamCall(
             }
         }
     } catch (err) {
-        // abort：返回已累积的截断 message（仅 content，丢可能不完整的 tool_calls）
+        // abort：返回已累积的截断 message（content + 已收到的 reasoning 入 _meta，丢可能不完整的 tool_calls）
         if (signal?.aborted) {
             return {
                 role: "assistant",
                 content: content || null,
+                _meta: reasoning ? { reasoning } : undefined,
             } as LlmResult;
         }
         throw err;
@@ -155,5 +175,6 @@ async function streamCall(
         content: content || null,
         tool_calls: toolCalls.length ? toolCalls : undefined,
         usage,
+        _meta: reasoning ? { reasoning } : undefined,
     } as LlmResult;
 }

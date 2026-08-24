@@ -8,6 +8,8 @@ export interface AgentEvent {
         | "System"
         | "User"
         | "Tool"
+        | "ToolStart"
+        | "ToolProgress"
         | "Iteration"
         | "AssistantDelta"
         | "Assistant"
@@ -47,6 +49,8 @@ export interface HistoryMessage {
         function: { name: string; arguments?: string };
     }>;
     tool_call_id?: string;
+    /** assistant message 的非标准 sidecar（SPEC-017）：reasoning 用于回放重建 Thinking 事件 */
+    _meta?: { reasoning?: string };
 }
 
 let idCounter = 0;
@@ -99,6 +103,17 @@ export function messagesToEvents(msgs: HistoryMessage[]): AgentEvent[] {
                 message: `Iteration ${turn}`,
                 turnId,
             });
+            // 思考内容落盘回放重建：assistant 带 _meta.reasoning → 产 Thinking 事件（同 turnId），
+            // groupByTurn 累积进 TurnItem.thinking → ThinkingBlock 渲染（SPEC-017 B-005）
+            if (m._meta?.reasoning) {
+                events.push({
+                    id: nextId("hist"),
+                    timestamp: 0,
+                    type: "Thinking",
+                    message: m._meta.reasoning,
+                    turnId,
+                });
+            }
             const text = contentToString(m.content);
             if (text) {
                 events.push({
