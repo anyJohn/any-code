@@ -258,4 +258,27 @@ describe("callLLM 流式（llm.ts）", () => {
             expect.objectContaining({ name: "write", bytes: 4500 })
         );
     });
+
+    it("AC-002 SPEC-023 provider.maxOutputTokens → payload.max_tokens；undefined 不传", async () => {
+        // 有 maxOutputTokens → payload.max_tokens 设该值
+        mockCreate.mockResolvedValue(
+            makeStream([{ choices: [{ delta: { content: "x" } }] }])
+        );
+        await callLLM([], undefined, undefined, undefined, {
+            apiKey: "k",
+            models: [{ id: "m" }],
+            defaultModel: "m",
+            streaming: true,
+            contextWindow: 128000,
+            maxOutputTokens: 8192,
+        });
+        expect(mockCreate.mock.calls[0][0].max_tokens).toBe(8192);
+
+        // 无 maxOutputTokens → payload 不含 max_tokens
+        mockCreate.mockResolvedValue(
+            makeStream([{ choices: [{ delta: { content: "x" } }] }])
+        );
+        await callLLM([], undefined, undefined, undefined, PROVIDER);
+        expect(mockCreate.mock.calls[1][0].max_tokens).toBeUndefined();
+    });
 });

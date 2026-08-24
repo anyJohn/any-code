@@ -57,6 +57,11 @@ export async function callLLM(
         tools: ToolKit.readOnlyTools.map((t) => t.schema), // 默认只读权限（schema）
         ...params,
     };
+    // max_tokens：用 resolved maxOutputTokens（探测/表/用户取 min）。undefined 不传（provider 默认）。
+    // SPEC-023 B-004。放 ...params 后以覆盖调用方默认，但保留显式 params 覆盖能力。
+    if (typeof provider.maxOutputTokens === "number") {
+        payload.max_tokens = provider.maxOutputTokens;
+    }
     // signal 透传：stop() abort 时流式生成抛 AbortError（下方 catch 兜底）/ 非流式 fetch 取消。
     if (provider.streaming) {
         return streamCall(client, payload, signal, onDelta, onThinkingDelta, onToolArgProgress, provider.defaultModel);

@@ -21,6 +21,7 @@ interface ConfigResponse {
             defaultModel: string;
             streaming: boolean;
             contextWindow?: number;
+            maxOutputTokens?: number;
         }
     >;
     default?: string;
@@ -36,6 +37,8 @@ interface ProviderForm {
     streaming: boolean;
     /** contextWindow 输入（字符串，空=auto：探测/模型表/128000） */
     contextWindow: string;
+    /** maxOutputTokens 输入（空=auto：探测/模型表/不传 max_tokens） */
+    maxOutputTokens: string;
     maskedKey: string;
 }
 
@@ -57,6 +60,7 @@ const emptyProvider = (): ProviderForm => ({
     defaultModel: "",
     streaming: true,
     contextWindow: "",
+    maxOutputTokens: "",
     maskedKey: "",
 });
 
@@ -110,6 +114,7 @@ function fromResponse(res: ConfigResponse): {
                 defaultModel,
                 streaming: p.streaming ?? true,
                 contextWindow: p.contextWindow ? String(p.contextWindow) : "",
+                maxOutputTokens: p.maxOutputTokens ? String(p.maxOutputTokens) : "",
                 maskedKey: p.apiKey ?? "",
             };
         }
@@ -174,6 +179,11 @@ function toConfigShape(
         if (p.contextWindow.trim()) {
             const n = Number(p.contextWindow);
             if (Number.isFinite(n) && n > 0) entry.contextWindow = n;
+        }
+        // maxOutputTokens：空=auto（不写 yaml，探测/表/不传 max_tokens）；填了才写
+        if (p.maxOutputTokens.trim()) {
+            const n = Number(p.maxOutputTokens);
+            if (Number.isFinite(n) && n > 0) entry.maxOutputTokens = n;
         }
         pOut[name] = entry;
     }
@@ -383,6 +393,23 @@ export default function SettingsPage() {
                                                     onChange={(e) =>
                                                         patchProvider(i, {
                                                             contextWindow:
+                                                                e.target.value,
+                                                        })
+                                                    }
+                                                />
+                                            </label>
+                                            <label className="flex flex-col gap-1">
+                                                <span className="text-xs text-muted-foreground">
+                                                    最大输出 token（留空=自动）
+                                                </span>
+                                                <Input
+                                                    className="h-8 font-mono"
+                                                    type="number"
+                                                    placeholder="留空自动，或填上限（与探测取最小）"
+                                                    value={p.maxOutputTokens}
+                                                    onChange={(e) =>
+                                                        patchProvider(i, {
+                                                            maxOutputTokens:
                                                                 e.target.value,
                                                         })
                                                     }
