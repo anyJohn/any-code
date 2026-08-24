@@ -9,6 +9,7 @@ import {
 } from "@any-code/domain";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import { preloadFileIndex } from "@/lib/fileIndex";
 
 function resolveWorkspace(projectKey: string): Workspace | null {
     const meta = WorkspaceRegistry.list().find((w) => w.projectKey === projectKey);
@@ -74,6 +75,8 @@ export async function GET(
     }
 
     const currentModel = provider.models.find((m) => m.id === provider.defaultModel);
+    // 预热文件索引：/chat 加载即后台建树，@ 检索时已缓存好（fire-and-forget 不阻塞响应）。SPEC-020 B-004
+    preloadFileIndex(projectKey, workspace.rootPath);
     return NextResponse.json({
         provider: cfg.default,
         model: provider.defaultModel,
@@ -86,3 +89,4 @@ export async function GET(
         mcpServers,
     });
 }
+
