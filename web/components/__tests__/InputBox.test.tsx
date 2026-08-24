@@ -53,7 +53,7 @@ describe("InputBox 命令弹层（SPEC-016 AC-004）", () => {
             filtered: [{ name: "model", desc: "" }],
         });
         const { container } = render(<InputBox {...props} />);
-        const input = container.querySelector("input")!;
+        const input = container.querySelector("textarea")!;
         fireEvent.keyDown(input, { key: "Enter" });
         expect(props.runCommand).toHaveBeenCalledWith("model");
     });
@@ -68,7 +68,7 @@ describe("InputBox 命令弹层（SPEC-016 AC-004）", () => {
             ],
         });
         const { container } = render(<InputBox {...props} />);
-        const input = container.querySelector("input")!;
+        const input = container.querySelector("textarea")!;
         fireEvent.keyDown(input, { key: "ArrowDown" });
         expect(props.setHighlight).toHaveBeenCalled();
     });
@@ -80,7 +80,7 @@ describe("InputBox 命令弹层（SPEC-016 AC-004）", () => {
             filtered: [{ name: "model", desc: "" }],
         });
         const { container } = render(<InputBox {...props} />);
-        const input = container.querySelector("input")!;
+        const input = container.querySelector("textarea")!;
         fireEvent.keyDown(input, { key: "Escape" });
         expect(props.setDraft).toHaveBeenCalledWith("");
     });
@@ -108,7 +108,7 @@ describe("InputBox 文件弹层 + chips（SPEC-016 AC-005）", () => {
             fileItems: [{ path: "/a/readme.md", name: "readme.md" }],
         });
         const { container } = render(<InputBox {...props} />);
-        const input = container.querySelector("input")!;
+        const input = container.querySelector("textarea")!;
         fireEvent.keyDown(input, { key: "Enter" });
         expect(props.selectFile).toHaveBeenCalledWith({
             path: "/a/readme.md",
@@ -122,7 +122,7 @@ describe("InputBox 文件弹层 + chips（SPEC-016 AC-005）", () => {
             chips: [{ path: "/x", name: "x" }],
         });
         const { container } = render(<InputBox {...props} />);
-        const input = container.querySelector("input")!;
+        const input = container.querySelector("textarea")!;
         fireEvent.keyDown(input, { key: "Backspace" });
         expect(props.popLastChip).toHaveBeenCalled();
     });
@@ -142,7 +142,7 @@ describe("InputBox 发送（SPEC-016）", () => {
     it("非弹层 Enter → send()", () => {
         const props = makeProps({ draft: "hello" });
         const { container } = render(<InputBox {...props} />);
-        const input = container.querySelector("input")!;
+        const input = container.querySelector("textarea")!;
         fireEvent.keyDown(input, { key: "Enter" });
         expect(props.send).toHaveBeenCalled();
     });
@@ -153,5 +153,27 @@ describe("InputBox 发送（SPEC-016）", () => {
         const stopBtn = screen.getByText("停止");
         fireEvent.click(stopBtn);
         expect(props.stop).toHaveBeenCalled();
+    });
+});
+
+describe("InputBox 多行换行", () => {
+    it("Alt+Enter → 插入换行（不 send）", () => {
+        const props = makeProps({ draft: "hello" });
+        const { container } = render(<InputBox {...props} />);
+        const ta = container.querySelector("textarea")!;
+        fireEvent.keyDown(ta, { key: "Enter", altKey: true });
+        expect(props.setDraft).toHaveBeenCalledWith(
+            expect.stringContaining("\n")
+        );
+        expect(props.send).not.toHaveBeenCalled();
+    });
+
+    it("Enter（无修饰）→ send，不插换行", () => {
+        const props = makeProps({ draft: "hello" });
+        const { container } = render(<InputBox {...props} />);
+        const ta = container.querySelector("textarea")!;
+        fireEvent.keyDown(ta, { key: "Enter" });
+        expect(props.send).toHaveBeenCalled();
+        expect(props.setDraft).not.toHaveBeenCalled();
     });
 });

@@ -1,7 +1,7 @@
 "use client";
 
+import { useLayoutEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { CommandItem } from "@/hooks/useCommand";
 import type { FileEntry } from "@/hooks/useFileReference";
@@ -57,6 +57,36 @@ export function InputBox({
     stop,
     runRawCommand,
 }: InputBoxProps) {
+    const taRef = useRef<HTMLTextAreaElement>(null);
+
+    // 自动增高（按内容，上限 160px 后滚动）
+    useLayoutEffect(() => {
+        const ta = taRef.current;
+        if (!ta) return;
+        ta.style.height = "auto";
+        ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
+    }, [draft]);
+
+    // 在光标处插入换行（Alt+Enter，textarea 默认对 Alt+Enter 不插换行）
+    const insertNewline = () => {
+        const ta = taRef.current;
+        if (!ta) {
+            setDraft((prev) => `${prev}\n`);
+            return;
+        }
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        const next = draft.slice(0, start) + "\n" + draft.slice(end);
+        setDraft(next);
+        requestAnimationFrame(() => {
+            ta.focus();
+            const pos = start + 1;
+            ta.setSelectionRange(pos, pos);
+            ta.style.height = "auto";
+            ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
+        });
+    };
+
     return (
         <div className="shrink-0 w-full max-w-3xl mx-auto px-4 py-3">
             <div className="relative">
@@ -133,14 +163,22 @@ export function InputBox({
                             ))}
                         </div>
                     )}
-                    <div className="flex items-center gap-2">
-                        <Input
+                    <div className="flex items-end gap-2">
+                        <textarea
+                            ref={taRef}
                             value={draft}
                             disabled={pending}
-                            placeholder="输入任务... (Enter 发送，/ 指令，@ 文件)"
-                            className="border-0 focus-visible:ring-0 bg-transparent"
+                            rows={1}
+                            placeholder="输入任务... (Enter 发送，Alt+Enter 换行，/ 指令，@ 文件)"
+                            className="flex-1 resize-none border-0 focus-visible:ring-0 bg-transparent text-sm leading-6 max-h-40 overflow-y-auto py-1.5"
                             onChange={(e) => setDraft(e.target.value)}
                             onKeyDown={(e) => {
+                                // Alt+Enter 换行（优先，无视弹层）
+                                if (e.altKey && e.key === "Enter") {
+                                    e.preventDefault();
+                                    insertNewline();
+                                    return;
+                                }
                                 if (commandOpen) {
                                     if (e.key === "ArrowDown") {
                                         e.preventDefault();
@@ -221,7 +259,8 @@ export function InputBox({
                                     runRawCommand(draft);
                                     return;
                                 }
-                                if (e.key === "Enter" && !e.shiftKey) {
+                                // Enter（无 Alt/Shift）发送；Shift+Enter 走 textarea 默认换行
+                                if (e.key === "Enter" && !e.altKey && !e.shiftKey) {
                                     e.preventDefault();
                                     send();
                                 }
