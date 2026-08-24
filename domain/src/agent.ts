@@ -57,6 +57,10 @@ export function AgentTool(def: AgentDefinition): Tool {
                 workspace: ctx.workspace,
                 eventStream: tagged,
                 signal: ctx.signal,
+                // 子 agent 复用父的 llm provider 与 fileState（read→write staleness 共享）。
+                // 历史漏传 llm 致子 agent callLLM 抛 "callLLM 需要 provider 配置" → "Error executing task"。
+                llm: ctx.llm,
+                fileState: ctx.fileState,
             };
             const messages: ChatMessage[] = [
                 { role: "system", content: def.instruction },
