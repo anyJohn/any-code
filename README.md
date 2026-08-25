@@ -62,6 +62,12 @@ providers:
     models: [{ id: deepseek-chat }]
     defaultModel: deepseek-chat
 default: openai                           # 当前生效 provider
+mcp:                                    # 可选：全局 MCP servers（项目级 .anycode/mcp.yaml 覆盖）
+  example-server:
+    type: stdio                          # 或 sse
+    command: npx
+    args: ["-y", "some-mcp-server"]
+    env: { KEY: value }                  # 可选
 ```
 
 - **多 provider + 运行时切换**：`/model`、`/provider` 指令或 `/settings` 切换，`reloadConfig()` 热更新。
@@ -77,7 +83,7 @@ default: openai                           # 当前生效 provider
 | `.anycode/memory.md` | 跨会话记忆，自动注入 system prompt |
 | `.anycode/rules/` | 自定义规则（markdown 文件） |
 | `.anycode/skills/` | 自定义技能（markdown 文件） |
-| `.anycode/mcp.json` | MCP 工具配置（**目前仅静态 schema 注入，未实现真协议连接**，见路线图） |
+| `.anycode/mcp.yaml` | 项目级 MCP servers（覆盖全局 config.yaml 的 `mcp` 段；stdio/SSE 真协议连接） |
 
 会话数据全局存储于 `~/.anycode/projects/<projectKey>/`，按工作区隔离，支持 resume。
 
@@ -180,15 +186,15 @@ domain/src/
 ├── eventStream.ts   EventStream — 基于 RxJS 的事件流（per-agent）
 ├── memory.ts        .anycode/memory.md 记忆管理
 ├── rule.ts / skill.ts   规则 / 技能加载
-├── mcp.ts           MCP 工具加载（静态 schema）
-├── ripgrep.ts       runRipgrep（@vscode/ripgrep，纯 argv + --no-config）
-├── prompt.ts        系统提示词
+├── mcp.ts           MCP 工具加载（stdio/SSE 真协议连接 + call_tool 转发，per-agent 建连/清理）
+├── ripgrep.ts       runRipgrep（async 解析 rg 二进制：ANYCODE_RG_PATH → vendored rg → @vscode/ripgrep fallback）
+├── prompt.ts        系统提示词 + workspace/memory 注入段 + compact 摘要器 prompt
 ├── tools/           工具系统（schema + toolCall + functions/）
 ├── type.ts          类型定义（AgentEvent / EventType / ChatMessage）
 └── cliExample.ts    纯命令行示例入口
 
 web/                  Next.js 15 App Router
-├── app/             api/（sessions/run SSE、workspaces、config、fs 等 route.ts）/ chat/[id] / settings / page / layout
+├── app/             api/（sessions/run SSE、sessions/:id/compact、sessions/:id/history、workspaces、search、config、fs 等 route.ts）/ chat/[id] / settings / page / layout
 ├── components/       AppShell / AppSidebar / ChatView / MessageList / ToolRow / ThinkingBlock / TurnBlock / SubagentBlock / ui/*
 ├── hooks/           useAgent / useCommand / useFileReference / useRedux
 └── lib/              api / atFile / renderItems / server
@@ -222,20 +228,21 @@ anycode 守"最小可读内核"定位：**小而全 + 真协议接入生态 + �
 | contextWindow / maxOutputTokens | 探测 + 表 + 用户取 min / 纯用户覆盖 |
 | 子 agent 委托 | `AgentTool(planAgent)` 声明式子 agent + tagged EventStream |
 | 两层记忆 + save_memory | 全局 `~/.anycode/memory.md` + 项目 `.anycode/memory.md`，LLM 主动调用写入 |
-| 文件系统（ripgrep） | glob/grep/explore 走 @vscode/ripgrep；read 记 mtime、write 原子写 + staleness 检测 |
+| 文件系统（ripgrep） | glob/grep/explore 走 @vscode/ripgrep（standalone 走 vendored rg via ANYCODE_RG_PATH）；read 记 mtime、write 原子写 + staleness 检测 |
+| MCP 真协议连接 | `loadMcpTools` 真建连（stdio spawn / SSE HTTP）+ listTools + call_tool 转发，per-agent 建连/清理，单 server 失败不阻断 |
+| 上下文压缩 | `/compact [focus]` 指令 + agentLoop 75% 自动压缩（旧消息→摘要 + 保留尾部 + tool 配对保护）|
 | 端到端安装（v1） | Linux/Windows 一行安装脚本 + `anycode web`（非技术用户开箱即用）|
+| 安装生命周期 | `anycode update`（复用安装器重拉重建）/ `uninstall`（删 ~/.anycode）/ `help` |
 | 核心路径单测 | domain + web vitest 全绿 |
 
 ### 待实现
 
 | 项 | 说明 |
 | --- | --- |
-| MCP 真协议连接（stdio/SSE） | 目前 `loadMcpTools` 仅静态 schema，未实现 client 真实连接——最大工程缺口 |
-| 权限策略层 | `TOOL` 事件已留 `{name,args,result}` 拦截点，缺 allow/deny/ask 策略 + 危险命令确认 |
-| 上下文 compaction | 长会话撑爆窗口；到阈值摘要旧 tool 结果（auto-compaction 思路） |
+| 权限策略层 | `TOOL` 事件已留 `{name,args,result}` 拦截点，缺 allow/deny/ask 策略 + 危险命令确认；`ask_question` 工具（模型向 human 提问/选择）待加 |
 | 程序性记忆 / 自学习 | 加 `create_skill` 工具让 agent 自造 skill，"越用越强"最小循环 |
 | 轻量编排切入 | ACP 委托外部 harness，或 `delegate_to_cli` 调外部 coding agent |
-| CI/CD + `anycode update` | 无 workflow；无自更新（重跑安装脚本即更新） |
+| CI/CD | 无 workflow（`anycode update` 已实现，自更新靠重跑安装器） |
 | Electron 桌面客户端 | 真正双击即装、代码签名（SmartScreen/Gatekeeper）随客户端一起做 |
 
 ### 明确不做
