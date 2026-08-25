@@ -72,4 +72,7 @@ v1 无自更新：重跑安装命令即可（已装的 node/PortableGit 会复�
 
 ## 平台支持
 
-v1：Windows + Linux。macOS、Electron 桌面客户端、代码签名（SmartScreen/Gatekeeper）作为后续特性。
+v1：Windows + Linux。
+- **Linux**：跑 `install.sh`。
+- **Windows**：跑 `install.ps1`（PowerShell 一行）。兜底：若在 Git Bash 里跑了 `install.sh`，它会检测到 MINGW/MSYS 环境自动改走 `install.ps1`（不在 bash 里重写 Windows 逻辑）。
+- macOS、Electron 桌面客户端、代码签名（SmartScreen/Gatekeeper）作为后续特性。

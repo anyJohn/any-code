@@ -20,6 +20,27 @@ info() { echo "▶ $*"; }
 command -v curl >/dev/null 2>&1 || err "需要 curl（请先安装）"
 command -v tar >/dev/null 2>&1 || err "需要 tar（请先安装）"
 
+# OS 探测：Windows（Git Bash / MSYS / Cygwin）改走 install.ps1——复用 PowerShell 的 Windows
+# 安装逻辑（win 平台 node zip + pnpm win zip + PortableGit + config.gitBashPath），不在 bash 重写。
+KERNEL="$(uname -s)"
+case "$KERNEL" in
+    MINGW*|MSYS*|CYGWIN*)
+        info "检测到 Windows（$KERNEL，Git Bash/MSYS/Cygwin）——改走 install.ps1（PowerShell）执行 Windows 安装…"
+        PS_URL="https://raw.githubusercontent.com/$ORG/$REPO/$BRANCH/build/install.ps1"
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb '$PS_URL' | iex" \
+            || err "install.ps1 执行失败（见上方输出）"
+        exit 0
+        ;;
+    Darwin*)
+        err "macOS 暂不支持（本次范围 Linux + Windows）"
+        ;;
+    Linux*)
+        : ;;
+    *)
+        err "不支持的系统：$KERNEL（仅支持 Linux 与 Windows）"
+        ;;
+esac
+
 ARCH="$(uname -m)"
 case "$ARCH" in
     x86_64) NODE_ARCH=linux-x64 ;;
