@@ -5,6 +5,18 @@ import { type AgentEvent, nextId } from "@/lib/sseEvents";
 
 const TERMINAL = new Set(["Done", "Error", "Stopped"]);
 
+/** ask_question INTERACTION 事件 data 形状（domain EventType.Interaction）。 */
+export interface InteractionQuestion {
+    question: string;
+    header?: string;
+    options?: string[];
+    multiSelect?: boolean;
+}
+export interface InteractionData {
+    id: string;
+    questions: InteractionQuestion[];
+}
+
 /**
  * 解析 SSE 流：读 fetch body，按 \n\n 分帧，取 data: 行 JSON.parse。
  * fetch streaming SSE（非 EventSource）——支持 POST 带 body + abort=stop。
@@ -54,6 +66,9 @@ export function useAgent(
     const [currentSessionId, setCurrentSessionId] = useState<string | null>(
         sessionId
     );
+    // ask_question 工具阻塞等答案时，服务端发 Interaction 事件→设此状态驱动模态
+    const [pendingInteraction, setPendingInteraction] =
+        useState<InteractionData | null>(null);
     const abortRef = useRef<AbortController | null>(null);
 
     const submit = useCallback(
@@ -119,8 +134,16 @@ export function useAgent(
                     return;
                 }
                 for await (const e of parseSSE(res.body)) {
-                    setEvents((prev) => [...prev, { ...e, id: nextId("live") }]);
-                    if (TERMINAL.has(e.type)) setPending(false);
+                    if (e.type === "Interaction") {
+                        // ask_question 阻塞中：拦截不入 events，设 pendingInteraction 驱动模态
+                        setPendingInteraction(e.data as InteractionData);
+                    } else {
+                        setEvents((prev) => [...prev, { ...e, id: nextId("live") }]);
+                    }
+                    if (TERMINAL.has(e.type)) {
+                        setPending(false);
+                        setPendingInteraction(null);
+                    }
                 }
             } catch (err) {
                 if (ac.signal.aborted) {
@@ -160,6 +183,28 @@ export function useAgent(
         abortRef.current?.abort(); // abort fetch → 服务端 destroy → 真停
     }, []);
 
+    /** 提交 ask_question 答案：POST /interact 解除服务端 handler 阻塞。 */
+    const submitInteraction = useCallback(
+        async (answers: string[]) => {
+            const data = pendingInteraction;
+            const sid = currentSessionId;
+            if (!data || !sid) return;
+            const res = await fetch(
+                `/api/sessions/${sid}/interact`,
+                {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({
+                        interactionId: data.id,
+                        answers,
+                    }),
+                }
+            );
+            if (res.ok) setPendingInteraction(null);
+        },
+        [pendingInteraction, currentSessionId]
+    );
+
     const clear = useCallback(() => setEvents([]), []);
 
     const appendSystem = useCallback((message: string) => {
@@ -174,5 +219,5 @@ export function useAgent(
         ]);
     }, []);
 
-    return { events, pending, submit, stop, clear, appendSystem, currentSessionId };
+    return { events, pending, submit, stop, clear, appendSystem, currentSessionId, pendingInteraction, submitInteraction };
 }

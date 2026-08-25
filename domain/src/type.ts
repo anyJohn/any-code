@@ -21,6 +21,7 @@ export enum EventType {
     USAGE = "Usage",
     PLANNING = "Planning",
     COMPACT = "Compact",
+    INTERACTION = "Interaction",
     ERROR = "Error",
     DONE = "Done",
     STOPPED = "Stopped",

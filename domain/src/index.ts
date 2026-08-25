@@ -7,3 +7,4 @@ export * from "./context";
 export * from "./agent";
 export * from "./config";
 export * from "./ripgrep";
+export * from "./pendingInteractions";

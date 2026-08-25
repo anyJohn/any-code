@@ -9,6 +9,7 @@ import type { AgentEvent } from "@/lib/sseEvents";
 import { InputBox } from "./InputBox";
 import { MessageList } from "./MessageList";
 import { StatusBar } from "./StatusBar";
+import { InteractionModal } from "./InteractionModal";
 
 /**
  * ChatView —— 聊天主视图容器：组合 MessageList / InputBox / StatusBar，
@@ -26,7 +27,8 @@ export function ChatView({
     initialEvents: AgentEvent[];
     projectKey?: string;
 }) {
-    const { events, pending, submit, stop, clear, appendSystem, currentSessionId } =
+    const { events, pending, submit, stop, clear, appendSystem, currentSessionId,
+            pendingInteraction, submitInteraction } =
         useAgent(sessionId, rootPath, initialEvents);
     const command = useCommand({
         clear,
@@ -134,6 +136,14 @@ export function ChatView({
             />
 
             {projectKey && <StatusBar projectKey={projectKey} events={events} />}
+
+            {pendingInteraction && (
+                <InteractionModal
+                    data={pendingInteraction}
+                    onSubmit={submitInteraction}
+                    onClose={stop}
+                />
+            )}
         </div>
     );
 }

@@ -216,6 +216,53 @@ const saveMemorySchema: ChatCompletionTool = {
     },
 };
 
+const askQuestionSchema: ChatCompletionTool = {
+    type: "function",
+    function: {
+        name: ToolName.AskQuestion,
+        description:
+            "Ask the user 1-5 questions and block until they answer. Use when genuinely blocked on a decision that is theirs (ambiguous requirement, implementation approach with real trade-offs). Do NOT use for low-stakes choices (pick a sensible default yourself) or for confirming dangerous commands (the permission layer handles that). Put the recommended option first and suffix its label with ' (Recommended)' when you have a preference. Free-text ('Other') is auto-added per question — do not include an Other option yourself. Answers come back as a tool result (not a new user message).",
+        parameters: {
+            type: "object",
+            properties: {
+                questions: {
+                    type: "array",
+                    minItems: 1,
+                    maxItems: 5,
+                    items: {
+                        type: "object",
+                        properties: {
+                            question: {
+                                type: "string",
+                                description: "The question to ask.",
+                            },
+                            header: {
+                                type: "string",
+                                description: "Short label for the question (modal title).",
+                            },
+                            options: {
+                                type: "array",
+                                minItems: 2,
+                                maxItems: 4,
+                                items: { type: "string" },
+                                description:
+                                    "2-4 choice labels. Omit for a free-text question. The first may be the recommended option (suffix ' (Recommended)').",
+                            },
+                            multiSelect: {
+                                type: "boolean",
+                                description:
+                                    "Allow selecting multiple options. Requires `options`.",
+                            },
+                        },
+                        required: ["question"],
+                    },
+                },
+            },
+            required: ["questions"],
+        },
+    },
+};
+
 export {
     globSchema,
     grepSchema,
@@ -225,4 +272,5 @@ export {
     exploreSchema,
     executeBashSchema,
     saveMemorySchema,
+    askQuestionSchema,
 };

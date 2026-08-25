@@ -8,6 +8,7 @@ enum ToolName {
     Glob = "glob",
     Grep = "grep",
     SaveMemory = "save_memory",
+    AskQuestion = "ask_question",
 }
 
 export { ToolName };

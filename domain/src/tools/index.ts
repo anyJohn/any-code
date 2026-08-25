@@ -9,6 +9,7 @@ import {
     exploreSchema,
     executeBashSchema,
     saveMemorySchema,
+    askQuestionSchema,
 } from "./schema";
 import { executeBashFunc } from "./functions/bash";
 import { readFunc } from "./functions/read";
@@ -18,6 +19,7 @@ import { exploreFunc } from "./functions/explore";
 import { globFunc } from "./functions/glob";
 import { grepFunc } from "./functions/grep";
 import { saveMemoryFunc } from "./functions/saveMemory";
+import { askQuestionFunc } from "./functions/askQuestion";
 
 /**
  * Tool = schema（给 LLM）+ handler（执行）。统一内置工具与 AgentTool，
@@ -39,6 +41,10 @@ const saveMemoryTool: Tool = {
     schema: saveMemorySchema,
     handler: saveMemoryFunc,
 };
+const askQuestionTool: Tool = {
+    schema: askQuestionSchema,
+    handler: askQuestionFunc,
+};
 
 // plan 由 AgentTool(planAgent) 提供（见 agent.ts）。
 const ToolKit = {
@@ -51,6 +57,7 @@ const ToolKit = {
         globTool,
         grepTool,
         saveMemoryTool,
+        askQuestionTool,
     ],
     readOnlyTools: [readTool, exploreTool, globTool, grepTool],
     executeTools: [
@@ -62,6 +69,7 @@ const ToolKit = {
         globTool,
         grepTool,
         saveMemoryTool,
+        askQuestionTool,
     ],
 };
 
