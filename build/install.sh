@@ -177,5 +177,5 @@ fi
 
 echo
 echo "✓ anycode 安装完成！"
-echo "  打开新终端（或 source ~/.bashrc），运行：anycode --web"
+echo "  打开新终端（或 source ~/.bashrc），运行：anycode web"
 echo "  浏览器自动打开 http://127.0.0.1:3000"

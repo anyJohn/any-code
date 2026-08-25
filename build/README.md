@@ -21,7 +21,7 @@ Windows 也可下载 `build/install.bat` 双击（薄 shim，内部跑 install.p
 装完打开**新终端**，运行：
 
 ```
-anycode --web
+anycode web
 ```
 
 浏览器自动打开 `http://127.0.0.1:3000`，即 web 端 agent。`Ctrl+C` 停止服务。
@@ -66,7 +66,7 @@ v1 无自更新：重跑安装命令即可（已装的 node/PortableGit 会复�
 | `install.sh` | Linux 一行安装器（curl\|bash 拉取） |
 | `install.ps1` | Windows 一行安装器（iwr\|iex 拉取） |
 | `install.bat` | Windows cmd/双击入口（薄 shim→ps1） |
-| `launcher.mjs` | `anycode --web` 启动器（node，跨平台；安装器生成薄 shim 调用它） |
+| `launcher.mjs` | `anycode web` 启动器（node，跨平台；安装器生成薄 shim 调用它） |
 | `versions.env` | 版本配置（node LTS 等） |
 
 ## 平台支持

@@ -25,6 +25,24 @@ const STANDALONE_WEB = join(APP, "web", ".next", "standalone", "web");
 const SERVER_JS = join(STANDALONE_WEB, "server.js");
 const RG = join(ANYCODE_HOME, "runtime", "rg", win ? "rg.exe" : "rg");
 
+// Subcommand dispatch. `anycode web` launches the web app; bare `anycode` prints
+// usage (a CLI mode is not shipped yet); unknown subcommand → error. Flags like
+// --port= may follow the subcommand. Dispatch happens before install-state checks so
+// usage/error work even on a mis-installed machine. Output is ASCII (Windows codepage).
+const argv = process.argv.slice(2);
+const sub = argv.find((a) => !a.startsWith("-"));
+if (sub && sub !== "web") {
+    console.error("anycode: unknown command '" + sub + "'. Try 'anycode web'.");
+    process.exit(2);
+}
+if (!sub) {
+    console.log("anycode — usage:");
+    console.log("  anycode web            Start the web app (opens http://127.0.0.1:3000)");
+    console.log("  anycode web --port=N   Start on a custom port");
+    process.exit(0);
+}
+
+// below runs only for `anycode web` — verify the install is present
 if (!existsSync(NODE_BIN)) {
     console.error("anycode not installed correctly: private node missing (" + NODE_BIN + "). Reinstall.");
     process.exit(1);
@@ -39,7 +57,7 @@ process.env.PATH = [NODE_DIR, process.env.PATH].join(win ? ";" : ":");
 
 // --port override; default 3000, auto-increment to a free port
 let startPort = 3000;
-for (const a of process.argv.slice(2)) {
+for (const a of argv) {
     if (a.startsWith("--port=")) startPort = parseInt(a.slice(7), 10) || 3000;
 }
 

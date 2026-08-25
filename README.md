@@ -24,13 +24,13 @@ curl -fsSL https://raw.githubusercontent.com/anyJohn/any-code/main/build/install
 iwr -useb https://raw.githubusercontent.com/anyJohn/any-code/main/build/install.ps1 | iex
 ```
 
-装完打开**新终端**运行 `anycode --web`，浏览器自动打开 `http://127.0.0.1:3000`。安装细节见 [`build/README.md`](./build/README.md)。
+装完打开**新终端**运行 `anycode web`，浏览器自动打开 `http://127.0.0.1:3000`。安装细节见 [`build/README.md`](./build/README.md)。
 
 ---
 
 ## 快速使用 · Quick Start
 
-1. 新终端运行 `anycode --web`，浏览器自动打开 `http://127.0.0.1:3000`。
+1. 新终端运行 `anycode web`，浏览器自动打开 `http://127.0.0.1:3000`。
 2. 首次进入：点顶栏「添加工作区」选一个本地目录——agent 在这个目录里干活（跑命令、读写文件都以此为根）。
 3. 进 `/settings` 填入 OpenAI 兼容 provider 的 API 密钥（也可直接编辑 `~/.anycode/config.yaml`）。
 4. 侧栏「新建对话」，输入任务，例如：
@@ -221,7 +221,7 @@ anycode 守"最小可读内核"定位：**小而全 + 真协议接入生态 + �
 | 子 agent 委托 | `AgentTool(planAgent)` 声明式子 agent + tagged EventStream |
 | 两层记忆 + save_memory | 全局 `~/.anycode/memory.md` + 项目 `.anycode/memory.md`，LLM 主动调用写入 |
 | 文件系统（ripgrep） | glob/grep/explore 走 @vscode/ripgrep；read 记 mtime、write 原子写 + staleness 检测 |
-| 端到端安装（v1） | Linux/Windows 一行安装脚本 + `anycode --web`（非技术用户开箱即用）|
+| 端到端安装（v1） | Linux/Windows 一行安装脚本 + `anycode web`（非技术用户开箱即用）|
 | 核心路径单测 | domain + web vitest 全绿 |
 
 ### 待实现

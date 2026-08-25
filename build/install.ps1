@@ -163,7 +163,7 @@ if ($userPath -notlike "*$binDir*") {
 
 Write-Host ''
 Write-Host '>> anycode installed!' -ForegroundColor Green
-Write-Host "  open a NEW terminal (PowerShell or cmd), run: anycode --web"
+Write-Host "  open a NEW terminal (PowerShell or cmd), run: anycode web"
 Write-Host "  browser opens http://127.0.0.1:3000"
 
 } finally {
