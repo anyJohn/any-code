@@ -55,6 +55,7 @@ scope: 端到端安装（Win+Linux 安装脚本 + anycode --web 启动器 + Wind
 - DEC-091: 端口默认 3000，占用则自增到空闲。
 - DEC-092: pnpm 用 standalone 二进制（`pnpm/pnpm` releases 的 `pnpm-linux-x64.tar.gz`/`pnpm-win32-x64.zip`），不用 corepack。原因：node v22.11.0 自带 corepack 0.29 验签坏（npm registry 签名 key 轮换，旧 known-keys 不匹配 → `Cannot find matching keyid`，`COREPACK_INTEGRITY_KEYS=none` 也无效），会阻断所有用户安装。pnpm standalone 自带 node、无验签、解压即用。
 - DEC-093: Windows Git Bash 路径走 `~/.anycode/config.yaml` 顶层 `gitBashPath`（非 env var）。原因：env var（setx 写注册表）脆弱、不可经 /settings 编辑；config 是单一可信源。bash.ts 候选序：config.gitBashPath → 安装器下发位置 `~/.anycode/runtime/portablegit/bin/bash.exe` → 系统 Git。install.ps1 在 config.yaml 已存在时合并写入 `gitBashPath`；首装无 config 时 bash.ts 自动发现下发位置。
+- DEC-094: 运行用 Next.js `output:"standalone"`（**反转 DEC-086**）。原因：DEC-086 的 `next start` 需全量 node_modules（~700MB）在旁，app 体积 ~830MB 太大；standalone 自包含 bundle（~62MB），运行只需 `.next/standalone`。体积从 ~1.2GB（Linux）/ 1.39GB（Win）降到 **~260MB**。配套：①ripgrep 二进制 vendor 到 `~/.anycode/runtime/rg/rg`（standalone 不含 @vscode/ripgrep 平台二进制），domain `ripgrep.ts` 读 `ANYCODE_RG_PATH`（launcher 注入），@vscode/ripgrep 降级为 dev 动态 import fallback；②build 后拷 `.next/static`+`public` 进 standalone，删 `.next` 非 standalone 的 build traces；③删 build-only `node_modules` + pnpm（standalone 自包含，safe_rm 锚定守卫）；④launcher 改跑 `node .next/standalone/web/server.js` + 设 `PORT`/`HOSTNAME=127.0.0.1`（standalone server.js 默认 0.0.0.0 公网，必须改）。未来 Electron 客户端也复用此 standalone bundle。
 
 ## 实现顺序
 1. AC-001 前置验证（prod build+start 端到端）——不通先修 web。
@@ -71,4 +72,5 @@ scope: 端到端安装（Win+Linux 安装脚本 + anycode --web 启动器 + Wind
 - AC-002 ✓：Linux 临时 HOME 真 install 跑通（node+pnpm standalone+pnpm install+next build+注册），`anycode --web` 启动 → `/` 200 + `/api/workspaces` 200。注：首次跑因网络抖动下载 next/swc 超时失败（非 install.sh bug），复用已建 pnpm store 后通过。
 - AC-003 ⏳：Windows 真 install 需 Windows 机器验证（本机 Linux 无法跑 install.ps1）。脚本逻辑镜像 Linux + PortableGit 自解压 + config.yaml 合并 gitBashPath，待 Windows/CI 验。
 - 重构后回归 ✓：AC-001 重验（refactored domain + config gitBashPath）prod bash 任务通过；domain tsc 0 + 92/92。
-- deferred：Electron 桌面客户端、macOS、代码签名、`anycode update`、`output:"standalone"`（仅 Electron/精简安装才需）。
+- standalone（DEC-094，反转 DEC-086）✓：next.config `output:"standalone"`；ripgrep vendor 到 `runtime/rg/rg` + ripgrep.ts 读 `ANYCODE_RG_PATH`（@vscode/ripgrep ESM 动态 import fallback，standalone 下缺失不致命）；build 后拷 static/public 进 standalone、删 .next build traces、删 build-only node_modules + pnpm（safe_rm 锚定）；launcher 改跑 `node .next/standalone/web/server.js` + HOSTNAME=127.0.0.1。体积 ~1.2GB→**260MB**。Linux 验：anycode --web Ready 310ms / 200 + /files（ripgrep --files）返 20 文件（vendored rg 跑通）。domain 92/92 含 ripgrep.test。
+- deferred：Electron 桌面客户端（复用 standalone bundle）、macOS、代码签名、`anycode update`、node 的 npm/corepack trim（运行时只用 node 二进制，省 ~85MB）。

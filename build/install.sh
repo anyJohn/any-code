@@ -121,8 +121,33 @@ fi
 cd "$APP"
 info "pnpm install（可能数分钟）…"
 pnpm install --frozen-lockfile
-info "构建 web（next build）…"
+info "构建 web（next build → standalone）…"
 pnpm --filter @any-code/web build
+
+# ---- 4b. standalone post-process：vendor rg / 拷 static / 删 build-only 依赖 ----
+info "post-process standalone..."
+# 1. vendor rg 二进制（standalone 不含 @vscode/ripgrep 平台二进制；直接 find 定位，避开 ESM require 问题）
+RG_DIR="$ANYCODE_HOME/runtime/rg"
+mkdir -p "$RG_DIR"
+RG_SRC="$(find "$APP/node_modules/.pnpm" -type f \( -name rg -o -name rg.exe \) 2>/dev/null | head -1)"
+if [ -n "$RG_SRC" ] && [ -f "$RG_SRC" ]; then
+    cp "$RG_SRC" "$RG_DIR/$(basename "$RG_SRC")"; chmod +x "$RG_DIR/$(basename "$RG_SRC")"
+else
+    err "未找到 ripgrep 二进制（@vscode/ripgrep 平台包）"
+fi
+# 2. 拷 static + public 进 standalone（server.js 从 standalone/web/.next/static 服务）
+STANDALONE_WEB="$APP/web/.next/standalone/web"
+mkdir -p "$STANDALONE_WEB/.next"
+cp -r "$APP/web/.next/static" "$STANDALONE_WEB/.next/static"
+[ -d "$APP/web/public" ] && cp -r "$APP/web/public" "$STANDALONE_WEB/public"
+# 3. 只留 .next/standalone（运行时）；删其余 build traces（~280MB）
+for d in "$APP/web/.next"/*; do
+    [ "$(basename "$d")" = "standalone" ] && continue
+    safe_rm "$d"
+done
+# 4. 删 build-only node_modules + pnpm（standalone 自包含；~860MB）。safe_rm 锚定守卫。
+safe_rm "$APP/node_modules"
+safe_rm "$PNPM_DIR"
 
 # ---- 5. 注册 anycode 到 PATH (generate thin sh shim) ----
 # launcher logic in build/launcher.mjs (node); sh shim just execs private node + launcher.mjs.

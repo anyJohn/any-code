@@ -103,9 +103,28 @@ Set-Location $App
 Info "pnpm install (may take minutes)..."
 pnpm install --frozen-lockfile
 if ($LASTEXITCODE -ne 0) { Die "pnpm install failed (exit $LASTEXITCODE)" }
-Info "build web (next build)..."
+Info "build web (next build -> standalone)..."
 pnpm --filter '@any-code/web' build
 if ($LASTEXITCODE -ne 0) { Die "next build failed (exit $LASTEXITCODE)" }
+
+# ---- 5b. standalone post-process: vendor rg / copy static / drop build-only deps ----
+Info "post-process standalone..."
+# 1. vendor rg binary (standalone lacks @vscode/ripgrep platform binary; locate via Get-ChildItem, avoid ESM require)
+$RgDir = Join-Path $AnycodeHome 'runtime\rg'
+$null = New-Item -ItemType Directory -Force -Path $RgDir
+$rgSrc = Get-ChildItem -Recurse -File (Join-Path $App 'node_modules\.pnpm') -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'rg.exe' -or $_.Name -eq 'rg' } | Select-Object -First 1
+if ($rgSrc) { Copy-Item $rgSrc.FullName (Join-Path $RgDir $rgSrc.Name) -Force }
+else { Die "ripgrep binary not found (@vscode/ripgrep platform package)" }
+# 2. copy static + public into standalone (server.js serves from standalone/web/.next/static)
+$StandaloneWeb = Join-Path $App 'web\.next\standalone\web'
+$null = New-Item -ItemType Directory -Force -Path (Join-Path $StandaloneWeb '.next')
+Copy-Item -Recurse -Force (Join-Path $App 'web\.next\static') (Join-Path $StandaloneWeb '.next\static')
+if (Test-Path (Join-Path $App 'web\public')) { Copy-Item -Recurse -Force (Join-Path $App 'web\public') (Join-Path $StandaloneWeb 'public') }
+# 3. keep only .next/standalone (runtime); delete the rest of .next (build traces, ~280MB)
+Get-ChildItem -Force (Join-Path $App 'web\.next') | Where-Object { $_.Name -ne 'standalone' } | ForEach-Object { Safe-Remove $_.FullName }
+# 4. drop build-only node_modules + pnpm (standalone self-contained; ~860MB). Safe-Remove anchored.
+Safe-Remove (Join-Path $App 'node_modules')
+Safe-Remove $PnpmDir
 
 # ---- 6. register anycode (generate thin .cmd shim: ASCII + CRLF + BOM-less via .NET) ----
 # launcher logic lives in build/launcher.mjs (node); the .cmd is a 2-line shim calling private node.

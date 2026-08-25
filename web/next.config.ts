@@ -6,6 +6,7 @@ import type { NextConfig } from "next";
 // domain exports 指向 src/index.ts（TS 源码）。transpilePackages 让 Turbopack/webpack
 // 把 domain 当依赖预转译并按模块缓存（预打包一次、跨路由共享，而非逐请求重解析）。
 const config: NextConfig = {
+    output: "standalone", // 自包含运行时 bundle：运行只需 .next/standalone（~50MB），不需全量 node_modules
     transpilePackages: ["@any-code/domain"],
     // 反代默认缓冲 SSE；事件端点在 handler 内显式设 X-Accel-Buffering: no。
     experimental: {

@@ -5,6 +5,10 @@
 //   Windows anycode.cmd:  @echo off\r\n"<node.exe>" "<this>" %*\r\n
 //   Linux   anycode:      exec "<node>" "<this>" "$@"
 // Output is ASCII-only on purpose (node stdout on Windows is codepage-dependent, unlike Python).
+//
+// Runs the Next.js standalone server (output:"standalone") via the private node — no `next` CLI,
+// no full node_modules needed at runtime. Sets HOSTNAME=127.0.0.1 (standalone server.js defaults
+// to 0.0.0.0 = public! must override) + ANYCODE_RG_PATH to the vendored rg binary.
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { existsSync } from "node:fs";
@@ -14,23 +18,24 @@ import { homedir, platform } from "node:os";
 const win = platform() === "win32";
 const ANYCODE_HOME = process.env.ANYCODE_HOME || join(homedir(), ".anycode");
 const APP = join(ANYCODE_HOME, "app");
-const WEB = join(APP, "web");
 const NODE_DIR = join(ANYCODE_HOME, "runtime", "node");
 const NODE_BIN = win ? join(NODE_DIR, "node.exe") : join(NODE_DIR, "bin", "node");
-const NEXT_ENTRY = join(WEB, "node_modules", "next", "dist", "bin", "next");
+// standalone layout: app/web/.next/standalone/web/server.js (mirrors repo's web/ subdir)
+const STANDALONE_WEB = join(APP, "web", ".next", "standalone", "web");
+const SERVER_JS = join(STANDALONE_WEB, "server.js");
+const RG = join(ANYCODE_HOME, "runtime", "rg", win ? "rg.exe" : "rg");
 
 if (!existsSync(NODE_BIN)) {
     console.error("anycode not installed correctly: private node missing (" + NODE_BIN + "). Reinstall.");
     process.exit(1);
 }
-if (!existsSync(NEXT_ENTRY)) {
-    console.error("anycode not installed correctly: web build missing (" + NEXT_ENTRY + "). Reinstall.");
+if (!existsSync(SERVER_JS)) {
+    console.error("anycode not installed correctly: web build missing (" + SERVER_JS + "). Reinstall.");
     process.exit(1);
 }
 
-// private node + web's bin on PATH so spawned next resolves its deps
-const PATH_PRE = [join(WEB, "node_modules", ".bin"), NODE_DIR];
-process.env.PATH = [...PATH_PRE, process.env.PATH].join(win ? ";" : ":");
+// private node on PATH (for anything the server/agent spawns that resolves `node`)
+process.env.PATH = [NODE_DIR, process.env.PATH].join(win ? ";" : ":");
 
 // --port override; default 3000, auto-increment to a free port
 let startPort = 3000;
@@ -53,6 +58,12 @@ function freePort(start) {
 const PORT = await freePort(startPort);
 const URL = "http://127.0.0.1:" + PORT;
 console.log(">> Starting anycode web -> " + URL + " (Ctrl+C to stop)");
+
+// standalone server.js reads PORT + HOSTNAME from env. HOSTNAME=127.0.0.1 (localhost-only, security).
+process.env.PORT = String(PORT);
+process.env.HOSTNAME = "127.0.0.1";
+// vendored rg path so domain ripgrep.ts finds it inside standalone (no @vscode/ripgrep binary there)
+process.env.ANYCODE_RG_PATH = RG;
 
 function openBrowser(url) {
     const cmd = win
@@ -83,9 +94,9 @@ function openBrowser(url) {
     }
 })();
 
-// run `next start` in foreground via the private node; Ctrl+C propagates to kill it
-const child = spawn(NODE_BIN, [NEXT_ENTRY, "start", "-H", "127.0.0.1", "-p", String(PORT)], {
-    cwd: WEB,
+// run the standalone server in foreground via private node; Ctrl+C propagates to kill it
+const child = spawn(NODE_BIN, [SERVER_JS], {
+    cwd: STANDALONE_WEB,
     stdio: "inherit",
 });
 child.on("exit", (code) => process.exit(code ?? 0));
