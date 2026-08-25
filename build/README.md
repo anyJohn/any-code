@@ -26,6 +26,15 @@ anycode web
 
 浏览器自动打开 `http://127.0.0.1:3000`，即 web 端 agent。`Ctrl+C` 停止服务。
 
+其他命令：
+
+| 命令 | 作用 |
+|---|---|
+| `anycode web [--port=N]` | 启动 web 端 |
+| `anycode update` | 重新拉取 + 重建到最新版（复用安装器，幂等） |
+| `anycode uninstall [-y]` | 卸载（删 `~/.anycode`；默认二次确认） |
+| `anycode help` / `anycode --help` | 打印用法 |
+
 ## 安装器做了什么
 
 1. **私有 provision node**：下载 nodejs.org LTS 到 `~/.anycode/runtime/node`。下载 pnpm standalone（`pnpm/pnpm` releases）到 `~/.anycode/runtime/pnpm`（绕开 corepack 0.29 验签 bug）。不写系统 PATH、不要 sudo / admin。

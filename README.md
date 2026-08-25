@@ -26,6 +26,8 @@ iwr -useb https://raw.githubusercontent.com/anyJohn/any-code/main/build/install.
 
 装完打开**新终端**运行 `anycode web`，浏览器自动打开 `http://127.0.0.1:3000`。安装细节见 [`build/README.md`](./build/README.md)。
 
+> 其他命令：`anycode update`（升级到最新）、`anycode uninstall`（卸载）、`anycode help`（用法）。
+
 ---
 
 ## 快速使用 · Quick Start

@@ -23,6 +23,7 @@ scope: 端到端安装（Win+Linux 安装脚本 + anycode web 启动器 + Window
 - B-009: ripgrep Windows 二进制：`domain/package.json` 加 `@vscode/ripgrep-win32-x64` optionalDep（现仅 linux-x64）。
 - B-010: 根 `package.json` 加 `"packageManager": "pnpm@<ver>"`（corepack 锁 pnpm，安装器靠它不另下 pnpm）。
 - B-011: 下载校验——node/PortableGit zip 下载后 sha256 校验（非技术用户防篡改/截断）。
+- B-012: launcher 子命令——`anycode web` 起 web；`anycode update` 复用安装器重拉+重建（幂等，node/pnpm 已在则跳过）；`anycode uninstall [-y]` 删 `~/.anycode`（延迟删，Windows node.exe 运行中被锁需等 launcher 退出；Linux 附带 strip .bashrc/.zshrc 的 anycode PATH 行）；`anycode help`/`--help`/`-h`/裸 `anycode` 打印用法；未知命令 exit 2。dispatch 在 install-state 检查前；web 路径 `if (sub==="web")` 包裹防 update/uninstall fall-through。
 
 ## constraints
 - C-001: 不假设用户机器有 node/npm/pnpm/git — confirmed
@@ -58,6 +59,7 @@ scope: 端到端安装（Win+Linux 安装脚本 + anycode web 启动器 + Window
 - DEC-094: 运行用 Next.js `output:"standalone"`（**反转 DEC-086**）。原因：DEC-086 的 `next start` 需全量 node_modules（~700MB）在旁，app 体积 ~830MB 太大；standalone 自包含 bundle（~62MB），运行只需 `.next/standalone`。体积从 ~1.2GB（Linux）/ 1.39GB（Win）降到 **~260MB**。配套：①ripgrep 二进制 vendor 到 `~/.anycode/runtime/rg/rg`（standalone 不含 @vscode/ripgrep 平台二进制），domain `ripgrep.ts` 读 `ANYCODE_RG_PATH`（launcher 注入），@vscode/ripgrep 降级为 dev 动态 import fallback；②build 后拷 `.next/static`+`public` 进 standalone，删 `.next` 非 standalone 的 build traces；③删 build-only `node_modules`（standalone 自包含，safe_rm 锚定守卫）；**保留 pnpm** 供未来 `anycode update` 重建（见 DEC-104）；④launcher 改跑 `node .next/standalone/web/server.js` + 设 `PORT`/`HOSTNAME=127.0.0.1`（standalone server.js 默认 0.0.0.0 公网，必须改）。未来 Electron 客户端也复用此 standalone bundle。
 - DEC-103（break）：启动命令 `anycode --web` → `anycode web` 子命令化（2026-08-25）。launcher argv dispatch：`anycode web` 起 web；裸 `anycode` 打印用法（CLI 未 ship）；未知子命令 exit 2。理由：多模式 CLI（web/tui/update/config）用子命令模型可扩展（git/npm/cargo 同路），flag 模式撑不住；pre-release 无兼容负担。break frozen 的 B-006 旧 `--web` 描述，按本 break 更新。
 - DEC-104（break）：安装后**保留 pnpm**（`~/.anycode/runtime/pnpm`），不再删除（反转 DEC-094③ 的"删 pnpm"，2026-08-25）。理由：未来 `anycode update`（git pull + pnpm install + next build）需要 pnpm 重建；删了 update 就没法跑。node_modules 仍删（standalone 运行不需要，update 时 pnpm install 重建）。代价：安装体积 +pnpm 大小（~3MB，可忽略）。
+- DEC-108：launcher 子命令扩展（2026-08-25）。`update` = 复用平台安装器（curl|bash / iwr|iex）重拉+重建，不另写更新逻辑（安装器幂等，node/pnpm 已在跳过）；`uninstall` = 延迟删 `~/.anycode`（detached sh/cmd 脚本等 launcher 退出后删，避 Windows 运行中 node.exe 锁）+ Linux strip rc PATH 行；`help`/`--help`/`-h`/裸 = 打印用法。理由：复用已验过的安装器做 update 最省且无重复逻辑；uninstall 延迟删解决自删难题。
 
 ## 实现顺序
 1. AC-001 前置验证（prod build+start 端到端）——不通先修 web。
