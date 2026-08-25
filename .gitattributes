@@ -1,1 +1,4 @@
 * text=auto eol=lf
+
+# .bat 必须 CRLF（cmd 期望），覆盖上面的 eol=lf；raw 下载到 CRLF 才不坏
+*.bat binary
