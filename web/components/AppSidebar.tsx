@@ -34,6 +34,7 @@ import {
     Pencil,
     Plus,
     Settings,
+    Search,
     PanelLeftClose,
     PanelLeftOpen,
 } from "lucide-react";
@@ -80,6 +81,23 @@ export function AppSidebar({
         s: SessionMeta;
         value: string;
     } | null>(null);
+    // 工作区删除目标（弹窗受控）
+    const [deleteWsTarget, setDeleteWsTarget] = useState<WorkspaceMeta | null>(null);
+    // 搜索：query 即时受控、debounced 驱动 fetch、results 扁平（跨所有工作区）
+    const [query, setQuery] = useState("");
+    const [debounced, setDebounced] = useState("");
+    const [results, setResults] = useState<{
+        sessions: {
+            projectKey: string;
+            sessionId: string;
+            title: string;
+            updatedAt: number;
+            workspaceName: string;
+            rootPath: string;
+        }[];
+        workspaces: { projectKey: string; name: string; rootPath: string }[];
+    } | null>(null);
+    const [searching, setSearching] = useState(false);
 
     useEffect(() => {
         dispatch(refreshWorkspaces());
@@ -151,6 +169,103 @@ export function AppSidebar({
         dispatch(setSelected(w));
         dispatch(setActiveSession(sessionId));
         router.push(`/chat/${sessionId}`);
+    };
+
+    // 搜索 debounce（300ms）→ debounced
+    useEffect(() => {
+        const t = setTimeout(() => setDebounced(query.trim()), 300);
+        return () => clearTimeout(t);
+    }, [query]);
+
+    // debounced 非空 → fetch /api/search；空 → 清结果
+    useEffect(() => {
+        if (!debounced) {
+            setResults(null);
+            setSearching(false);
+            return;
+        }
+        let cancelled = false;
+        setSearching(true);
+        apiJson<{
+            sessions: {
+                projectKey: string;
+                sessionId: string;
+                title: string;
+                updatedAt: number;
+                workspaceName: string;
+                rootPath: string;
+            }[];
+            workspaces: { projectKey: string; name: string; rootPath: string }[];
+        }>(`/api/search?q=${encodeURIComponent(debounced)}`).then((r) => {
+            if (cancelled) return;
+            setResults(r ?? { sessions: [], workspaces: [] });
+            setSearching(false);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [debounced]);
+
+    // 搜索结果点击：定位 redux 里的 WorkspaceMeta（找不到则构造最小 meta）→ 选中 + 导航
+    const findOrBuildMeta = (projectKey: string, name: string, rootPath: string): WorkspaceMeta => {
+        return (
+            workspaces.find((w) => w.projectKey === projectKey) ?? {
+                rootPath,
+                projectKey,
+                name,
+                addedAt: 0,
+                lastUsedAt: 0,
+            }
+        );
+    };
+    const openSearchSession = (hit: {
+        projectKey: string;
+        sessionId: string;
+        workspaceName: string;
+        rootPath: string;
+    }) => {
+        const meta = findOrBuildMeta(hit.projectKey, hit.workspaceName, hit.rootPath);
+        dispatch(setSelected(meta));
+        dispatch(setActiveSession(hit.sessionId));
+        setQuery("");
+        router.push(`/chat/${hit.sessionId}`);
+    };
+    const openSearchWorkspace = (hit: {
+        projectKey: string;
+        name: string;
+        rootPath: string;
+    }) => {
+        const meta = findOrBuildMeta(hit.projectKey, hit.name, hit.rootPath);
+        dispatch(setSelected(meta));
+        setQuery("");
+        router.push("/");
+    };
+
+    const confirmDeleteWorkspace = async () => {
+        const t = deleteWsTarget;
+        if (!t) return;
+        const r = await apiJson<{ status: string }>("/api/workspaces", {
+            method: "DELETE",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ path: t.rootPath }),
+        });
+        setDeleteWsTarget(null);
+        if (!r) {
+            setSidebarErr("删除工作区失败，请重试");
+            return;
+        }
+        // 清该工作区本地 sessions 缓存 + 刷新注册表
+        setSessionsMap((p) => {
+            const next = { ...p };
+            delete next[t.projectKey];
+            return next;
+        });
+        await dispatch(refreshWorkspaces());
+        if (selected?.projectKey === t.projectKey) {
+            dispatch(setSelected(null));
+            dispatch(setActiveSession(null));
+            router.push("/");
+        }
     };
 
     const confirmDelete = async () => {
@@ -252,14 +367,94 @@ export function AppSidebar({
                 </button>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto">
-                <div className="p-2 flex flex-col gap-1">
-                    {workspaces.length === 0 && (
-                        <p className="px-2 py-4 text-xs text-muted-foreground">
-                            点上方「添加工作区」选一个本地目录开始
-                        </p>
+            {/* 搜索框：输入即 debounce 300ms → GET /api/search，结果扁平替换树 */}
+            <div className="shrink-0 p-2 border-b border-border">
+                <div className="flex items-center gap-1.5 rounded-md border border-input bg-background px-2 focus-within:ring-1 focus-within:ring-ring">
+                    <Search className="size-3.5 text-muted-foreground shrink-0" />
+                    <input
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="搜索工作区 / 会话…"
+                        className="flex-1 min-w-0 border-0 bg-transparent text-sm py-1.5 outline-none"
+                    />
+                    {query && (
+                        <button
+                            onClick={() => setQuery("")}
+                            className="text-muted-foreground hover:text-foreground text-xs shrink-0"
+                            title="清除"
+                        >
+                            ×
+                        </button>
                     )}
-                    {workspaces.map((w) => (
+                </div>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto">
+                {debounced ? (
+                    <div className="p-2 flex flex-col gap-2">
+                        {searching && (
+                            <p className="px-2 py-1 text-xs text-muted-foreground">
+                                搜索中…
+                            </p>
+                        )}
+                        {!searching && results &&
+                            results.workspaces.length === 0 &&
+                            results.sessions.length === 0 && (
+                                <p className="px-2 py-4 text-xs text-muted-foreground">
+                                    无匹配结果
+                                </p>
+                            )}
+                        {results && results.workspaces.length > 0 && (
+                            <div className="flex flex-col gap-1">
+                                <p className="px-2 text-[11px] uppercase text-muted-foreground">
+                                    工作区
+                                </p>
+                                {results.workspaces.map((w) => (
+                                    <button
+                                        key={w.projectKey}
+                                        className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-sm hover:bg-accent text-left"
+                                        onClick={() => openSearchWorkspace(w)}
+                                    >
+                                        <Folder className="size-3.5 text-muted-foreground shrink-0" />
+                                        <span className="truncate">{w.name}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                        {results && results.sessions.length > 0 && (
+                            <div className="flex flex-col gap-1">
+                                <p className="px-2 text-[11px] uppercase text-muted-foreground">
+                                    会话
+                                </p>
+                                {results.sessions.map((s) => (
+                                    <button
+                                        key={s.projectKey + s.sessionId}
+                                        className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-sm hover:bg-accent text-left"
+                                        onClick={() => openSearchSession(s)}
+                                    >
+                                        <MessageSquare className="size-3.5 text-muted-foreground shrink-0" />
+                                        <div className="min-w-0 flex-1">
+                                            <div className="truncate">{s.title}</div>
+                                            <div className="text-[11px] text-muted-foreground truncate">
+                                                {s.workspaceName}
+                                            </div>
+                                        </div>
+                                        <span className="text-[10px] text-muted-foreground shrink-0">
+                                            {new Date(s.updatedAt).toLocaleDateString()}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="p-2 flex flex-col gap-1">
+                        {workspaces.length === 0 && (
+                            <p className="px-2 py-4 text-xs text-muted-foreground">
+                                点上方「添加工作区」选一个本地目录开始
+                            </p>
+                        )}
+                        {workspaces.map((w) => (
                         <Collapsible
                             key={w.projectKey}
                             open={!!openKeys[w.projectKey]}
@@ -304,6 +499,16 @@ export function AppSidebar({
                                     }}
                                 >
                                     <Plus className="size-3.5" />
+                                </button>
+                                <button
+                                    title="删除工作区"
+                                    className="shrink-0 p-0.5 rounded hover:bg-accent text-muted-foreground"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDeleteWsTarget(w);
+                                    }}
+                                >
+                                    <Trash2 className="size-3.5" />
                                 </button>
                             </div>
                             <CollapsibleContent>
@@ -423,6 +628,7 @@ export function AppSidebar({
                         </Collapsible>
                     ))}
                 </div>
+            )}
             </div>
 
             {addError && (
@@ -467,6 +673,32 @@ export function AppSidebar({
                         </DialogClose>
                         <Button variant="destructive" onClick={confirmDelete}>
                             删除
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={!!deleteWsTarget}
+                onOpenChange={(o) => !o && setDeleteWsTarget(null)}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>删除工作区？</DialogTitle>
+                    </DialogHeader>
+                    <p className="text-sm text-muted-foreground">
+                        从侧栏移除「{deleteWsTarget?.name}」。该工作区下的会话文件保留在磁盘
+                        （重新添加同一路径可恢复），不会删除你的项目源码。
+                    </p>
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <Button variant="ghost">取消</Button>
+                        </DialogClose>
+                        <Button
+                            variant="destructive"
+                            onClick={confirmDeleteWorkspace}
+                        >
+                            移除
                         </Button>
                     </DialogFooter>
                 </DialogContent>
