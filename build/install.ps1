@@ -2,6 +2,10 @@
 # 流程同 install.sh + 额外下 PortableGit（agent bash 工具用，保持 bash 全平台统一）
 # + setx ANYCODE_GIT_BASH_PATH（User 作用域，.NET 写避免 setx 1024 截断）。
 $ErrorActionPreference = 'Stop'
+# 控制台输出用 UTF-8：PS 默认非 UTF-8，中文/Unicode 会显示成 ???（Write-Host 经 [Console]::OutputEncoding 编码 + 控制台 codepage 解码）。
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+try { & chcp 65001 > $null } catch {}
 # 兼容老版 Windows PowerShell 5.1：默认 TLS 1.0，下 GitHub/nodejs.org 会握手失败。PS 7 忽略此行。
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 

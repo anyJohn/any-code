@@ -2,6 +2,7 @@
 REM anycode --web：私有 node 起 next start（仅 127.0.0.1）+ 开浏览器 + 前台（Ctrl+C 停止）。
 REM 由 install.ps1 复制到 %USERPROFILE%\.anycode\bin\anycode.bat。
 setlocal enabledelayedexpansion
+chcp 65001 >nul
 
 set "ANYCODE_HOME=%USERPROFILE%\.anycode"
 set "APP=%ANYCODE_HOME%\app"
