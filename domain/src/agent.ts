@@ -61,6 +61,7 @@ export function AgentTool(def: AgentDefinition): Tool {
                 // 历史漏传 llm 致子 agent callLLM 抛 "callLLM 需要 provider 配置" → "Error executing task"。
                 llm: ctx.llm,
                 fileState: ctx.fileState,
+                gitBashPath: ctx.gitBashPath,
             };
             const messages: ChatMessage[] = [
                 { role: "system", content: def.instruction },

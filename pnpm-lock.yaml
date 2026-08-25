@@ -38,6 +38,9 @@ importers:
       '@vscode/ripgrep-linux-x64':
         specifier: ^1.18.0
         version: 1.18.0
+      '@vscode/ripgrep-win32-x64':
+        specifier: ^1.18.0
+        version: 1.18.0
       glob:
         specifier: ^13.0.6
         version: 13.0.6
@@ -5114,8 +5117,7 @@ snapshots:
   '@vscode/ripgrep-win32-ia32@1.18.0':
     optional: true
 
-  '@vscode/ripgrep-win32-x64@1.18.0':
-    optional: true
+  '@vscode/ripgrep-win32-x64@1.18.0': {}
 
   '@vscode/ripgrep@1.18.0':
     optionalDependencies:

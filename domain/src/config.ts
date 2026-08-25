@@ -103,6 +103,8 @@ export interface ConfigShape {
     providers?: Record<string, Partial<LlmProvider>>;
     default?: string;
     mcp?: Record<string, McpServerConfig>;
+    /** Windows 上 agent bash 工具用的 Git Bash 路径（config.yaml 配，非 env）。安装器下发 PortableGit 后写入。 */
+    gitBashPath?: string;
 }
 
 /** apiKey 脱敏（前4后4，过短则 ****） */
@@ -145,15 +147,19 @@ export class Config {
     providers: Record<string, LlmProvider>;
     default: string;
     mcpServers: Record<string, McpServerConfig>;
+    /** Windows agent bash 用的 Git Bash 路径（~/.anycode/config.yaml 顶层 gitBashPath）。 */
+    gitBashPath?: string;
 
     private constructor(
         providers: Record<string, LlmProvider>,
         def: string,
-        mcpServers: Record<string, McpServerConfig>
+        mcpServers: Record<string, McpServerConfig>,
+        gitBashPath?: string
     ) {
         this.providers = providers;
         this.default = def;
         this.mcpServers = mcpServers;
+        this.gitBashPath = gitBashPath;
     }
 
     static load(): Config {
@@ -188,7 +194,7 @@ export class Config {
             }
         }
         const mcpServers = parsed?.mcp ?? {};
-        return new Config(providers, resolvedDef, mcpServers);
+        return new Config(providers, resolvedDef, mcpServers, parsed?.gitBashPath);
     }
 
     /** 当前生效 provider（按 default 字段） */
@@ -245,7 +251,12 @@ export class Config {
         mkdirSync(globalConfigDir(), { recursive: true });
         writeFileSync(
             file,
-            yaml.dump({ providers, default: def, mcp: data.mcp ?? {} }),
+            yaml.dump({
+                providers,
+                default: def,
+                mcp: data.mcp ?? {},
+                gitBashPath: data.gitBashPath,
+            }),
             "utf-8"
         );
     }

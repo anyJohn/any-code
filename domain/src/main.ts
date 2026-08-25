@@ -283,6 +283,7 @@ class AnyAgent {
             signal: abortController.signal,
             llm: this.config.getCurrentProvider(),
             fileState: new Map<string, number>(),
+            gitBashPath: this.config.gitBashPath,
         };
         await agentLoop(
             task,

@@ -8,6 +8,9 @@
 node_modules/
 dist/
 build/
+# 根 build/ 是安装脚本目录（非构建产物），显式放行；嵌套 build/ 仍被忽略
+!/build/
+!/build/**
 *.tgz
 *.log
 .cache/

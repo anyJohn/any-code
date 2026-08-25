@@ -23,6 +23,7 @@
         "@modelcontextprotocol/sdk": "^1.30.0",
         "@vscode/ripgrep": "^1.18.0",
         "@vscode/ripgrep-linux-x64": "^1.18.0",
+        "@vscode/ripgrep-win32-x64": "^1.18.0",
         "glob": "^13.0.6",
         "js-yaml": "^5.3.0",
         "openai": "^6.32.0",

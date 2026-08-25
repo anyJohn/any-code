@@ -28,4 +28,6 @@ export interface ToolContext {
     emitProgress?: (chunk: string) => void;
     /** path(ms mtime)→上次 read 的 mtime。write/edit 写前对比检测外部改动（警告不阻断）。SPEC-022 B-006 */
     fileState?: Map<string, number>;
+    /** Windows agent bash 用的 Git Bash 路径（来自 config.gitBashPath，bash.ts resolveShell 用）。 */
+    gitBashPath?: string;
 }
