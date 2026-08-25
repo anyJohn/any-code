@@ -114,16 +114,19 @@ $null = New-Item -ItemType Directory -Force -Path (Join-Path $AnycodeHome 'bin')
 [System.IO.File]::WriteAllText($anycodeCmd, $cmdContents, $utf8NoBom)
 # gitBashPath into config.yaml (top-level; bash.ts reads config, not env). Skip if config.yaml absent
 # (first install: AnyAgent creates config on first run; bash.ts then auto-finds PortableGit location).
+# .NET ReadAllText/WriteAllText + UTF8Encoding($false): BOM-aware read + BOM-less write.
+# PS 5.1's Set-Content -Encoding UTF8 writes a BOM, which makes js-yaml (domain Config.load) throw.
 $cfg = Join-Path $AnycodeHome 'config.yaml'
 if (Test-Path $cfg) {
-    $lines = @(Get-Content $cfg)
+    $text = [System.IO.File]::ReadAllText($cfg)
+    $lines = $text -split "`r?`n"
     $idx = -1
     for ($i = 0; $i -lt $lines.Count; $i++) {
         if ($lines[$i] -match '^\s*gitBashPath\s*:') { $idx = $i; break }
     }
     $line = "gitBashPath: '$BashExe'"
     if ($idx -ge 0) { $lines[$idx] = $line } else { $lines += $line }
-    Set-Content -Path $cfg -Value $lines -Encoding UTF8
+    [System.IO.File]::WriteAllText($cfg, ($lines -join "`r`n"), $utf8NoBom)
 }
 # PATH (User scope) -- .NET to avoid setx 1024 truncation
 $binDir = Join-Path $AnycodeHome 'bin'
