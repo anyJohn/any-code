@@ -122,9 +122,9 @@ Copy-Item -Recurse -Force (Join-Path $App 'web\.next\static') (Join-Path $Standa
 if (Test-Path (Join-Path $App 'web\public')) { Copy-Item -Recurse -Force (Join-Path $App 'web\public') (Join-Path $StandaloneWeb 'public') }
 # 3. keep only .next/standalone (runtime); delete the rest of .next (build traces, ~280MB)
 Get-ChildItem -Force (Join-Path $App 'web\.next') | Where-Object { $_.Name -ne 'standalone' } | ForEach-Object { Safe-Remove $_.FullName }
-# 4. drop build-only node_modules + pnpm (standalone self-contained; ~860MB). Safe-Remove anchored.
+# 4. drop build-only node_modules (standalone self-contained; ~700MB). Safe-Remove anchored.
+#    Keep pnpm ($PnpmDir): a future 'anycode update' needs it to rebuild.
 Safe-Remove (Join-Path $App 'node_modules')
-Safe-Remove $PnpmDir
 
 # ---- 6. register anycode (generate thin .cmd shim: ASCII + CRLF + BOM-less via .NET) ----
 # launcher logic lives in build/launcher.mjs (node); the .cmd is a 2-line shim calling private node.

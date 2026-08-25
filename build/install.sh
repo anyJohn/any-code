@@ -145,9 +145,9 @@ for d in "$APP/web/.next"/*; do
     [ "$(basename "$d")" = "standalone" ] && continue
     safe_rm "$d"
 done
-# 4. 删 build-only node_modules + pnpm（standalone 自包含；~860MB）。safe_rm 锚定守卫。
+# 4. 删 build-only node_modules（standalone 自包含；~700MB）。safe_rm 锚定守卫。
+#    保留 pnpm（~/.anycode/runtime/pnpm）：未来 anycode update 需要它重建。
 safe_rm "$APP/node_modules"
-safe_rm "$PNPM_DIR"
 
 # ---- 5. 注册 anycode 到 PATH (generate thin sh shim) ----
 # launcher logic in build/launcher.mjs (node); sh shim just execs private node + launcher.mjs.
