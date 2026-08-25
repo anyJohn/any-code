@@ -66,8 +66,7 @@ v1 无自更新：重跑安装命令即可（已装的 node/PortableGit 会复�
 | `install.sh` | Linux 一行安装器（curl\|bash 拉取） |
 | `install.ps1` | Windows 一行安装器（iwr\|iex 拉取） |
 | `install.bat` | Windows cmd/双击入口（薄 shim→ps1） |
-| `launcher.sh` | `anycode --web` Linux 启动器 |
-| `launcher.bat` | `anycode --web` Windows 启动器 |
+| `launcher.mjs` | `anycode --web` 启动器（node，跨平台；安装器生成薄 shim 调用它） |
 | `versions.env` | 版本配置（node LTS 等） |
 
 ## 平台支持

@@ -110,14 +110,22 @@ pnpm install --frozen-lockfile
 info "构建 web（next build）…"
 pnpm --filter @any-code/web build
 
-# ---- 5. 注册 anycode 到 PATH ----
-cp "$APP/build/launcher.sh" "$ANYCODE_HOME/bin/anycode"
-chmod +x "$ANYCODE_HOME/bin/anycode"
+# ---- 5. 注册 anycode 到 PATH (generate thin sh shim) ----
+# launcher logic in build/launcher.mjs (node); sh shim just execs private node + launcher.mjs.
+ANYCODE_SH="$ANYCODE_HOME/bin/anycode"
+LAUNCHER_MJS="$APP/build/launcher.mjs"
+NODE_BIN_SH="$ANYCODE_HOME/runtime/node/bin/node"
+mkdir -p "$ANYCODE_HOME/bin"
+cat > "$ANYCODE_SH" <<SHIM
+#!/bin/sh
+exec "$NODE_BIN_SH" "$LAUNCHER_MJS" "\$@"
+SHIM
+chmod +x "$ANYCODE_SH"
 
 PATH_LINE='export PATH="$HOME/.anycode/bin:$PATH"'
 patch_rc() {
     local rc="$1"
-    [ -f "$rc" ] || return
+    [ -f "$rc" ] || return 0
     grep -qF '.anycode/bin' "$rc" 2>/dev/null || printf '\n# anycode\n%s\n' "$PATH_LINE" >> "$rc"
 }
 patch_rc "$HOME/.bashrc"

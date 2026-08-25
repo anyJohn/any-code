@@ -101,8 +101,17 @@ Info "build web (next build)..."
 pnpm --filter '@any-code/web' build
 if ($LASTEXITCODE -ne 0) { Die "next build failed (exit $LASTEXITCODE)" }
 
-# ---- 6. register anycode + config gitBashPath ----
-Copy-Item (Join-Path $App 'build\launcher.bat') (Join-Path $AnycodeHome 'bin\anycode.bat') -Force
+# ---- 6. register anycode (generate thin .cmd shim: ASCII + CRLF + BOM-less via .NET) ----
+# launcher logic lives in build/launcher.mjs (node); the .cmd is a 2-line shim calling private node.
+# Written via [System.IO.File]::WriteAllText + UTF8Encoding($false) (no BOM -- PS 5.1 Set-Content adds BOM
+# which makes cmd mis-read the first line) with explicit `r`n (CRLF).
+$anycodeCmd = Join-Path $AnycodeHome 'bin\anycode.cmd'
+$launcherMjs = Join-Path $App 'build\launcher.mjs'
+$nodeExe = Join-Path $NodeDir 'node.exe'
+$cmdContents = "@echo off`r`n`"$nodeExe`" `"$launcherMjs`" %*`r`n"
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$null = New-Item -ItemType Directory -Force -Path (Join-Path $AnycodeHome 'bin')
+[System.IO.File]::WriteAllText($anycodeCmd, $cmdContents, $utf8NoBom)
 # gitBashPath into config.yaml (top-level; bash.ts reads config, not env). Skip if config.yaml absent
 # (first install: AnyAgent creates config on first run; bash.ts then auto-finds PortableGit location).
 $cfg = Join-Path $AnycodeHome 'config.yaml'
