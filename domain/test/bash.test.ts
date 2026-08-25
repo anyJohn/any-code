@@ -95,14 +95,14 @@ describe("resolveShell（SPEC-024 AC-004）", () => {
         });
     });
 
-    it("win32：config gitBashPath 首选，cwd 翻 MSYS", () => {
+    it("win32：config gitBashPath 首选，cwd 保持原生 Windows（spawn cwd 须原生，CreateProcessW 要求）", () => {
         setPlatform("win32");
         vi.mocked(existsSync).mockImplementation(
             (p) => p === "C:\\custom\\bash.exe"
         );
         expect(resolveShell("C:\\Users\\john\\proj", "C:\\custom\\bash.exe")).toEqual({
             binary: "C:\\custom\\bash.exe",
-            cwd: "/c/Users/john/proj",
+            cwd: "C:\\Users\\john\\proj",
         });
     });
 
@@ -119,7 +119,7 @@ describe("resolveShell（SPEC-024 AC-004）", () => {
         );
         expect(resolveShell("D:\\work")).toEqual({
             binary: "C:\\Program Files\\Git\\bin\\bash.exe",
-            cwd: "/d/work",
+            cwd: "D:\\work",
         });
     });
 

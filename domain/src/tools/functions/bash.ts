@@ -16,7 +16,9 @@ const SYSTEM_GIT_BASH = "C:\\Program Files\\Git\\bin\\bash.exe";
 
 /**
  * Windows 盘符路径 → MSYS 风格（C:\Users\foo → /c/Users/foo），posix 路径不动。
- * bash.exe 的 cwd 用 MSYS 路径，避免 Windows 反斜杠/盘符在 bash 里被误解析。
+ * 用于翻译 LLM 命令里的 Windows 路径（若需要）；**不**用于 spawn 的 cwd——
+ * Node spawn 的 cwd 在 Windows 交给 CreateProcessW.lpCurrentDirectory，必须原生 Windows 路径，
+ * MSYS 路径会让 CreateProcess 失败。
  */
 export function toMsysCwd(p: string): string {
     if (process.platform !== "win32") return p;
@@ -29,6 +31,7 @@ export function toMsysCwd(p: string): string {
  * 解析执行 shell：unix 用 /bin/sh；Windows 按候选序找 bash.exe（保持 bash 全平台统一，
  * prompt/skills 不分叉）。候选 = config.gitBashPath（首选）→ 安装器下发的 PortableGit 位置
  * → 系统 Git for Windows。都没有则抛错（在 config.yaml 配 gitBashPath 或装 Git for Windows）。
+ * cwd 保持原生 OS 路径（win 上 Windows 路径，bash.exe 内部自行转 MSYS 展示）。
  */
 export function resolveShell(
     cwd: string,
@@ -46,7 +49,7 @@ export function resolveShell(
             "Windows 未找到 Git Bash（在 ~/.anycode/config.yaml 配 gitBashPath，或安装 Git for Windows）"
         );
     }
-    return { binary, cwd: toMsysCwd(cwd) };
+    return { binary, cwd };
 }
 
 /**
