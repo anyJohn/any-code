@@ -85,7 +85,7 @@ describe("toMsysCwd（SPEC-024 AC-004）", () => {
 });
 
 describe("resolveShell（SPEC-024 AC-004）", () => {
-    const PG_PATH = join(globalConfigDir(), "runtime", "portablegit", "bin", "bash.exe");
+    const PG_PATH = join(globalConfigDir(), "runtime", "busybox", "sh.exe");
 
     it("unix → /bin/sh，cwd 不动", () => {
         setPlatform("linux");

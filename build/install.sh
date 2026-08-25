@@ -12,10 +12,24 @@ BRANCH=main
 NODE_VERSION=v22.11.0
 PNPM_VERSION=11.8.0
 ANYCODE_HOME="${ANYCODE_HOME:-$HOME/.anycode}"
+# 顶部断言：ANYCODE_HOME 须在 $HOME 下（挡住空/根/异常值，保护后续 rm -rf 锚定）
+case "$ANYCODE_HOME" in
+    "$HOME"/*) : ;;
+    *) echo "✗ ANYCODE_HOME 须在 \$HOME 下（当前：$ANYCODE_HOME）" >&2; exit 1 ;;
+esac
 # ======================================
 
 err() { echo "✗ anycode 安装失败：$*" >&2; exit 1; }
 info() { echo "▶ $*"; }
+# 安全删除：仅在"非空 + 是目录 + 锚定在 ANYCODE_HOME 下"才 rm -rf，否则报错不动。
+safe_rm() {
+    local p="$1"
+    [ -n "$p" ] && [ -d "$p" ] || return 0
+    case "$p" in
+        "$ANYCODE_HOME"/*) rm -rf -- "$p" ;;
+        *) err "safe_rm 拒绝删除 $p（不在 $ANYCODE_HOME 下）" ;;
+    esac
+}
 
 command -v curl >/dev/null 2>&1 || err "需要 curl（请先安装）"
 command -v tar >/dev/null 2>&1 || err "需要 tar（请先安装）"
@@ -50,7 +64,7 @@ esac
 
 info "目标目录：$ANYCODE_HOME"
 mkdir -p "$ANYCODE_HOME/runtime" "$ANYCODE_HOME/app" "$ANYCODE_HOME/bin"
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+TMP="$(mktemp -d)"; trap '[ -n "$TMP" ] && [ -d "$TMP" ] && rm -rf -- "$TMP"' EXIT
 
 # ---- 1. 私有 node（next start 运行时用）----
 NODE_DIR="$ANYCODE_HOME/runtime/node"
@@ -64,7 +78,7 @@ if [ ! -x "$NODE_DIR/bin/node" ]; then
     command -v xz >/dev/null 2>&1 || command -v unxz >/dev/null 2>&1 || err "需要 xz（解压 node tar.xz）"
     info "解压 node…"
     tar -xJf "$TMP/$TARBALL" -C "$TMP"
-    rm -rf "$NODE_DIR"
+    safe_rm "$NODE_DIR"
     mv "$TMP/node-$NODE_VERSION-$NODE_ARCH" "$NODE_DIR"
 fi
 info "node: $("$NODE_DIR/bin/node" -v)"
@@ -99,7 +113,7 @@ if [ ! -f "$APP/package.json" ]; then
     tar -xzf "$TMP/repo.tar.gz" -C "$TMP"
     EXTRACTED="$(find "$TMP" -maxdepth 1 -mindepth 1 -type d | head -1)"
     [ -n "$EXTRACTED" ] && [ -f "$EXTRACTED/package.json" ] || err "仓库解压后未找到 package.json"
-    rm -rf "$APP"
+    safe_rm "$APP"
     mv "$EXTRACTED" "$APP"
 fi
 

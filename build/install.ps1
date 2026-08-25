@@ -14,6 +14,17 @@ $PnpmVersion = '11.8.0'
 $AnycodeHome = Join-Path $env:USERPROFILE '.anycode'
 # ==================
 
+# 顶部断言：AnycodeHome 须在 USERPROFILE 下（挡住异常值，保护后续 Remove-Item 锚定）
+if (-not $AnycodeHome.StartsWith($env:USERPROFILE)) {
+    Write-Host "!! AnycodeHome must be under USERPROFILE ($AnycodeHome)" -ForegroundColor Red; exit 1
+}
+# 安全删除：仅在"非空 + 存在 + 锚定在 AnycodeHome 下"才 Remove-Item，否则不动。
+function Safe-Remove($p) {
+    if ($p -and (Test-Path $p) -and $p.StartsWith($AnycodeHome)) {
+        Remove-Item -Recurse -Force $p -ErrorAction SilentlyContinue
+    }
+}
+
 function Info($m) { Write-Host ">> $m" }
 function Die($m) { Write-Host "!! anycode install failed: $m" -ForegroundColor Red; exit 1 }
 
@@ -42,27 +53,22 @@ if (-not (Test-Path (Join-Path $NodeDir 'node.exe'))) {
     if ($actual -ne $expected.ToLower()) { Die "node download sha256 mismatch" }
     Info "extract node..."
     Expand-Archive -Path (Join-Path $Tmp $Zip) -DestinationPath $Tmp -Force
-    if (Test-Path $NodeDir) { Remove-Item -Recurse -Force $NodeDir }
+    Safe-Remove $NodeDir
     Move-Item (Join-Path $Tmp "node-$NodeVersion-$NodeArch") $NodeDir
 }
 $env:PATH = "$NodeDir;$env:PATH"
 Info "node: $(node -v)"
 
-# ---- 2. PortableGit (agent bash tool; not MinGit -- needs bash.exe + coreutils) ----
-$GitDir = Join-Path $AnycodeHome 'runtime\portablegit'
-$BashExe = Join-Path $GitDir 'bin\bash.exe'
-if (-not (Test-Path $BashExe)) {
-    Info "download PortableGit (for agent bash tool)..."
-    $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/git-for-windows/git/releases/latest' -Headers @{ 'User-Agent' = 'anycode-installer' }
-    $asset = $rel.assets | Where-Object { $_.name -like 'PortableGit-*-64-bit.7z.exe' } | Select-Object -First 1
-    if (-not $asset) { Die "PortableGit asset not found (git-for-windows latest release)" }
-    $pgExe = Join-Path $Tmp 'portablegit.exe'
-    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $pgExe -UseBasicParsing
-    if (Test-Path $GitDir) { Remove-Item -Recurse -Force $GitDir }
-    $null = New-Item -ItemType Directory -Force -Path $GitDir
-    Info "extract PortableGit (7z self-extract, -y -o)..."
-    $p = Start-Process -FilePath $pgExe -ArgumentList "-y","-o$GitDir" -Wait -PassThru -WindowStyle Hidden
-    if (-not (Test-Path $BashExe)) { Die "PortableGit extracted but bin\bash.exe not found (may need 7z)" }
+# ---- 2. busybox-w32 (agent bash tool; single ~700KB exe = sh + coreutils, no extraction) ----
+# leaner than PortableGit (~400MB with full git+mingw64) which we don't need -- only sh+coreutils.
+$BusyboxDir = Join-Path $AnycodeHome 'runtime\busybox'
+$ShExe = Join-Path $BusyboxDir 'sh.exe'
+if (-not (Test-Path $ShExe)) {
+    Info "download busybox-w32 (for agent bash tool)..."
+    Safe-Remove $BusyboxDir
+    $null = New-Item -ItemType Directory -Force -Path $BusyboxDir
+    Invoke-WebRequest -Uri 'https://frippery.org/files/busybox/busybox64.exe' -OutFile $ShExe -UseBasicParsing
+    if (-not (Test-Path $ShExe)) { Die "busybox-w32 download failed" }
 }
 
 # ---- 3. repo ----
@@ -73,7 +79,7 @@ if (-not (Test-Path (Join-Path $App 'package.json'))) {
     $Zip = Join-Path $Tmp 'repo.zip'
     Invoke-WebRequest -Uri $Url -OutFile $Zip -UseBasicParsing
     Expand-Archive -Path $Zip -DestinationPath $Tmp -Force
-    if (Test-Path $App) { Remove-Item -Recurse -Force $App }
+    Safe-Remove $App
     Move-Item (Join-Path $Tmp "$Repo-$Branch") $App
 }
 
@@ -85,7 +91,7 @@ if (-not (Test-Path (Join-Path $PnpmDir 'pnpm.exe'))) {
     $url = "https://github.com/pnpm/pnpm/releases/download/v$PnpmVersion/$pnpmAsset"
     $zip = Join-Path $Tmp 'pnpm.zip'
     Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
-    if (Test-Path $PnpmDir) { Remove-Item -Recurse -Force $PnpmDir }
+    Safe-Remove $PnpmDir
     $null = New-Item -ItemType Directory -Force -Path $PnpmDir
     Expand-Archive -Path $zip -DestinationPath $PnpmDir -Force
 }
@@ -124,7 +130,7 @@ if (Test-Path $cfg) {
     for ($i = 0; $i -lt $lines.Count; $i++) {
         if ($lines[$i] -match '^\s*gitBashPath\s*:') { $idx = $i; break }
     }
-    $line = "gitBashPath: '$BashExe'"
+    $line = "gitBashPath: '$ShExe'"
     if ($idx -ge 0) { $lines[$idx] = $line } else { $lines += $line }
     [System.IO.File]::WriteAllText($cfg, ($lines -join "`r`n"), $utf8NoBom)
 }

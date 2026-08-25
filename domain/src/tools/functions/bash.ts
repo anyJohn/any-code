@@ -40,7 +40,7 @@ export function resolveShell(
     if (process.platform !== "win32") return { binary: "/bin/sh", cwd };
     const candidates = [
         gitBashPath,
-        join(globalConfigDir(), "runtime", "portablegit", "bin", "bash.exe"),
+        join(globalConfigDir(), "runtime", "busybox", "sh.exe"),
         SYSTEM_GIT_BASH,
     ].filter((x): x is string => !!x && existsSync(x));
     const binary = candidates[0];
