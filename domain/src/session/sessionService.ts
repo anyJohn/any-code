@@ -70,6 +70,11 @@ export class SessionService {
         await this.store.append(key, [titleMetaEntry(title)]);
     }
 
+    /** 原子重写整个 session 的消息（压缩后整体替换）。保留原 title/createdAt。 */
+    async replaceMessages(key: SessionKey, messages: ChatMessage[]): Promise<void> {
+        await this.store.replaceMessages(key, messages);
+    }
+
     /** 跨项目按 sessionId 反查 session（直链 /chat/:sessionId 解析用，返回所属 key + session） */
     async findSession(
         sessionId: string

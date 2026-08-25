@@ -174,5 +174,5 @@ export function useAgent(
         ]);
     }, []);
 
-    return { events, pending, submit, stop, clear, appendSystem };
+    return { events, pending, submit, stop, clear, appendSystem, currentSessionId };
 }

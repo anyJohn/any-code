@@ -6,10 +6,12 @@ import { AgentLoopResult, ChatMessage } from "./type";
 import { EventType } from "./type";
 import type { ToolContext } from "./context";
 import type { Tool } from "./tools";
+import { compactMessages, AUTO_COMPACT_THRESHOLD } from "./compact";
 
 /**
  * 核心代码，实现AgentLoop，通过循环让大模型持续使用工具。
  * ctx 贯穿（eventStream + workspace）；tools 是该 agent 的工具集（schema + handler）。
+ * onCompact：自动压缩替换 messages 后回调持久化（主 agent 落盘；sub-agent 传 undefined）。
  */
 export async function agentLoop(
     task: string,
@@ -18,7 +20,8 @@ export async function agentLoop(
     params: Partial<ChatCompletionCreateParamsNonStreaming> | undefined,
     onMessage: ((msg: ChatMessage) => void | Promise<void>) | undefined,
     ctx: ToolContext,
-    tools: Tool[]
+    tools: Tool[],
+    onCompact?: (messages: ChatMessage[]) => void | Promise<void>
 ): Promise<AgentLoopResult> {
     const maxIter = maxIterations ?? 30;
     const userMsg: ChatMessage = {
@@ -27,10 +30,49 @@ export async function agentLoop(
     };
     messages.push(userMsg);
     await onMessage?.(userMsg);
+    let lastUsage: { prompt_tokens: number } | undefined;
     for (let i = 0; i < maxIter; i++) {
         // 迭代边界先查中断：stop() 已 abort 的话直接返回，不发起 LLM 调用
         if (ctx.signal.aborted) {
             return { result: "[stopped]", messages };
+        }
+        // 自动压缩：上一轮真实 usage.prompt_tokens >= 75% * contextWindow → 压缩后继续。
+        // 真实 usage 最准（无需 tokenizer）；首迭代无 usage 不会触 75%。
+        if (
+            lastUsage &&
+            ctx.llm?.contextWindow &&
+            lastUsage.prompt_tokens >=
+                AUTO_COMPACT_THRESHOLD * ctx.llm.contextWindow
+        ) {
+            try {
+                const res = await compactMessages(messages, ctx.llm, undefined, ctx.signal);
+                if (res.compacted) {
+                    messages.length = 0;
+                    messages.push(...res.messages);
+                    lastUsage = undefined;
+                    await onCompact?.(res.messages);
+                    ctx.eventStream.submit({
+                        type: EventType.COMPACT,
+                        message: `已压缩上下文 ${res.beforeTokens}→${res.afterTokens} tokens`,
+                        data: {
+                            beforeTokens: res.beforeTokens,
+                            afterTokens: res.afterTokens,
+                            auto: true,
+                        },
+                    });
+                }
+            } catch (err) {
+                if (ctx.signal.aborted) {
+                    return { result: "[stopped]", messages };
+                }
+                // 压缩失败不阻断主循环：记错继续原 messages（下轮可能再试）
+                ctx.eventStream.submit({
+                    type: EventType.ERROR,
+                    message: `自动压缩失败：${
+                        err instanceof Error ? err.message : String(err)
+                    }`,
+                });
+            }
         }
         // 同一回合的 ITERATION/ASSISTANT/TOOL 事件共用 turnId,
         // 前端据此把 "assistant 文本 + 紧随的工具调用" 组成块状展示。
@@ -102,6 +144,7 @@ export async function agentLoop(
             });
         }
         if (msg.usage) {
+            lastUsage = msg.usage;
             ctx.eventStream.submit({
                 type: EventType.USAGE,
                 message: `${msg.usage.prompt_tokens}/${

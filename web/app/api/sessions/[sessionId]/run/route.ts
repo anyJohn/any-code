@@ -1,12 +1,9 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { AnyAgent } from "@any-code/domain";
+import { runningSessions } from "@/lib/singleFlight";
 
-// single-flight：同一 session 同时只允许一个 /run，防并发写 session.jsonl 交错损坏。
-// 挂 globalThis 跨 HMR 保持（与原 agentPool 同理）。
-const g = globalThis as unknown as { __anycodeRunning?: Set<string> };
-const running: Set<string> =
-    g.__anycodeRunning ?? (g.__anycodeRunning = new Set());
+const running = runningSessions();
 
 const TERMINAL = new Set(["Done", "Error", "Stopped"]);
 

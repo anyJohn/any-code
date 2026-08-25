@@ -17,6 +17,7 @@ export interface AgentEvent {
         | "Thinking"
         | "Usage"
         | "Planning"
+        | "Compact"
         | "Error"
         | "Done"
         | "Stopped";

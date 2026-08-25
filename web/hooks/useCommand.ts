@@ -18,6 +18,7 @@ export const BUILTIN_COMMANDS: CommandItem[] = [
     { name: "model", desc: "查看/切换模型（/model <id>）" },
     { name: "provider", desc: "查看/切换 provider（/provider <name>）" },
     { name: "sessions", desc: "列出最近会话" },
+    { name: "compact", desc: "压缩上下文（/compact [聚焦]）" },
 ];
 
 interface UseCommandDeps {
@@ -25,6 +26,8 @@ interface UseCommandDeps {
     appendSystem: (msg: string) => void;
     submit: (msg: string) => void;
     projectKey?: string;
+    rootPath: string;
+    currentSessionId: string | null;
 }
 
 /**
@@ -32,10 +35,12 @@ interface UseCommandDeps {
  * draft 是受控的：本 hook 不持有 draft，由调用方传入。
  * runCommand(name) 从 draft 提取 args，清空 draft 后执行。
  */
-export function useCommand({ clear, appendSystem, submit, projectKey }: UseCommandDeps) {
+export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, currentSessionId }: UseCommandDeps) {
     const router = useRouter();
     const [customCommands, setCustomCommands] = useState<CommandItem[]>([]);
     const [draft, setDraft] = useState("");
+    // /compact 进行中（调摘要 LLM 数秒）：驱动 indeterminate 进度条
+    const [compacting, setCompacting] = useState(false);
 
     useEffect(() => {
         if (!projectKey) return;
@@ -213,6 +218,52 @@ export function useCommand({ clear, appendSystem, submit, projectKey }: UseComma
                         }
                     }
                     return;
+                case "compact": {
+                    if (!currentSessionId) {
+                        appendSystem("无会话历史可压缩");
+                        return;
+                    }
+                    setCompacting(true);
+                    try {
+                        const res = await fetch(
+                            `/api/sessions/${currentSessionId}/compact`,
+                            {
+                                method: "POST",
+                                headers: { "content-type": "application/json" },
+                                body: JSON.stringify({
+                                    workspacePath: rootPath,
+                                    focus: args || undefined,
+                                }),
+                            }
+                        );
+                        if (res.ok) {
+                            const r = (await res.json()) as {
+                                beforeTokens: number;
+                                afterTokens: number;
+                                compacted: boolean;
+                            };
+                            appendSystem(
+                                r.compacted
+                                    ? `已压缩上下文 ${r.beforeTokens}→${r.afterTokens} tokens`
+                                    : "无可压缩内容（上下文已足够短）"
+                            );
+                        } else {
+                            let text = "压缩失败";
+                            try {
+                                const j = (await res.json()) as {
+                                    statusMessage?: string;
+                                };
+                                if (j.statusMessage) text = j.statusMessage;
+                            } catch {
+                                // body 非 json
+                            }
+                            appendSystem(text);
+                        }
+                    } finally {
+                        setCompacting(false);
+                    }
+                    return;
+                }
                 default: {
                     const custom = customCommands.find((c) => c.name === name);
                     if (custom && custom.body != null) {
@@ -228,6 +279,8 @@ export function useCommand({ clear, appendSystem, submit, projectKey }: UseComma
             appendSystem,
             router,
             projectKey,
+            rootPath,
+            currentSessionId,
             customCommands,
             submit,
             buildHelpText,
@@ -266,5 +319,6 @@ export function useCommand({ clear, appendSystem, submit, projectKey }: UseComma
         customCommands,
         runCommand,
         runRawCommand,
+        compacting,
     };
 }

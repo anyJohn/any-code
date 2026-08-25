@@ -20,6 +20,7 @@ export enum EventType {
     THINKING = "Thinking",
     USAGE = "Usage",
     PLANNING = "Planning",
+    COMPACT = "Compact",
     ERROR = "Error",
     DONE = "Done",
     STOPPED = "Stopped",

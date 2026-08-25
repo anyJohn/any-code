@@ -169,7 +169,7 @@ export function InputBox({
                             value={draft}
                             disabled={pending}
                             rows={1}
-                            placeholder="输入任务... (Enter 发送，Alt+Enter 换行，/ 指令，@ 文件)"
+                            placeholder="输入任务... (Enter 发送，Alt+Enter 换行，/ 指令 Tab 补全，@ 文件)"
                             className="flex-1 resize-none border-0 focus-visible:ring-0 bg-transparent text-sm leading-6 max-h-40 overflow-y-auto py-1.5"
                             onChange={(e) => setDraft(e.target.value)}
                             onKeyDown={(e) => {
@@ -192,10 +192,19 @@ export function InputBox({
                                         );
                                         return;
                                     }
-                                    if (
-                                        e.key === "Tab" ||
-                                        (e.key === "Enter" && !e.shiftKey)
-                                    ) {
+                                    // Tab 补全指令名（填入输入框，不执行）；
+                                    // Enter 执行高亮指令。
+                                    if (e.key === "Tab") {
+                                        e.preventDefault();
+                                        const idx = Math.min(
+                                            highlight,
+                                            filtered.length - 1
+                                        );
+                                        const name = filtered[idx].name;
+                                        setDraft(`/${name} `);
+                                        return;
+                                    }
+                                    if (e.key === "Enter" && !e.shiftKey) {
                                         e.preventDefault();
                                         const idx = Math.min(
                                             highlight,

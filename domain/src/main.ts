@@ -7,6 +7,7 @@ import {
     InteractionRequest,
 } from "./type";
 import { agentLoop } from "./core";
+import { compactMessages } from "./compact";
 import { loadRule } from "./rule";
 import { loadSkills } from "./skill";
 import { EventStream } from "./eventStream";
@@ -17,6 +18,7 @@ import type { AgentDefinition } from "./agent";
 import type { Tool } from "./tools";
 import { loadMcpTools, loadProjectMcp } from "./mcp";
 import { Config, type LlmProvider } from "./config";
+import { workspaceNote, memoryNote } from "./prompt";
 import {
     detectContextWindow,
     resolveContextWindow,
@@ -221,6 +223,57 @@ class AnyAgent {
         this.task$.next(task);
     }
 
+    /**
+     * 手动压缩当前 session 上下文：旧消息→一条摘要 + 保留尾部原文。
+     * 压缩后整体重写 session.jsonl（保留 title/createdAt）。返回压缩前后 token 数。
+     * 与 submit 驱动的 agentLoop 自动压缩共用 compactMessages，仅触发方式不同（手动 vs 75% 阈值）。
+     */
+    async compact(
+        focus?: string
+    ): Promise<{
+        beforeTokens: number;
+        afterTokens: number;
+        compacted: boolean;
+    }> {
+        const session = this.session;
+        const sessionKey = this.sessionKey;
+        if (!session || !sessionKey) {
+            throw new Error("compact 需要已存在的 session");
+        }
+        // compactMessages 保护 messages[0]=system；先确保 [0] 是 system（executeTask 每任务重建，此处补以防未跑过任务）
+        const sys = this.getSystemMessage(this.workspace);
+        if (session.messages[0]?.role === "system") {
+            session.messages[0] = sys[0];
+        } else {
+            session.messages.unshift(sys[0]);
+        }
+        const res = await compactMessages(
+            session.messages,
+            this.config.getCurrentProvider(),
+            focus != null ? { focus } : undefined
+        );
+        if (res.compacted) {
+            session.messages.length = 0;
+            session.messages.push(...res.messages);
+            await this.service.replaceMessages(sessionKey, res.messages);
+            this.eventStream.submit({
+                type: EventType.COMPACT,
+                message: `已压缩上下文 ${res.beforeTokens}→${res.afterTokens} tokens`,
+                data: {
+                    beforeTokens: res.beforeTokens,
+                    afterTokens: res.afterTokens,
+                    auto: false,
+                    focus: focus ?? null,
+                },
+            });
+        }
+        return {
+            beforeTokens: res.beforeTokens,
+            afterTokens: res.afterTokens,
+            compacted: res.compacted,
+        };
+    }
+
     private initProcessor() {
         this.task$
             .pipe(
@@ -292,7 +345,10 @@ class AnyAgent {
             {},
             onMessage,
             ctx,
-            this.tools
+            this.tools,
+            // 自动压缩落盘：agentLoop 原地替换 messages 后回调重写 session.jsonl
+            async (msgs) =>
+                this.service.replaceMessages(sessionKey, msgs)
         );
         // 记忆由 save_memory 工具触发（LLM 在循环内主动调用）
         this.abortController = null;
@@ -315,21 +371,15 @@ class AnyAgent {
         const memory = loadMemory(workspace);
         const rule = loadRule(workspace);
         const skills = loadSkills(workspace);
-        // 告知 LLM 工作根目录，让它能把工具输出里的绝对路径对应到相对路径
-        // （测试框架报错含绝对路径，否则 LLM 认知断裂）。见 docs/workspace设计.md。
+        // 拼装 system prompt：instruction + workspace/memory 注入段 + memory/skills/rule。
+        // 所有 prompt 文本集中存于 ./prompt.ts，此处只拼装。
         let sysPrompt =
             this.definition.instruction +
-            `\n\n# Workspace\n你的工作根目录是 ${workspace.rootPath}。` +
-            `分析工具输出中的绝对路径时，将其与该根目录对应。`;
+            workspaceNote(workspace.rootPath);
         if (memory) {
             sysPrompt += memory;
         }
-        // 引导 LLM 主动用 save_memory 工具记值得长期记住的信息。
-        // 仅在确有必要时记，避免噪音；闲聊/无意义任务不应记。
-        sysPrompt +=
-            "\n\n# Memory\n你有 save_memory 工具，可主动记录值得跨会话记住的信息" +
-            "（用户偏好、关键决策、项目约定、持久事实）。scope=project 记项目级，" +
-            "global 记跨项目通用。仅在确有必要时调用，勿记录琐碎或临时任务状态。";
+        sysPrompt += memoryNote;
         if (skills) {
             sysPrompt += skills;
         }

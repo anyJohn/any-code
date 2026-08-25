@@ -142,6 +142,26 @@ describe("toRenderItems (TEST-005 TC-005.4, B-003 sub-agent)", () => {
             expect(sub.events).toHaveLength(2);
         }
     });
+
+    it("Compact 事件成独立 single 项，不被回合吞掉", () => {
+        const events: AgentEvent[] = [
+            ev("Iteration", "i1", { turnId: "t1" }),
+            ev("Assistant", "a1", { turnId: "t1" }),
+            ev("Compact", "已压缩上下文 1000→200 tokens", {
+                data: { auto: true, beforeTokens: 1000, afterTokens: 200 },
+            }),
+            ev("Iteration", "i2", { turnId: "t2" }),
+            ev("Assistant", "a2", { turnId: "t2" }),
+        ];
+        const items = toRenderItems(events);
+        // turn(t1) → single(Compact) → turn(t2)
+        expect(items.map((i) => i.kind)).toEqual(["turn", "single", "turn"]);
+        const c = items[1];
+        if (c.kind === "single") {
+            expect(c.event.type).toBe("Compact");
+            expect(c.event.message).toContain("1000→200");
+        }
+    });
 });
 
 describe("messagesToEvents 思考落盘回放（SPEC-017 AC-003/005）", () => {

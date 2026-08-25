@@ -19,6 +19,7 @@ const tagClass: Record<AgentEvent["type"], string> = {
     Thinking: "text-muted-foreground",
     Usage: "text-muted-foreground",
     Planning: "text-muted-foreground",
+    Compact: "text-amber-600 dark:text-amber-400",
     Error: "text-destructive",
     Done: "text-muted-foreground",
     Stopped: "text-muted-foreground",

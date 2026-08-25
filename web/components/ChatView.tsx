@@ -26,12 +26,16 @@ export function ChatView({
     initialEvents: AgentEvent[];
     projectKey?: string;
 }) {
-    const { events, pending, submit, stop, clear, appendSystem } = useAgent(
-        sessionId,
+    const { events, pending, submit, stop, clear, appendSystem, currentSessionId } =
+        useAgent(sessionId, rootPath, initialEvents);
+    const command = useCommand({
+        clear,
+        appendSystem,
+        submit,
+        projectKey,
         rootPath,
-        initialEvents
-    );
-    const command = useCommand({ clear, appendSystem, submit, projectKey });
+        currentSessionId,
+    });
     const fileRef = useFileReference({
         projectKey,
         commandMode: command.commandMode,
@@ -95,6 +99,17 @@ export function ChatView({
                 scrollRef={scrollRef}
                 onLayoutEffect={() => {}}
             />
+
+            {command.compacting && (
+                <div className="shrink-0 w-full max-w-3xl mx-auto px-4 pb-1">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span className="shrink-0">正在压缩上下文…</span>
+                        <div className="relative h-1 flex-1 rounded-full bg-muted overflow-hidden">
+                            <span className="compact-progress-bar rounded-full bg-primary" />
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <InputBox
                 draft={command.draft}

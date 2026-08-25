@@ -58,6 +58,38 @@ describe("InputBox 命令弹层（SPEC-016 AC-004）", () => {
         expect(props.runCommand).toHaveBeenCalledWith("model");
     });
 
+    it("commandOpen + Tab → 补全指令名（setDraft '/name '），不执行 runCommand", () => {
+        const props = makeProps({
+            draft: "/mo",
+            commandOpen: true,
+            highlight: 0,
+            filtered: [{ name: "model", desc: "" }],
+        });
+        const { container } = render(<InputBox {...props} />);
+        const input = container.querySelector("textarea")!;
+        fireEvent.keyDown(input, { key: "Tab" });
+        // 补全：填入 "/model "（带尾空格供输参），不执行
+        expect(props.setDraft).toHaveBeenCalledWith("/model ");
+        expect(props.runCommand).not.toHaveBeenCalled();
+    });
+
+    it("commandOpen + Tab 多候选 → 补全高亮项", () => {
+        const props = makeProps({
+            draft: "/c",
+            commandOpen: true,
+            highlight: 1,
+            filtered: [
+                { name: "clear", desc: "" },
+                { name: "compact", desc: "" },
+            ],
+        });
+        const { container } = render(<InputBox {...props} />);
+        const input = container.querySelector("textarea")!;
+        fireEvent.keyDown(input, { key: "Tab" });
+        expect(props.setDraft).toHaveBeenCalledWith("/compact ");
+        expect(props.runCommand).not.toHaveBeenCalled();
+    });
+
     it("commandOpen + ArrowDown → setHighlight 移动", () => {
         const props = makeProps({
             draft: "/mo",
