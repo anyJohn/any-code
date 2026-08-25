@@ -78,7 +78,7 @@ export default function Page() {
                             </span>
                         ) : (
                             <span className="text-xs text-muted-foreground">
-                                在顶栏「添加工作区」选一个本地目录开始
+                                在侧栏「添加工作区」选一个本地目录开始
                             </span>
                         )}
                     </div>

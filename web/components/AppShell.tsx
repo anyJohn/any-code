@@ -8,21 +8,25 @@ import { AppTopbar } from "@/components/AppTopbar";
 const MIN_W = 200;
 const MAX_W = 480;
 const DEFAULT_W = 256;
+const COLLAPSED_W = 44; // 折叠态 rail 宽度（= 折叠按钮大小）
 const STORAGE_KEY = "anycode:sidebarWidth";
+const COLLAPSED_KEY = "anycode:sidebarCollapsed";
 
 /**
  * AppShell —— 圆角卡片可拖拽布局。
  * 两栏圆角卡片浮于 app 底色，中间窄分割栏（三点 grab handle）可按住拖拽调左右宽度。
- * 宽度持久化到 localStorage。
+ * 宽度 + 折叠态持久化到 localStorage。折叠时侧栏缩成 rail（= 折叠按钮宽）。
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
     const [sidebarWidth, setSidebarWidth] = useState<number>(DEFAULT_W);
+    const [collapsed, setCollapsed] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // 初始宽度从 localStorage 读
+    // 初始宽度 + 折叠态从 localStorage 读
     useEffect(() => {
         const saved = Number(localStorage.getItem(STORAGE_KEY));
         if (saved >= MIN_W && saved <= MAX_W) setSidebarWidth(saved);
+        setCollapsed(localStorage.getItem(COLLAPSED_KEY) === "1");
     }, []);
 
     const onHandleDown = useCallback((e: React.MouseEvent) => {
@@ -48,30 +52,39 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         window.addEventListener("mouseup", onUp);
     }, []);
 
-    // 持久化宽度（拖拽结束后下次生效，节流：直接写每次也行，量小）
+    // 持久化宽度 + 折叠态
     useEffect(() => {
         localStorage.setItem(STORAGE_KEY, String(sidebarWidth));
     }, [sidebarWidth]);
+    useEffect(() => {
+        localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
+    }, [collapsed]);
 
     return (
         <div ref={containerRef} className="h-screen flex p-2 bg-muted/50">
             <aside
-                style={{ width: sidebarWidth }}
-                className="shrink-0 rounded-lg border border-border bg-background overflow-hidden flex flex-col"
+                style={{ width: collapsed ? COLLAPSED_W : sidebarWidth }}
+                className="shrink-0 rounded-lg border border-border bg-background overflow-hidden flex flex-col transition-[width] duration-150"
             >
-                <AppSidebar />
+                <AppSidebar
+                    collapsed={collapsed}
+                    onCollapse={() => setCollapsed(true)}
+                    onExpand={() => setCollapsed(false)}
+                />
             </aside>
-            {/* 三点 grab handle：按住拖拽调宽 */}
-            <div
-                onMouseDown={onHandleDown}
-                role="separator"
-                aria-orientation="vertical"
-                className="group shrink-0 w-2 cursor-col-resize flex flex-col items-center justify-center gap-1.5 rounded transition-colors hover:bg-accent/50"
-            >
-                <span className="size-1 rounded-full bg-muted-foreground/40 group-hover:bg-foreground/60" />
-                <span className="size-1 rounded-full bg-muted-foreground/40 group-hover:bg-foreground/60" />
-                <span className="size-1 rounded-full bg-muted-foreground/40 group-hover:bg-foreground/60" />
-            </div>
+            {/* 三点 grab handle：按住拖拽调宽（折叠态隐藏） */}
+            {!collapsed && (
+                <div
+                    onMouseDown={onHandleDown}
+                    role="separator"
+                    aria-orientation="vertical"
+                    className="group shrink-0 w-2 cursor-col-resize flex flex-col items-center justify-center gap-1.5 rounded transition-colors hover:bg-accent/50"
+                >
+                    <span className="size-1 rounded-full bg-muted-foreground/40 group-hover:bg-foreground/60" />
+                    <span className="size-1 rounded-full bg-muted-foreground/40 group-hover:bg-foreground/60" />
+                    <span className="size-1 rounded-full bg-muted-foreground/40 group-hover:bg-foreground/60" />
+                </div>
+            )}
             <div className="flex-1 min-w-0 rounded-lg border border-border bg-background overflow-hidden flex flex-col">
                 <header className="shrink-0 border-b border-border bg-background">
                     <AppTopbar />

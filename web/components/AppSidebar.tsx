@@ -34,9 +34,12 @@ import {
     Pencil,
     Plus,
     Settings,
+    PanelLeftClose,
+    PanelLeftOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiJson } from "@/lib/api";
+import { DirectoryPicker } from "./DirectoryPicker";
 import Link from "next/link";
 
 type SessionsStatus = "loading" | "ready" | "error";
@@ -45,8 +48,17 @@ type SessionsStatus = "loading" | "ready" | "error";
  * AppSidebar —— 工作区 Collapsible + sessions。
  * 双重高亮：工作区行 selected.projectKey + 会话行 activeSessionId。
  * 会话支持删除（弹窗二次确认）与重命名（inline 编辑）。
+ * 顶部工具栏：添加工作区（开 DirectoryPicker）+ 折叠侧栏（收成 rail）。
  */
-export function AppSidebar() {
+export function AppSidebar({
+    collapsed,
+    onCollapse,
+    onExpand,
+}: {
+    collapsed: boolean;
+    onCollapse: () => void;
+    onExpand: () => void;
+}) {
     const { selected, workspaces, activeSessionId } =
         useAppSelector(selectWorkspace);
     const dispatch = useAppDispatch();
@@ -56,6 +68,8 @@ export function AppSidebar() {
     const [sessionsStatus, setSessionsStatus] = useState<Record<string, SessionsStatus>>({});
     const [openKeys, setOpenKeys] = useState<Record<string, boolean>>({});
     const [sidebarErr, setSidebarErr] = useState("");
+    const [pickerOpen, setPickerOpen] = useState(false);
+    const [addError, setAddError] = useState("");
     // 删除目标（弹窗受控）；重命名目标（inline 编辑受控）
     const [deleteTarget, setDeleteTarget] = useState<{
         w: WorkspaceMeta;
@@ -93,6 +107,21 @@ export function AppSidebar() {
         }
         setSessionsMap((p) => ({ ...p, [w.projectKey]: list }));
         setSessionsStatus((p) => ({ ...p, [w.projectKey]: "ready" }));
+    };
+
+    const onPicked = async (path: string) => {
+        setAddError("");
+        const meta = await apiJson<WorkspaceMeta>("/api/workspaces", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ path }),
+        });
+        if (!meta) {
+            setAddError("添加工作区失败，请重试");
+            return;
+        }
+        await dispatch(refreshWorkspaces());
+        dispatch(setSelected(meta));
     };
 
     const onToggle = (w: WorkspaceMeta) => {
@@ -143,7 +172,7 @@ export function AppSidebar() {
                 (s) => s.id !== t.s.id
             ),
         }));
-        // 删的是当前活动 session → 跳回列表（目标 C：无 agent pool 需清理，session 文件已删即可）
+        // 删的是当前活动 session → 跳回列表（session 文件已删即可）
         if (activeSessionId === t.s.id) {
             dispatch(setActiveSession(null));
             router.push("/");
@@ -179,144 +208,170 @@ export function AppSidebar() {
         setRenameTarget(null);
     };
 
+    // 折叠态：rail（展开按钮 + 设置图标）
+    if (collapsed) {
+        return (
+            <div className="h-full flex flex-col items-center py-2 gap-1">
+                <button
+                    onClick={onExpand}
+                    title="展开侧栏"
+                    className="p-2 rounded-md hover:bg-accent"
+                >
+                    <PanelLeftOpen className="size-4" />
+                </button>
+                <div className="flex-1" />
+                <Link
+                    href="/settings"
+                    title="设置"
+                    className="p-2 rounded-md hover:bg-accent"
+                >
+                    <Settings className="size-4 text-muted-foreground" />
+                </Link>
+            </div>
+        );
+    }
+
     return (
         <div className="h-full flex flex-col">
+            {/* 顶部工具栏：添加工作区 + 折叠 */}
+            <div className="shrink-0 flex items-center gap-1 p-2 border-b border-border">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 gap-1.5"
+                    onClick={() => setPickerOpen(true)}
+                >
+                    <Plus className="size-4" /> 添加工作区
+                </Button>
+                <button
+                    onClick={onCollapse}
+                    title="折叠侧栏"
+                    className="p-1.5 rounded-md hover:bg-accent shrink-0"
+                >
+                    <PanelLeftClose className="size-4" />
+                </button>
+            </div>
+
             <div className="flex-1 min-h-0 overflow-y-auto">
                 <div className="p-2 flex flex-col gap-1">
                     {workspaces.length === 0 && (
-                    <p className="px-2 py-4 text-xs text-muted-foreground">
-                        顶栏「添加工作区」选一个本地目录开始
-                    </p>
-                )}
-                {workspaces.map((w) => (
-                    <Collapsible
-                        key={w.projectKey}
-                        open={!!openKeys[w.projectKey]}
-                        onOpenChange={() => onToggle(w)}
-                    >
-                        <div
-                            className={cn(
-                                "flex items-center gap-1 w-full px-2 py-1.5 rounded-md text-sm hover:bg-accent",
-                                selected?.projectKey === w.projectKey && "bg-accent"
-                            )}
+                        <p className="px-2 py-4 text-xs text-muted-foreground">
+                            点上方「添加工作区」选一个本地目录开始
+                        </p>
+                    )}
+                    {workspaces.map((w) => (
+                        <Collapsible
+                            key={w.projectKey}
+                            open={!!openKeys[w.projectKey]}
+                            onOpenChange={() => onToggle(w)}
                         >
-                            <CollapsibleTrigger asChild>
-                                <button
-                                    className="shrink-0 p-0.5 rounded hover:bg-accent"
-                                    aria-label={
-                                        openKeys[w.projectKey] ? "折叠" : "展开"
-                                    }
-                                >
-                                    <ChevronRight
-                                        className="size-3.5 transition-transform"
-                                        style={{
-                                            transform: openKeys[w.projectKey]
-                                                ? "rotate(90deg)"
-                                                : undefined,
-                                        }}
-                                    />
-                                </button>
-                            </CollapsibleTrigger>
-                            <button
-                                className="flex items-center gap-1.5 flex-1 min-w-0 truncate text-left"
-                                onClick={() => onOpenWorkspace(w)}
-                            >
-                                <Folder className="size-3.5 text-muted-foreground shrink-0" />
-                                <span className="truncate">{w.name}</span>
-                            </button>
-                            <button
-                                title="新建对话"
-                                className="shrink-0 p-0.5 rounded hover:bg-accent text-muted-foreground"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    newChat(w);
-                                }}
-                            >
-                                <Plus className="size-3.5" />
-                            </button>
-                        </div>
-                        <CollapsibleContent>
-                            <div className="ml-4 my-1 flex flex-col gap-1 border-l border-border pl-2">
-                                {sidebarErr && (
-                                    <p className="px-2 py-0.5 text-[11px] text-destructive">
-                                        {sidebarErr}
-                                    </p>
+                            <div
+                                className={cn(
+                                    "flex items-center gap-1 w-full px-2 py-1.5 rounded-md text-sm hover:bg-accent",
+                                    selected?.projectKey === w.projectKey && "bg-accent"
                                 )}
-                                {(sessionsStatus[w.projectKey] === "loading" ||
-                                    (!sessionsStatus[w.projectKey] &&
-                                        !sessionsMap[w.projectKey])) &&
-                                    Array.from({ length: 3 }).map((_, i) => (
-                                        <Skeleton
-                                            key={i}
-                                            className="h-6 mx-2 rounded"
+                            >
+                                <CollapsibleTrigger asChild>
+                                    <button
+                                        className="shrink-0 p-0.5 rounded hover:bg-accent"
+                                        aria-label={
+                                            openKeys[w.projectKey] ? "折叠" : "展开"
+                                        }
+                                    >
+                                        <ChevronRight
+                                            className="size-3.5 transition-transform"
+                                            style={{
+                                                transform: openKeys[w.projectKey]
+                                                    ? "rotate(90deg)"
+                                                    : undefined,
+                                            }}
                                         />
-                                    ))}
-                                {sessionsStatus[w.projectKey] === "error" && (
-                                    <p className="px-2 py-1 text-[11px] text-destructive">
-                                        加载会话失败
-                                    </p>
-                                )}
-                                {sessionsStatus[w.projectKey] === "ready" &&
-                                    (sessionsMap[w.projectKey] ?? []).map((s) => {
-                                        const rt = renameTarget?.s.id === s.id ? renameTarget : null;
-                                        const isActive =
-                                            selected?.projectKey === w.projectKey &&
-                                            activeSessionId === s.id;
-                                        return (
-                                            <div
-                                                key={s.id}
-                                                className={cn(
-                                                    "group flex items-center gap-1 px-2 py-1 rounded border border-transparent hover:border-border hover:bg-accent text-xs",
-                                                    isActive && "bg-accent text-foreground border-border"
-                                                )}
-                                            >
-                                                <MessageSquare className="size-3 shrink-0 text-muted-foreground" />
-                                                {rt ? (
-                                                    <Input
-                                                        className="h-5 px-1 text-xs flex-1"
-                                                        value={rt.value}
-                                                        autoFocus
-                                                        onClick={(e) => e.stopPropagation()}
-                                                        onChange={(e) =>
-                                                            setRenameTarget({
-                                                                ...rt,
-                                                                value: e.target.value,
-                                                            })
-                                                        }
-                                                        onKeyDown={(e) => {
-                                                            e.stopPropagation();
-                                                            if (e.key === "Enter")
-                                                                submitRename(rt);
-                                                            else if (e.key === "Escape")
-                                                                setRenameTarget(null);
-                                                        }}
-                                                        onBlur={() => setRenameTarget(null)}
-                                                    />
-                                                ) : (
-                                                    <button
-                                                        className="flex-1 min-w-0 truncate text-left"
-                                                        title={s.title || "（无标题）"}
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            resume(w, s.id);
-                                                        }}
-                                                        onDoubleClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setRenameTarget({
-                                                                w,
-                                                                s,
-                                                                value: s.title || "",
-                                                            });
-                                                        }}
-                                                    >
-                                                        {s.title || "（无标题）"}
-                                                    </button>
-                                                )}
-                                                {!rt && (
-                                                    <span className="flex items-center gap-0.5 shrink-0">
+                                    </button>
+                                </CollapsibleTrigger>
+                                <button
+                                    className="flex items-center gap-1.5 flex-1 min-w-0 truncate text-left"
+                                    onClick={() => onOpenWorkspace(w)}
+                                >
+                                    <Folder className="size-3.5 text-muted-foreground shrink-0" />
+                                    <span className="truncate">{w.name}</span>
+                                </button>
+                                <button
+                                    title="新建对话"
+                                    className="shrink-0 p-0.5 rounded hover:bg-accent text-muted-foreground"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        newChat(w);
+                                    }}
+                                >
+                                    <Plus className="size-3.5" />
+                                </button>
+                            </div>
+                            <CollapsibleContent>
+                                <div className="ml-4 my-1 flex flex-col gap-1 border-l border-border pl-2">
+                                    {sidebarErr && (
+                                        <p className="px-2 py-0.5 text-[11px] text-destructive">
+                                            {sidebarErr}
+                                        </p>
+                                    )}
+                                    {(sessionsStatus[w.projectKey] === "loading" ||
+                                        (!sessionsStatus[w.projectKey] &&
+                                            !sessionsMap[w.projectKey])) &&
+                                        Array.from({ length: 3 }).map((_, i) => (
+                                            <Skeleton
+                                                key={i}
+                                                className="h-6 mx-2 rounded"
+                                            />
+                                        ))}
+                                    {sessionsStatus[w.projectKey] === "error" && (
+                                        <p className="px-2 py-1 text-[11px] text-destructive">
+                                            加载会话失败
+                                        </p>
+                                    )}
+                                    {sessionsStatus[w.projectKey] === "ready" &&
+                                        (sessionsMap[w.projectKey] ?? []).map((s) => {
+                                            const rt = renameTarget?.s.id === s.id ? renameTarget : null;
+                                            const isActive =
+                                                selected?.projectKey === w.projectKey &&
+                                                activeSessionId === s.id;
+                                            return (
+                                                <div
+                                                    key={s.id}
+                                                    className={cn(
+                                                        "group flex items-center gap-1 px-2 py-1 rounded border border-transparent hover:border-border hover:bg-accent text-xs",
+                                                        isActive && "bg-accent text-foreground border-border"
+                                                    )}
+                                                >
+                                                    <MessageSquare className="size-3 shrink-0 text-muted-foreground" />
+                                                    {rt ? (
+                                                        <Input
+                                                            className="h-5 px-1 text-xs flex-1"
+                                                            value={rt.value}
+                                                            autoFocus
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            onChange={(e) =>
+                                                                setRenameTarget({
+                                                                    ...rt,
+                                                                    value: e.target.value,
+                                                                })
+                                                            }
+                                                            onKeyDown={(e) => {
+                                                                e.stopPropagation();
+                                                                if (e.key === "Enter")
+                                                                    submitRename(rt);
+                                                                else if (e.key === "Escape")
+                                                                    setRenameTarget(null);
+                                                            }}
+                                                            onBlur={() => setRenameTarget(null)}
+                                                        />
+                                                    ) : (
                                                         <button
-                                                            title="重命名"
+                                                            className="flex-1 min-w-0 truncate text-left"
+                                                            title={s.title || "（无标题）"}
                                                             onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                resume(w, s.id);
+                                                            }}
+                                                            onDoubleClick={(e) => {
                                                                 e.stopPropagation();
                                                                 setRenameTarget({
                                                                     w,
@@ -325,34 +380,56 @@ export function AppSidebar() {
                                                                 });
                                                             }}
                                                         >
-                                                            <Pencil className="size-3 text-muted-foreground" />
+                                                            {s.title || "（无标题）"}
                                                         </button>
-                                                        <button
-                                                            title="删除"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setDeleteTarget({ w, s });
-                                                            }}
-                                                        >
-                                                            <Trash2 className="size-3 text-muted-foreground" />
-                                                        </button>
-                                                    </span>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                {sessionsStatus[w.projectKey] === "ready" &&
-                                    (sessionsMap[w.projectKey] ?? []).length === 0 && (
-                                        <p className="px-2 py-1 text-[11px] text-muted-foreground">
-                                            暂无会话
-                                        </p>
-                                    )}
-                            </div>
-                        </CollapsibleContent>
-                    </Collapsible>
-                ))}
+                                                    )}
+                                                    {!rt && (
+                                                        <span className="flex items-center gap-0.5 shrink-0">
+                                                            <button
+                                                                title="重命名"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setRenameTarget({
+                                                                        w,
+                                                                        s,
+                                                                        value: s.title || "",
+                                                                    });
+                                                                }}
+                                                            >
+                                                                <Pencil className="size-3 text-muted-foreground" />
+                                                            </button>
+                                                            <button
+                                                                title="删除"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setDeleteTarget({ w, s });
+                                                                }}
+                                                            >
+                                                                <Trash2 className="size-3 text-muted-foreground" />
+                                                            </button>
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    {sessionsStatus[w.projectKey] === "ready" &&
+                                        (sessionsMap[w.projectKey] ?? []).length === 0 && (
+                                            <p className="px-2 py-1 text-[11px] text-muted-foreground">
+                                                暂无会话
+                                            </p>
+                                        )}
+                                </div>
+                            </CollapsibleContent>
+                        </Collapsible>
+                    ))}
                 </div>
             </div>
+
+            {addError && (
+                <p className="shrink-0 px-3 py-1 text-[11px] text-destructive border-t border-border">
+                    {addError}
+                </p>
+            )}
 
             <div className="shrink-0 border-t border-border p-2">
                 <Link
@@ -363,6 +440,15 @@ export function AppSidebar() {
                     <span>设置</span>
                 </Link>
             </div>
+
+            <DirectoryPicker
+                open={pickerOpen}
+                onOpenChange={(v) => {
+                    setPickerOpen(v);
+                    if (!v) setAddError("");
+                }}
+                onPicked={onPicked}
+            />
 
             <Dialog
                 open={!!deleteTarget}

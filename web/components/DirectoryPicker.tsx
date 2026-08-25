@@ -116,7 +116,10 @@ export function DirectoryPicker({
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
                         取消
                     </Button>
-                    <Button onClick={confirm}>
+                    <Button
+                        onClick={confirm}
+                        disabled={!current || current === "此电脑"}
+                    >
                         <Check className="size-4" /> 选定此目录
                     </Button>
                 </DialogFooter>
