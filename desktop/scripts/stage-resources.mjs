@@ -51,24 +51,15 @@ if (rgWin) copy(rgWin, join(RESOURCES, "rg", "rg.exe"));
 else console.warn("  ⚠ win rg.exe not found");
 
 // 3. busybox-w32（win bash 工具）→ resources/busybox-win/sh.exe
-//    无 npm 包；从 frippery.org 下载（同 install.ps1），或从 ~/.anycode 拷（已装的）。
-//    自包含，不依赖 prior install。Linux AppImage 不需要 busybox（用 /bin/sh）。
+//    直接从仓库 bundled 拷贝（desktop/resources/busybox-win/sh.exe 已 commit 进仓库），
+//    不再从 frippery.org 下载（个人站不可靠 + 中国网络不通）。
+//    Linux AppImage 不需要 busybox（用 /bin/sh）。
+const bundledBusybox = join(__dirname, "..", "resources", "busybox-win", "sh.exe");
 mkdirSync(join(RESOURCES, "busybox-win"), { recursive: true });
-const busyboxDest = join(RESOURCES, "busybox-win", "sh.exe");
-const busyboxLocal = join(process.env.HOME || process.env.USERPROFILE || "", ".anycode", "runtime", "busybox", "sh.exe");
-if (existsSync(busyboxLocal)) {
-    copy(busyboxLocal, busyboxDest);
+if (existsSync(bundledBusybox)) {
+    copy(bundledBusybox, join(RESOURCES, "busybox-win", "sh.exe"));
 } else {
-    console.log("  下载 busybox-w32（frippery.org）…");
-    try {
-        const res = await fetch("https://frippery.org/files/busybox/busybox64.exe", { redirect: "follow" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const buf = Buffer.from(await res.arrayBuffer());
-        writeFileSync(busyboxDest, buf);
-        console.log(`  ✓ ${busyboxDest} (${buf.length} bytes)`);
-    } catch (e) {
-        console.warn(`  ⚠ busybox 下载失败（${e.message}）— Windows bash 在桌面端将不可用（Linux 不受影响）`);
-    }
+    console.warn("  ⚠ busybox sh.exe not bundled in repo (desktop/resources/busybox-win/) — Windows bash 不可用");
 }
 
 console.log(">> resources staged.");
