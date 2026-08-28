@@ -107,7 +107,7 @@ $Tmp = Join-Path $env:TEMP ("anycode-install-" + [guid]::NewGuid().ToString('N')
 $null = New-Item -ItemType Directory -Force -Path $Tmp
 try {
 
-# ---- 1. node (next start runtime) ----
+# ---- 1. node (hono server runtime) ----
 $NodeDir = Join-Path $AnycodeHome 'runtime\node'
 if (-not (Test-Path (Join-Path $NodeDir 'node.exe'))) {
     Info "download node $NodeVersion ($NodeArch)..."

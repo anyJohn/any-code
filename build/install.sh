@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # anycode Linux 一行安装器（curl | bash 拉取执行）。
 # 流程：私有 provision node（nodejs.org / npmmirror 镜像）+ pnpm standalone（绕开 corepack 0.29 验签 bug）
-# → 拉仓库 tarball（不依赖 git）→ pnpm install + next build → 注册 anycode 到 PATH。
+# → 拉仓库 tarball（不依赖 git）→ pnpm install → vite build + server esbuild → 注册 anycode 到 PATH。
 # 不碰系统 PATH、不要 sudo；用户机仅需 curl + tar。
 #
 # 中国用户：ANYCODE_MIRROR=cn 走 npmmirror 镜像（默认 auto=按时区自动判中国）。
@@ -123,7 +123,7 @@ info "目标目录：$ANYCODE_HOME"
 mkdir -p "$ANYCODE_HOME/runtime" "$ANYCODE_HOME/app" "$ANYCODE_HOME/bin"
 TMP="$(mktemp -d)"; trap '[ -n "$TMP" ] && [ -d "$TMP" ] && rm -rf -- "$TMP"' EXIT
 
-# ---- 1. 私有 node（next start 运行时用）----
+# ---- 1. 私有 node（hono server 运行时用）----
 NODE_DIR="$ANYCODE_HOME/runtime/node"
 if [ ! -x "$NODE_DIR/bin/node" ]; then
     info "下载 node $NODE_VERSION ($NODE_ARCH)…"
