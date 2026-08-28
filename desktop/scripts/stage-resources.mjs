@@ -51,15 +51,15 @@ if (rgWin) copy(rgWin, join(RESOURCES, "rg", "rg.exe"));
 else console.warn("  ⚠ win rg.exe not found");
 
 // 3. busybox-w32（win bash 工具）→ resources/busybox-win/sh.exe
-//    直接从仓库 bundled 拷贝（desktop/resources/busybox-win/sh.exe 已 commit 进仓库），
-//    不再从 frippery.org 下载（个人站不可靠 + 中国网络不通）。
+//    从仓库 assets/busybox-win/sh.exe 拷贝（git-tracked，不依赖外部下载）。
+//    来源：pierreown/busybox-w32-build GitHub releases。
 //    Linux AppImage 不需要 busybox（用 /bin/sh）。
-const bundledBusybox = join(__dirname, "..", "resources", "busybox-win", "sh.exe");
+const bundledBusybox = join(__dirname, "..", "assets", "busybox-win", "sh.exe");
 mkdirSync(join(RESOURCES, "busybox-win"), { recursive: true });
 if (existsSync(bundledBusybox)) {
     copy(bundledBusybox, join(RESOURCES, "busybox-win", "sh.exe"));
 } else {
-    console.warn("  ⚠ busybox sh.exe not bundled in repo (desktop/resources/busybox-win/) — Windows bash 不可用");
+    console.warn("  ⚠ busybox sh.exe not in assets/busybox-win/ — Windows bash 不可用");
 }
 
 console.log(">> resources staged.");
