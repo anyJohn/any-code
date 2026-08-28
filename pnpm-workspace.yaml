@@ -1,10 +1,13 @@
 packages:
   - "domain"
   - "server"
+  - "desktop"
   - "tui"
   - "web"
 allowBuilds:
   "@parcel/watcher": true
+  electron: true
+  electron-winstaller: true
   esbuild: true
   msw: false
   sharp: false

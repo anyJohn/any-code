@@ -227,6 +227,10 @@ process.env.HOSTNAME = "127.0.0.1";
 process.env.ANYCODE_WEB_DIST = WEB_DIST; // server serve 静态 SPA
 // vendored rg path so domain ripgrep.ts finds it（无 @vscode/ripgrep 二进制时降级到此）
 process.env.ANYCODE_RG_PATH = RG;
+// Windows: vendored busybox（install.ps1 下发）给 domain bash.ts 用（同 ANYCODE_RG_PATH 模式）
+if (win) {
+    process.env.ANYCODE_BASH_PATH = join(ANYCODE_HOME, "runtime", "busybox", "sh.exe");
+}
 
 function openBrowser(url) {
     const cmd = win

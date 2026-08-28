@@ -1,0 +1,27 @@
+{
+    "name": "@any-code/desktop",
+    "version": "0.1.0",
+    "private": true,
+    "description": "AnyCode desktop client (Electron + hono sidecar)",
+    "author": "AnyJohn",
+    "main": "dist/main/main.cjs",
+    "scripts": {
+        "dev": "npm run build:main && electron .",
+        "build:main": "node esbuild.config.js",
+        "stage": "node scripts/stage-resources.mjs",
+        "build": "npm run stage && npm run build:main && electron-builder --config electron-builder.config.js",
+        "build:linux": "npm run build -- --linux",
+        "build:win": "npm run build -- --win",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@any-code/domain": "workspace:*",
+        "@any-code/server": "workspace:*"
+    },
+    "devDependencies": {
+        "electron": "^35.0.0",
+        "electron-builder": "^26.0.0",
+        "esbuild": "^0.27.4",
+        "typescript": "^5.9.3"
+    }
+}

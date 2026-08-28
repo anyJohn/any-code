@@ -39,14 +39,15 @@ export function resolveShell(
 ): { binary: string; cwd: string } {
     if (process.platform !== "win32") return { binary: "/bin/sh", cwd };
     const candidates = [
-        gitBashPath,
+        process.env.ANYCODE_BASH_PATH, // 桌面/launcher 注入（同 ANYCODE_RG_PATH 模式）
+        gitBashPath, // config.yaml（install.ps1 写入）
         join(globalConfigDir(), "runtime", "busybox", "sh.exe"),
         SYSTEM_GIT_BASH,
     ].filter((x): x is string => !!x && existsSync(x));
     const binary = candidates[0];
     if (!binary) {
         throw new Error(
-            "Windows 未找到 Git Bash（在 ~/.anycode/config.yaml 配 gitBashPath，或安装 Git for Windows）"
+            "Windows 未找到 Git Bash（设 ANYCODE_BASH_PATH，或在 ~/.anycode/config.yaml 配 gitBashPath，或安装 Git for Windows）"
         );
     }
     return { binary, cwd };
