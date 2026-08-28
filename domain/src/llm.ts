@@ -42,9 +42,6 @@ export async function callLLM(
         throw new Error("callLLM 需要 provider 配置（由 AnyAgent 从 config.yaml 解析传入）");
     }
     const provider = llm;
-    if (!provider.apiKey) {
-        throw new Error("provider.apiKey 为空，请在 ~/.anycode/config.yaml 配置 apiKey（或在设置页添加 provider）");
-    }
     const client = new OpenAI({
         apiKey: provider.apiKey,
         baseURL: provider.baseURL,
