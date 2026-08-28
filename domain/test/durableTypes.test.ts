@@ -5,26 +5,26 @@ import { EventType, DURABLE_TYPES } from "../src/type";
 
 describe("DURABLE_TYPES（SPEC-030 B-004/AC-006）", () => {
     const durable = [
-        EventType.USER,
-        EventType.ITERATION,
-        EventType.THINKING,
-        EventType.ASSISTANT,
-        EventType.TOOL,
-        EventType.USAGE,
-        EventType.COMPACT,
-        EventType.ERROR,
-        EventType.WARNING,
-        EventType.DONE,
-        EventType.STOPPED,
+        "User",
+        "Iteration",
+        "Thinking",
+        "Assistant",
+        "Tool",
+        "Usage",
+        "Compact",
+        "Error",
+        "Warning",
+        "Done",
+        "Stopped",
     ];
     const ephemeral = [
-        EventType.ASSISTANT_DELTA,
-        EventType.TOOL_START,
-        EventType.TOOL_PROGRESS,
-        EventType.TOOL_ARG_PROGRESS,
-        EventType.SYSTEM,
-        EventType.PLANNING,
-        EventType.INTERACTION,
+        "AssistantDelta",
+        "ToolStart",
+        "ToolProgress",
+        "ToolArgProgress",
+        "System",
+        "Planning",
+        "Interaction",
     ];
 
     it("durable 事件在 DURABLE_TYPES 中（持久化作 reload 真值）", () => {

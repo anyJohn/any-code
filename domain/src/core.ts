@@ -52,7 +52,7 @@ export async function agentLoop(
                     lastUsage = undefined;
                     await onCompact?.(res.messages);
                     ctx.eventStream.submit({
-                        type: EventType.COMPACT,
+                        type: "Compact",
                         message: `已压缩上下文 ${res.beforeTokens}→${res.afterTokens} tokens`,
                         data: {
                             beforeTokens: res.beforeTokens,
@@ -68,11 +68,11 @@ export async function agentLoop(
                 // 压缩失败不阻断主循环：发 Warning（非终态），循环继续原 messages（下轮可能再试）。
                 // web TERMINAL 不含 Warning → 不会误终止 run（SPEC-030 B-003/I-003，修 latent bug）。
                 ctx.eventStream.submit({
-                    type: EventType.WARNING,
+                    type: "Warning",
                     message: `自动压缩失败：${
                         err instanceof Error ? err.message : String(err)
                     }`,
-                    data: serializeError(err),
+                    error: serializeError(err),
                 });
             }
         }
@@ -80,7 +80,7 @@ export async function agentLoop(
         // 前端据此把 "assistant 文本 + 紧随的工具调用" 组成块状展示。
         const turnId = randomUUID();
         ctx.eventStream.submit({
-            type: EventType.ITERATION,
+            type: "Iteration",
             message: `Iteration ${i + 1}/${maxIter}`,
             turnId,
         });
@@ -94,7 +94,7 @@ export async function agentLoop(
                 // 非流式 provider 不调 onDelta，无 delta 事件。
                 (delta) =>
                     ctx.eventStream.submit({
-                        type: EventType.ASSISTANT_DELTA,
+                        type: "AssistantDelta",
                         message: delta,
                         turnId,
                     }),
@@ -102,7 +102,7 @@ export async function agentLoop(
                 // 思考内容（reasoning_content）：部分模型支持，发 THINKING 事件
                 (delta) =>
                     ctx.eventStream.submit({
-                        type: EventType.THINKING,
+                        type: "Thinking",
                         message: delta,
                         turnId,
                     }),
@@ -110,7 +110,7 @@ export async function agentLoop(
                 // 避免 LLM 流式输出大 write content 时事件流静默冻屏。SPEC-022 B-003 / DEC-076
                 (info) =>
                     ctx.eventStream.submit({
-                        type: EventType.TOOL_ARG_PROGRESS,
+                        type: "ToolArgProgress",
                         message: info.name ?? "tool",
                         data: { bytes: info.bytes, name: info.name },
                         turnId,
@@ -129,7 +129,7 @@ export async function agentLoop(
                 messages.push(msg);
                 await onMessage?.(msg);
                 ctx.eventStream.submit({
-                    type: EventType.ASSISTANT,
+                    type: "Assistant",
                     message: msg.content,
                     turnId,
                 });
@@ -140,7 +140,7 @@ export async function agentLoop(
         await onMessage?.(msg);
         if (msg.content) {
             ctx.eventStream.submit({
-                type: EventType.ASSISTANT,
+                type: "Assistant",
                 message: msg.content,
                 turnId,
             });
@@ -148,7 +148,7 @@ export async function agentLoop(
         if (msg.usage) {
             lastUsage = msg.usage;
             ctx.eventStream.submit({
-                type: EventType.USAGE,
+                type: "Usage",
                 message: `${msg.usage.prompt_tokens}/${
                     ctx.llm?.contextWindow ?? 128000
                 }`,

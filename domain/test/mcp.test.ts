@@ -200,12 +200,12 @@ describe("MCP 真协议连接（mcp.ts / SPEC-006，配置从 config.yaml mcp �
         expect(ctx.eventStream.submit).toHaveBeenCalledTimes(2);
         const calls = (ctx.eventStream.submit as ReturnType<typeof vi.fn>).mock.calls;
         expect(calls[0][0]).toMatchObject({
-            type: EventType.TOOL_START,
+            type: "ToolStart",
             message: "foo",
             turnId: "t1",
         });
         expect(calls[1][0]).toMatchObject({
-            type: EventType.TOOL,
+            type: "Tool",
             message: "foo",
             data: { name: "foo", args: {}, result: "ok" },
             turnId: "t1",

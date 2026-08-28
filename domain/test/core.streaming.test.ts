@@ -44,7 +44,7 @@ describe("agentLoop 流式增量事件（core.ts）", () => {
 
         // AC-002：两条 ASSISTANT_DELTA（实时态）
         const deltas = ctx.submits.filter(
-            (e) => (e as { type: EventType }).type === EventType.ASSISTANT_DELTA
+            (e) => (e as { type: EventType }).type === "AssistantDelta"
         );
         expect(deltas).toHaveLength(2);
         expect((deltas[0] as { message: string }).message).toBe("hel");
@@ -52,7 +52,7 @@ describe("agentLoop 流式增量事件（core.ts）", () => {
 
         // AC-003：一条 ASSISTANT 整段定稿
         const finals = ctx.submits.filter(
-            (e) => (e as { type: EventType }).type === EventType.ASSISTANT
+            (e) => (e as { type: EventType }).type === "Assistant"
         );
         expect(finals).toHaveLength(1);
         expect((finals[0] as { message: string }).message).toBe("hello");
@@ -80,7 +80,7 @@ describe("agentLoop 流式增量事件（core.ts）", () => {
         const messages: ChatMessage[] = [];
         await agentLoop("task", messages, 30, undefined, () => {}, ctx, []);
         const usages = ctx.submits.filter(
-            (e) => (e as { type: EventType }).type === EventType.USAGE
+            (e) => (e as { type: EventType }).type === "Usage"
         );
         expect(usages).toHaveLength(1);
         expect(
@@ -115,7 +115,7 @@ describe("agentLoop 流式增量事件（core.ts）", () => {
         expect(assistantPersisted[0].content).toBe("hel");
         // 定稿 ASSISTANT 事件
         const finals = ctx.submits.filter(
-            (e) => (e as { type: EventType }).type === EventType.ASSISTANT
+            (e) => (e as { type: EventType }).type === "Assistant"
         );
         expect(finals).toHaveLength(1);
         expect((finals[0] as { message: string }).message).toBe("hel");

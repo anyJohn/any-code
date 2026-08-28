@@ -68,13 +68,13 @@ describe("toolCall（tools/toolCall.ts）", () => {
         const startEvt = calls[0][0];
         const toolEvt = calls[1][0];
         expect(startEvt).toMatchObject({
-            type: EventType.TOOL_START,
+            type: "ToolStart",
             message: "fakeTool",
             data: { name: "fakeTool", args: { x: 1 } },
             turnId: "t1",
         });
         expect(toolEvt).toMatchObject({
-            type: EventType.TOOL,
+            type: "Tool",
             message: "fakeTool",
             data: { name: "fakeTool", args: { x: 1 }, result: "tool-output" },
             turnId: "t1",
@@ -95,7 +95,7 @@ describe("toolCall（tools/toolCall.ts）", () => {
         const calls = (ctx.eventStream.submit as ReturnType<typeof vi.fn>).mock
             .calls.map((c) => c[0]);
         const progressEvts = calls.filter(
-            (e) => e.type === EventType.TOOL_PROGRESS
+            (e) => e.type === "ToolProgress"
         );
         expect(progressEvts).toHaveLength(2);
         expect(progressEvts[0]).toMatchObject({
@@ -141,7 +141,7 @@ describe("toolCall（tools/toolCall.ts）", () => {
         const calls = (ctx.eventStream.submit as ReturnType<typeof vi.fn>).mock.calls.map(
             (c) => c[0]
         );
-        const toolEvt = calls.find((e) => e.type === EventType.TOOL);
+        const toolEvt = calls.find((e) => e.type === "Tool");
         expect(toolEvt.data.args.content).toBe(
             "a".repeat(500) + "[truncated, 10000 total]"
         );

@@ -91,7 +91,7 @@ describe("toRenderItems (TEST-005 TC-005.4, B-003 sub-agent)", () => {
             ev("Iteration", "i1", { turnId: "t1" }),
             ev("Assistant", "a1", { turnId: "t1" }),
             ev("Warning", "自动压缩失败：compact boom", {
-                data: { message: "compact boom", name: "Error" },
+                error: { message: "compact boom", name: "Error" },
             }),
             ev("Iteration", "i2", { turnId: "t2" }),
         ];
@@ -140,7 +140,7 @@ describe("groupByTurn Thinking 累积（SPEC-015 AC-003/005）", () => {
         const events: AgentEvent[] = [
             ev("Iteration", "i1", { turnId: "t1" }),
             ev("Thinking", "reasoning", { turnId: "t1" }),
-            ev("ToolStart", "bash", { turnId: "t1", data: { name: "bash" } }),
+            ev("ToolStart", "bash", { turnId: "t1", data: { name: "bash", args: {} } }),
             ev("ToolProgress", "out", { turnId: "t1" }),
         ];
         const turns = groupByTurn(events);
@@ -232,7 +232,7 @@ describe("reload 重放 durable 事件日志（SPEC-030 AC-009/010，定位 by c
         const events: AgentEvent[] = [
             ev("User", "do x"),
             ev("Error", "Error executing task: do x", {
-                data: { message: "boom", name: "Error", stack: "at x" },
+                error: { message: "boom", name: "Error", stack: "at x" },
             }),
             ev("User", "do x"),
             ev("Iteration", "Iter 1", { turnId: "t2" }),

@@ -157,7 +157,7 @@ describe("agentLoop（core.ts）", () => {
         );
         expect(warning).toBeTruthy();
         expect(
-            (warning![0] as { data: { message: string } }).data.message
+            (warning![0] as { error: { message: string } }).error.message
         ).toBe("compact boom");
         // AC-005：循环继续——压缩失败未终止，callLLM 被调 2 次，result=done
         expect(vi.mocked(callLLM)).toHaveBeenCalledTimes(2);

@@ -16,25 +16,25 @@ const agent = await AnyAgent.create({ rootPath: process.cwd() });
 
 agent.eventStream$.subscribe((event) => {
     switch (event.type) {
-        case EventType.SYSTEM:
+        case "System":
             console.log(`🔵 ${event.message}`);
             break;
-        case EventType.USER:
+        case "User":
             console.log(`👤 ${event.message}`);
             break;
-        case EventType.ASSISTANT:
+        case "Assistant":
             console.log(`🤖 ${event.message}`);
             break;
-        case EventType.TOOL:
+        case "Tool":
             console.log(`🔧 ${event.message}`);
             break;
-        case EventType.ITERATION:
+        case "Iteration":
             console.log(`🔄 ${event.message}`);
             break;
-        case EventType.ERROR:
+        case "Error":
             console.error(`❌ ${event.message}`);
-            if (event.data) {
-                console.error(event.data);
+            if (event.error) {
+                console.error(event.error);
             }
             break;
         default:

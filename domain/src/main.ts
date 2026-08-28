@@ -147,7 +147,7 @@ class AnyAgent {
             };
         } else {
             this.eventStream.submit({
-                type: EventType.SYSTEM,
+                type: "System",
                 message: `Session ${sessionId} not found. Send a message to start a new one.`,
             });
         }
@@ -258,7 +258,7 @@ class AnyAgent {
             session.messages.push(...res.messages);
             await this.service.replaceMessages(sessionKey, res.messages);
             this.eventStream.submit({
-                type: EventType.COMPACT,
+                type: "Compact",
                 message: `已压缩上下文 ${res.beforeTokens}→${res.afterTokens} tokens`,
                 data: {
                     beforeTokens: res.beforeTokens,
@@ -290,9 +290,9 @@ class AnyAgent {
                             // domain 发出即 plain ErrorPayload（serializeError），raw Error 不离开内核；
                             // live==persisted by construction，adapter 不再 replacer（SPEC-030 B-002/I-001）。
                             this.eventStream.submit({
-                                type: EventType.ERROR,
+                                type: "Error",
                                 message: `Error executing task: ${task}`,
-                                data: serializeError(err),
+                                error: serializeError(err),
                             });
                             return of(null);
                         }),
@@ -359,12 +359,12 @@ class AnyAgent {
         // Error 由 catchError 发 ERROR，前端同样解除 pending。
         if (abortController.signal.aborted) {
             this.eventStream.submit({
-                type: EventType.STOPPED,
+                type: "Stopped",
                 message: "已停止任务",
             });
         } else {
             this.eventStream.submit({
-                type: EventType.DONE,
+                type: "Done",
                 message: `任务完成`,
             });
         }

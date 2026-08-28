@@ -46,7 +46,7 @@ describe("ask_question handler（AC-003）", () => {
             ctx
         );
         const submit = ctx.eventStream.submit as unknown as ReturnType<typeof vi.fn>;
-        const ev = submit.mock.calls.find((c) => c[0]?.type === EventType.INTERACTION);
+        const ev = submit.mock.calls.find((c) => c[0]?.type === "Interaction");
         expect(ev).toBeTruthy();
         expect(ev![0].data).toMatchObject({
             id: expect.any(String),
@@ -69,7 +69,7 @@ describe("ask_question handler（AC-003）", () => {
             ctx
         );
         const submit = ctx.eventStream.submit as unknown as ReturnType<typeof vi.fn>;
-        const ev = submit.mock.calls.find((c) => c[0]?.type === EventType.INTERACTION);
+        const ev = submit.mock.calls.find((c) => c[0]?.type === "Interaction");
         resolveInteraction(ev![0].data.id, ["x", "a, b"]);
         const result = await p;
         expect(result).toContain("Q: 单选\nA: x");
@@ -82,7 +82,7 @@ describe("ask_question handler（AC-003）", () => {
         expect(result).toContain("[Error]");
         const submit = ctx.eventStream.submit as unknown as ReturnType<typeof vi.fn>;
         expect(
-            submit.mock.calls.some((c) => c[0]?.type === EventType.INTERACTION)
+            submit.mock.calls.some((c) => c[0]?.type === "Interaction")
         ).toBe(false);
     });
 

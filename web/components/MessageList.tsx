@@ -160,10 +160,8 @@ export function MessageList({
                             </div>
                         );
                     }
-                    // System / Error
-                    const errorData = e.data as
-                        | { message?: string; name?: string; stack?: string }
-                        | undefined;
+                    // System / Error / Warning —— Error/Warning 经 error 字段（domain serializeError）
+                    const errorData = e.error;
                     return (
                         <div
                             key={e.id}

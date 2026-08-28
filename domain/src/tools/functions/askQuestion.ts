@@ -64,7 +64,7 @@ export async function askQuestionFunc(
 
     // 发 INTERACTION 事件（web 据此弹模态）
     ctx.eventStream.submit({
-        type: EventType.INTERACTION,
+        type: "Interaction",
         message: `ask_question: ${questions.length} question(s)`,
         data: { id, questions },
     });

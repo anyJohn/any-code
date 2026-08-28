@@ -7,47 +7,99 @@ export interface AgentLoopResult {
     messages: ChatMessage[];
 }
 
-export enum EventType {
-    SYSTEM = "System",
-    USER = "User",
-    TOOL = "Tool",
-    TOOL_START = "ToolStart",
-    TOOL_PROGRESS = "ToolProgress",
-    TOOL_ARG_PROGRESS = "ToolArgProgress",
-    ITERATION = "Iteration",
-    ASSISTANT_DELTA = "AssistantDelta",
-    ASSISTANT = "Assistant",
-    THINKING = "Thinking",
-    USAGE = "Usage",
-    PLANNING = "Planning",
-    COMPACT = "Compact",
-    INTERACTION = "Interaction",
-    ERROR = "Error",
-    WARNING = "Warning",
-    DONE = "Done",
-    STOPPED = "Stopped",
+// ── 事件类型（SPEC-030 B-001：discriminated union，per-variant typed payload，删 data?:any）──
+
+/** 事件公共字段。timestamp 由 EventStream.submit 盖；message 所有事件都有。 */
+interface EventBase {
+    timestamp: number;
+    message: string;
+    /** 一次推理回合的分组 id：同回合的 Iteration/Assistant/Tool 等共用 */
+    turnId?: string;
+    /** 发出该事件的 agent 名（主 agent 省略；sub-agent 用 def.name，如 "plan"） */
+    author?: string;
+    /** 一次 sub-agent 调用的分组 id，前端据此折叠展示 */
+    runId?: string;
+}
+
+export type AgentEvent =
+    | (EventBase & { type: "System" })
+    | (EventBase & { type: "User" })
+    | (EventBase & { type: "Iteration" })
+    | (EventBase & { type: "Thinking" })
+    | (EventBase & { type: "Assistant" })
+    | (EventBase & { type: "AssistantDelta" })
+    | (EventBase & { type: "Tool"; data: ToolEventData })
+    | (EventBase & { type: "ToolStart"; data: ToolStartData })
+    | (EventBase & { type: "ToolProgress" })
+    | (EventBase & { type: "ToolArgProgress"; data: ToolArgProgressData })
+    | (EventBase & { type: "Usage"; data: UsageEventData })
+    | (EventBase & { type: "Compact"; data: CompactEventData })
+    | (EventBase & { type: "Interaction"; data: InteractionEventData })
+    | (EventBase & { type: "Planning" })
+    | (EventBase & { type: "Error"; error: ErrorPayload })
+    | (EventBase & { type: "Warning"; error?: ErrorPayload })
+    | (EventBase & { type: "Done" })
+    | (EventBase & { type: "Stopped" });
+
+/** 事件类型字面量集合（向后兼容 EventType 引用，但值为 string literal，不再是 enum）。 */
+export type EventType = AgentEvent["type"];
+
+// ── per-variant data 形状（均 plain 可序列化，live==persisted by construction）──
+
+export interface ToolEventData {
+    name: string;
+    args: unknown;
+    result: string;
+}
+export interface ToolStartData {
+    name: string;
+    args: unknown;
+}
+export interface ToolArgProgressData {
+    bytes: number;
+    name?: string;
+}
+export interface UsageEventData {
+    prompt_tokens: number;
+    completion_tokens: number;
+    contextWindow: number;
+}
+export interface CompactEventData {
+    beforeTokens: number;
+    afterTokens: number;
+    auto: boolean;
+    focus?: string | null;
+}
+export interface InteractionEventData {
+    id: string;
+    questions: Array<{
+        question: string;
+        header?: string;
+        options?: string[];
+        multiSelect?: boolean;
+    }>;
 }
 
 /** durable 事件集：持久化到 session JSONL，作 reload UI 真值（SPEC-030 B-004/I-005）。
  *  ephemeral（AssistantDelta/ToolStart/ToolProgress/ToolArgProgress/System/Planning/Interaction）
  *  live-only 不持久——deltas/progress 是实时 UX，reload 不重建。 */
 export const DURABLE_TYPES: ReadonlySet<EventType> = new Set<EventType>([
-    EventType.USER,
-    EventType.ITERATION,
-    EventType.THINKING,
-    EventType.ASSISTANT,
-    EventType.TOOL,
-    EventType.USAGE,
-    EventType.COMPACT,
-    EventType.ERROR,
-    EventType.WARNING,
-    EventType.DONE,
-    EventType.STOPPED,
+    "User",
+    "Iteration",
+    "Thinking",
+    "Assistant",
+    "Tool",
+    "Usage",
+    "Compact",
+    "Error",
+    "Warning",
+    "Done",
+    "Stopped",
 ]);
 
 /**
  * assistant message 的非标准 sidecar（命名空间化，避免和 provider 的 reasoning_content 字段撞）。
- * reasoning：思考内容全文，随 message 落盘，回放时重建 Thinking 事件（SPEC-017）。
+ * reasoning：思考内容全文，随 message 落盘；durable Thinking 事件已持久（SPEC-030 P2），不再需从 message 重建。
  * callLLM 入口剥离 _meta，发给 provider 的 messages 不含此字段。
  */
 export interface MessageMeta {
@@ -58,20 +110,6 @@ export interface MessageMeta {
 export interface LlmUsage {
     prompt_tokens: number;
     completion_tokens: number;
-}
-
-export interface AgentEvent {
-    timestamp: number;
-    type: EventType;
-    message: string;
-    data?: any;
-    /** 发出该事件的 agent 名(主 agent 省略;sub-agent 用 def.name,如 "plan") */
-    author?: string;
-    /** 一次 sub-agent 调用的分组 id,前端据此折叠展示 */
-    runId?: string;
-    /** 一次推理回合的分组 id:同一回合的 ITERATION/ASSISTANT_DELTA/ASSISTANT/TOOL 事件共用,
-     *  前端据此把 "assistant 文本 + 紧随的工具调用" 组成块状展示 */
-    turnId?: string;
 }
 
 export enum AgentStatus {
@@ -85,14 +123,10 @@ export interface InteractionRequest {
     payload?: any;
 }
 
-export interface AgentEventPayload {
-    type: EventType;
-    message: string;
-    data?: any;
-    author?: string;
-    runId?: string;
-    turnId?: string;
-}
+/** submit 入参：AgentEvent 去掉 timestamp（submit 盖 timestamp）。
+ *  distributive Omit——对 discriminated union 逐成员去 timestamp，保留各 variant 的 data/error。 */
+type DistributiveOmit<T, K extends PropertyKey> = T extends T ? Omit<T, K> : never;
+export type AgentEventPayload = DistributiveOmit<AgentEvent, "timestamp">;
 
 /**
  * 可序列化的错误结构。Error 实例的 message/stack/name 不可枚举（JSON.stringify(err)={}），

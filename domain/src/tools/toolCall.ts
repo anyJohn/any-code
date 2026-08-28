@@ -73,13 +73,13 @@ export async function toolCall(
         // emitProgress：注入流式回调，bash 等工具逐 chunk 上抛 TOOL_PROGRESS（turnId 闭包绑定）。
         ctx.emitProgress = (chunk: string) => {
             ctx.eventStream.submit({
-                type: EventType.TOOL_PROGRESS,
+                type: "ToolProgress",
                 message: chunk,
                 turnId,
             });
         };
         ctx.eventStream.submit({
-            type: EventType.TOOL_START,
+            type: "ToolStart",
             message: funcName,
             data: { name: funcName, args: truncateArgs(args) },
             turnId,
@@ -95,7 +95,7 @@ export async function toolCall(
         // 一次工具调用的完整画像：name + args + result 都进事件流。
         // 这是未来权限/黑白名单/bypass 的天然拦截点——在此处做策略决策即可。
         ctx.eventStream.submit({
-            type: EventType.TOOL,
+            type: "Tool",
             message: funcName,
             data: { name: funcName, args: truncateArgs(args), result: toolOutput },
             turnId,

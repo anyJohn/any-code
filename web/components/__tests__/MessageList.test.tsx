@@ -34,7 +34,7 @@ describe("MessageList 活动工具卡片（SPEC-018 AC-003）", () => {
             ev("User", "run it"),
             ev("Iteration", "i1", { turnId: "t1" }),
             ev("Assistant", "let me run", { turnId: "t1" }),
-            ev("ToolStart", "bash", { turnId: "t1", data: { name: "bash" } }),
+            ev("ToolStart", "bash", { turnId: "t1", data: { name: "bash", args: {} } }),
             ev("ToolProgress", "line1\n", { turnId: "t1" }),
             ev("ToolProgress", "line2\n", { turnId: "t1" }),
         ];
@@ -120,7 +120,7 @@ describe("MessageList typing（SPEC-018 AC-004）", () => {
                 turnId: "t1",
                 data: { bytes: 4096 },
             }),
-            ev("ToolStart", "write", { turnId: "t1", data: { name: "write" } }),
+            ev("ToolStart", "write", { turnId: "t1", data: { name: "write", args: {} } }),
         ];
         render(<MessageList {...baseProps(events, true)} />);
         expect(screen.queryByText(/正在生成/)).toBeNull();
