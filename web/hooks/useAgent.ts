@@ -138,7 +138,18 @@ export function useAgent(
                         // ask_question 阻塞中：拦截不入 events，设 pendingInteraction 驱动模态
                         setPendingInteraction(e.data as InteractionData);
                     } else {
-                        setEvents((prev) => [...prev, { ...e, id: nextId("live") }]);
+                        setEvents((prev) => {
+                            // 去重：server 的 User 事件与乐观插入的 user 气泡重复（同 message），跳过
+                            if (
+                                e.type === "User" &&
+                                prev.length > 0 &&
+                                prev[prev.length - 1].type === "User" &&
+                                prev[prev.length - 1].message === e.message
+                            ) {
+                                return prev;
+                            }
+                            return [...prev, { ...e, id: nextId("live") }];
+                        });
                     }
                     if (TERMINAL.has(e.type)) {
                         setPending(false);

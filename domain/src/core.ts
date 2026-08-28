@@ -30,6 +30,9 @@ export async function agentLoop(
     };
     messages.push(userMsg);
     await onMessage?.(userMsg);
+    // User 事件入流（durable，作 reload 真值）。web live 端已乐观插入 user 气泡，
+    // 此 server 事件会被 web 去重（同 message），不重复显示。
+    ctx.eventStream.submit({ type: "User", message: task });
     let lastUsage: { prompt_tokens: number } | undefined;
     for (let i = 0; i < maxIter; i++) {
         // 迭代边界先查中断：stop() 已 abort 的话直接返回，不发起 LLM 调用
