@@ -62,12 +62,10 @@ export function StatusBar({
     let promptTokens = 0;
     let ctxWindow = status.contextWindow;
     for (let i = events.length - 1; i >= 0; i--) {
-        if (events[i].type === "Usage") {
-            const d = events[i].data as UsageData | undefined;
-            if (d) {
-                promptTokens = d.prompt_tokens;
-                ctxWindow = d.contextWindow || status.contextWindow;
-            }
+        const ev = events[i];
+        if (ev.type === "Usage") {
+            promptTokens = ev.data.prompt_tokens;
+            ctxWindow = ev.data.contextWindow || status.contextWindow;
             break;
         }
     }

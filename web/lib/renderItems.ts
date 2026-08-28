@@ -11,7 +11,7 @@ export interface TurnItem {
      *  驱动 ThinkingBlock 计时器停止——避免"思考后直接调工具无 content"或"长 bash 执行期"
      *  里 assistant/tools 未就位导致计时器空跑到 30s。 */
     thinkingFinished?: boolean;
-    tools: AgentEvent[];
+    tools: Extract<AgentEvent, { type: "Tool" }>[];
 }
 export interface SubagentItem {
     kind: "subagent";

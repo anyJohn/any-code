@@ -15,6 +15,7 @@ import { apiJson } from "@/lib/api";
 import {
     nextId,
     type AgentEvent,
+    type AgentEventPayload,
     type HistoryMessage,
 } from "@/lib/sseEvents";
 
@@ -61,7 +62,7 @@ export default function ChatPage() {
             // 真实 sessionId：取历史（含 projectKey）直读盘
             const data = await apiJson<{
                 messages: HistoryMessage[];
-                events: Omit<AgentEvent, "id">[];
+                events: AgentEventPayload[];
                 projectKey: string;
             }>(`/api/sessions/${routeSessionId}/history`);
             if (cancelled) return;
@@ -79,10 +80,9 @@ export default function ChatPage() {
                 rootPath: meta?.rootPath ?? selected?.rootPath ?? data.projectKey,
                 projectKey: data.projectKey,
                 sessionId: routeSessionId,
-                initialEvents: (data.events ?? []).map((e) => ({
-                    ...e,
-                    id: nextId("hist"),
-                })),
+                initialEvents: (data.events ?? []).map(
+                    (e) => ({ ...e, id: nextId("hist") } as AgentEvent)
+                ),
             });
         })();
         return () => {

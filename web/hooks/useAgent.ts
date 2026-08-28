@@ -1,21 +1,17 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { type AgentEvent, nextId } from "@/lib/sseEvents";
+import {
+    type AgentEvent,
+    type AgentEventPayload,
+    type InteractionData,
+    type InteractionQuestion,
+    nextId,
+} from "@/lib/sseEvents";
+// InteractionData/InteractionQuestion 定义于 sseEvents（AgentEvent union 引用），re-export 保 InteractionModal import 不变。
+export type { InteractionData, InteractionQuestion };
 
 const TERMINAL = new Set(["Done", "Error", "Stopped"]);
-
-/** ask_question INTERACTION 事件 data 形状（domain EventType.Interaction）。 */
-export interface InteractionQuestion {
-    question: string;
-    header?: string;
-    options?: string[];
-    multiSelect?: boolean;
-}
-export interface InteractionData {
-    id: string;
-    questions: InteractionQuestion[];
-}
 
 /**
  * 解析 SSE 流：读 fetch body，按 \n\n 分帧，取 data: 行 JSON.parse。
@@ -23,7 +19,7 @@ export interface InteractionData {
  */
 async function* parseSSE(
     body: ReadableStream<Uint8Array>
-): AsyncGenerator<Omit<AgentEvent, "id">> {
+): AsyncGenerator<AgentEventPayload> {
     const reader = body.getReader();
     const dec = new TextDecoder();
     let buf = "";
@@ -128,6 +124,7 @@ export function useAgent(
                             timestamp: Date.now(),
                             type: "Error",
                             message: `运行失败 (HTTP ${res.status})`,
+                            error: { message: `HTTP ${res.status}`, name: "Error" },
                         },
                     ]);
                     setPending(false);
@@ -148,7 +145,7 @@ export function useAgent(
                             ) {
                                 return prev;
                             }
-                            return [...prev, { ...e, id: nextId("live") }];
+                            return [...prev, { ...e, id: nextId("live") } as AgentEvent];
                         });
                     }
                     if (TERMINAL.has(e.type)) {
@@ -179,6 +176,10 @@ export function useAgent(
                             message: `运行失败: ${
                                 err instanceof Error ? err.message : String(err)
                             }`,
+                            error: {
+                                message: err instanceof Error ? err.message : String(err),
+                                name: err instanceof Error ? err.name : "Error",
+                            },
                         },
                     ]);
                 }

@@ -4,17 +4,18 @@ import { MessageList } from "@/components/MessageList";
 import { toRenderItems } from "@/lib/renderItems";
 import type { AgentEvent } from "@/lib/sseEvents";
 
-const ev = (
-    type: AgentEvent["type"],
+const ev = <T extends AgentEvent["type"]>(
+    type: T,
     message: string,
-    extra: Partial<AgentEvent> = {}
-): AgentEvent => ({
-    id: extra.id ?? `e-${type}-${message}`,
-    timestamp: 0,
-    type,
-    message,
-    ...extra,
-});
+    extra: Partial<Extract<AgentEvent, { type: T }>> = {}
+): Extract<AgentEvent, { type: T }> =>
+    ({
+        id: extra.id ?? `e-${type}-${message}`,
+        timestamp: 0,
+        type,
+        message,
+        ...extra,
+    } as Extract<AgentEvent, { type: T }>);
 
 const baseProps = (events: AgentEvent[], pending: boolean) => ({
     renderItems: toRenderItems(events),

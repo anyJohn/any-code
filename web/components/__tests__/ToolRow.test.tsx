@@ -5,7 +5,9 @@ import type { AgentEvent } from "@/lib/sseEvents";
 
 // SPEC-016 AC-006: ToolRow 折叠——默认折叠显示摘要，展开显示 result
 describe("ToolRow（SPEC-016 AC-006）", () => {
-    const toolEvent = (over: Partial<AgentEvent> = {}): AgentEvent =>
+    const toolEvent = (
+        over: Partial<Extract<AgentEvent, { type: "Tool" }>> = {}
+    ): Extract<AgentEvent, { type: "Tool" }> =>
         ({
             id: "t1",
             timestamp: 0,
@@ -13,7 +15,7 @@ describe("ToolRow（SPEC-016 AC-006）", () => {
             message: "bash",
             data: { name: "bash", args: { command: "ls" }, result: "file1\nfile2" },
             ...over,
-        }) as AgentEvent;
+        } as Extract<AgentEvent, { type: "Tool" }>);
 
     it("默认折叠——摘要可见，result 不可见", () => {
         render(<ToolRow event={toolEvent()} open={false} onToggle={() => {}} />);

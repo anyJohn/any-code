@@ -1,50 +1,41 @@
-// 前端事件视图：镜像 domain 的 EventType + per-variant data 形状（SPEC-030 AC-012）。
-// 用 flat interface（data 为 typed union，非 unknown；Error/Warning 经 error 字段）——
-// 不用 discriminated union：web 经 {...e, id} spread 注入 id，discriminated union 的 spread
-// 会丢失 variant 判别，摩擦过大；flat + typed-data 在零消费端 churn 下满足"无 data?:unknown"。
+// 前端事件视图：镜像 domain 的 AgentEvent discriminated union（SPEC-030 AC-012，full）。
+// 加客户端 id（SSE 无 id，前端 nextId 补）。data/error 均 typed per-variant（无 data?:unknown）。
+// spread 注入 id 处用 `as AgentEvent`（discriminated union 的 spread 丢判别，cast 还原）。
 
-export type EventType =
-    | "System"
-    | "User"
-    | "Tool"
-    | "ToolStart"
-    | "ToolProgress"
-    | "ToolArgProgress"
-    | "Iteration"
-    | "AssistantDelta"
-    | "Assistant"
-    | "Thinking"
-    | "Usage"
-    | "Planning"
-    | "Compact"
-    | "Interaction"
-    | "Error"
-    | "Warning"
-    | "Done"
-    | "Stopped";
-
-export interface AgentEvent {
-    id: string; // 客户端生成的唯一 key（历史与实时事件混排，timestamp 可能撞）
+interface EventBase {
+    id: string;
     timestamp: number;
-    type: EventType;
     message: string;
-    /** per-variant data（typed union，非 unknown）。Error/Warning 用 error 字段，不放 data。 */
-    data?:
-        | ToolCallData
-        | UsageData
-        | CompactData
-        | InteractionData
-        | ToolStartData
-        | ToolArgProgressData;
-    /** Error/Warning 事件的可序列化错误结构（镜像 domain ErrorPayload）。 */
-    error?: ErrorPayload;
     turnId?: string;
     author?: string;
     runId?: string;
 }
 
-/** SSE/payload：AgentEvent 去掉 id（flat interface，Omit 直接可用）。 */
-export type AgentEventPayload = Omit<AgentEvent, "id">;
+export type AgentEvent =
+    | (EventBase & { type: "System" })
+    | (EventBase & { type: "User" })
+    | (EventBase & { type: "Iteration" })
+    | (EventBase & { type: "Thinking" })
+    | (EventBase & { type: "Assistant" })
+    | (EventBase & { type: "AssistantDelta" })
+    | (EventBase & { type: "Tool"; data: ToolCallData })
+    | (EventBase & { type: "ToolStart"; data: ToolStartData })
+    | (EventBase & { type: "ToolProgress" })
+    | (EventBase & { type: "ToolArgProgress"; data: ToolArgProgressData })
+    | (EventBase & { type: "Usage"; data: UsageData })
+    | (EventBase & { type: "Compact"; data: CompactData })
+    | (EventBase & { type: "Interaction"; data: InteractionData })
+    | (EventBase & { type: "Planning" })
+    | (EventBase & { type: "Error"; error: ErrorPayload })
+    | (EventBase & { type: "Warning"; error?: ErrorPayload })
+    | (EventBase & { type: "Done" })
+    | (EventBase & { type: "Stopped" });
+
+export type EventType = AgentEvent["type"];
+
+/** SSE/payload：AgentEvent 去掉 id（distributive Omit，保 variant data/error）。 */
+type DistributiveOmit<T, K extends PropertyKey> = T extends T ? Omit<T, K> : never;
+export type AgentEventPayload = DistributiveOmit<AgentEvent, "id">;
 
 // ── per-variant data 形状（镜像 domain type.ts）──
 
@@ -98,7 +89,6 @@ export interface HistoryMessage {
         function: { name: string; arguments?: string };
     }>;
     tool_call_id?: string;
-    /** assistant message 的非标准 sidecar（SPEC-017）：reasoning（durable Thinking 事件已持久，不再需从 message 重建） */
     _meta?: { reasoning?: string };
 }
 

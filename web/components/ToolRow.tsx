@@ -18,7 +18,7 @@ export function ToolRow({
     onToggle,
     compact,
 }: {
-    event: AgentEvent;
+    event: Extract<AgentEvent, { type: "Tool" }>;
     open: boolean;
     onToggle: () => void;
     compact?: boolean;

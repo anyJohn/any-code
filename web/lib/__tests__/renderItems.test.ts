@@ -6,17 +6,18 @@ import {
 } from "@/lib/renderItems";
 import type { AgentEvent } from "@/lib/sseEvents";
 
-const ev = (
-    type: AgentEvent["type"],
+const ev = <T extends AgentEvent["type"]>(
+    type: T,
     message: string,
-    extra: Partial<AgentEvent> = {}
-): AgentEvent => ({
-    id: extra.id ?? `e-${type}-${message}`,
-    timestamp: 0,
-    type,
-    message,
-    ...extra,
-});
+    extra: Partial<Extract<AgentEvent, { type: T }>> = {}
+): Extract<AgentEvent, { type: T }> =>
+    ({
+        id: extra.id ?? `e-${type}-${message}`,
+        timestamp: 0,
+        type,
+        message,
+        ...extra,
+    } as Extract<AgentEvent, { type: T }>);
 
 describe("groupByTurn (TEST-005 TC-005.3, B-003)", () => {
     it("Iteration 开新回合，Assistant+Tool 归块，System 不归回合", () => {

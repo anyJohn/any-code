@@ -161,7 +161,10 @@ export function MessageList({
                         );
                     }
                     // System / Error / Warning —— Error/Warning 经 error 字段（domain serializeError）
-                    const errorData = e.error;
+                    const errorData =
+                        e.type === "Error" || e.type === "Warning"
+                            ? e.error
+                            : undefined;
                     return (
                         <div
                             key={e.id}
