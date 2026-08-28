@@ -23,6 +23,7 @@ export enum EventType {
     COMPACT = "Compact",
     INTERACTION = "Interaction",
     ERROR = "Error",
+    WARNING = "Warning",
     DONE = "Done",
     STOPPED = "Stopped",
 }
@@ -74,4 +75,27 @@ export interface AgentEventPayload {
     author?: string;
     runId?: string;
     turnId?: string;
+}
+
+/**
+ * 可序列化的错误结构。Error 实例的 message/stack/name 不可枚举（JSON.stringify(err)={}），
+ * domain 在发出 Error/Warning 事件时即用它转成 plain object——live==persisted by construction，
+ * adapter 不再做 replacer（SPEC-030 B-002 / I-001）。
+ */
+export interface ErrorPayload {
+    message: string;
+    name: string;
+    stack?: string;
+    cause?: string;
+}
+
+/** 把任意 thrown 值转成可序列化 ErrorPayload。Error 提取 message/name/stack/cause；其余取 String。 */
+export function serializeError(err: unknown): ErrorPayload {
+    if (err instanceof Error) {
+        const payload: ErrorPayload = { message: err.message, name: err.name };
+        if (err.stack) payload.stack = err.stack;
+        if (err.cause) payload.cause = String(err.cause);
+        return payload;
+    }
+    return { message: String(err), name: "Error" };
 }

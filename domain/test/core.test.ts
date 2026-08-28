@@ -3,7 +3,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // 固定桩 mock callLLM：测 agentLoop 控制流，不调真 LLM
 vi.mock("../src/llm", () => ({ callLLM: vi.fn() }));
 
+// mock compactMessages：测压缩失败路径（SPEC-030 AC-004/005），保留 AUTO_COMPACT_THRESHOLD 真值
+vi.mock("../src/compact", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("../src/compact")>();
+    return { ...actual, compactMessages: vi.fn() };
+});
+
 import { callLLM } from "../src/llm";
+import { compactMessages } from "../src/compact";
 import { agentLoop } from "../src/core";
 import type { ChatMessage } from "../src/type";
 import type { ToolContext } from "../src/context";
@@ -109,6 +116,52 @@ describe("agentLoop（core.ts）", () => {
 
         expect(vi.mocked(callLLM)).not.toHaveBeenCalled();
         expect(res.result).toBe("[stopped]");
+    });
+
+    it("SPEC-030 AC-004/005：压缩失败 → 发 Warning（非终态）+ 循环继续", async () => {
+        vi.mocked(compactMessages).mockRejectedValue(new Error("compact boom"));
+        const handler = vi.fn().mockResolvedValue("tool-out");
+        const tools = [mkTool("fakeTool", handler)];
+        // i=0：带 tool_calls + usage>=75%*contextWindow（800>=750）→ i=1 触发自动压缩
+        vi.mocked(callLLM)
+            .mockResolvedValueOnce({
+                role: "assistant",
+                content: null,
+                tool_calls: [toolCallReq("fakeTool")],
+                usage: { prompt_tokens: 800, completion_tokens: 10 },
+            } as never)
+            // i=1（压缩失败后继续）：无 tool_calls → 终态
+            .mockResolvedValueOnce(assistantMsg("done") as never);
+
+        const submit = vi.fn();
+        const ctx: ToolContext = {
+            workspace: {} as never,
+            eventStream: { submit },
+            signal: new AbortController().signal,
+            llm: { contextWindow: 1000 } as never,
+        };
+        const messages: ChatMessage[] = [];
+        const res = await agentLoop(
+            "task",
+            messages,
+            30,
+            undefined,
+            undefined,
+            ctx,
+            tools
+        );
+
+        // AC-004：压缩失败发 Warning（非 Error），data 是 serializeError 的 ErrorPayload
+        const warning = submit.mock.calls.find(
+            ([e]) => (e as { type: string }).type === "Warning"
+        );
+        expect(warning).toBeTruthy();
+        expect(
+            (warning![0] as { data: { message: string } }).data.message
+        ).toBe("compact boom");
+        // AC-005：循环继续——压缩失败未终止，callLLM 被调 2 次，result=done
+        expect(vi.mocked(callLLM)).toHaveBeenCalledTimes(2);
+        expect(res.result).toBe("done");
     });
 
     it("AC-004 达 maxIter → 停止不无限循环", async () => {

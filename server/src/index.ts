@@ -13,6 +13,7 @@ import {
     resolveInteraction,
     runRipgrep,
     SessionService,
+    type AgentEvent,
     type ConfigShape,
     type SessionKey,
     type Workspace,
@@ -28,6 +29,14 @@ import { runningSessions } from "./singleFlight.js";
  * 见 DEC-007 / SPEC-028。
  */
 const TERMINAL = new Set(["Done", "Error", "Stopped"]);
+
+/** 需持久化到 session JSONL 的事件类型（消息无法重建的那类；Error 等）。
+ *  其余事件（Iteration/AssistantDelta/Tool/Usage/…）不入盘：User/Assistant/Tool
+ *  由 messages 重建，deltas/usage 刷新即丢——只有"异常终态"值得留存。 */
+const DURABLE = new Set(["Error"]);
+
+// events 已可序列化 by construction（domain serializeError 把 Error 转 plain ErrorPayload），
+// SSE 与持久化均直接 JSON.stringify，无需 replacer（SPEC-030 B-002/B-010/I-001）。
 
 const MIME: Record<string, string> = {
     ".html": "text/html; charset=utf-8",
@@ -296,22 +305,8 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
                 const send = (e: unknown) => {
                     if (closed) return;
                     try {
-                        // Error 对象的 message/stack/name 不可枚举，JSON.stringify(err) = {}；
-                        // replacer 在序列化边界提取，让 interface 层拿到完整错误结构体。
                         controller.enqueue(
-                            enc.encode(
-                                `data: ${JSON.stringify(e, (_k, v) => {
-                                    if (v instanceof Error) {
-                                        return {
-                                            message: v.message,
-                                            name: v.name,
-                                            stack: v.stack,
-                                            ...(v.cause ? { cause: String(v.cause) } : {}),
-                                        };
-                                    }
-                                    return v;
-                                })}\n\n`,
-                            ),
+                            enc.encode(`data: ${JSON.stringify(e)}\n\n`),
                         );
                     } catch {
                         // controller 已关
@@ -342,8 +337,21 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
                 }, 15000);
 
                 for (const e of agent.eventHistory$.value) send(e);
-                sub = agent.eventStream$.subscribe((e: { type?: string }) => {
+                sub = agent.eventStream$.subscribe(async (e: AgentEvent) => {
                     send(e);
+                    // 持久化可留存事件（Error）到 session JSONL：e 已可序列化（domain serializeError），
+                    // 直接写盘，live==persisted shape。仅 live 新事件写，replay 不重复。
+                    if (e?.type && DURABLE.has(e.type)) {
+                        const key: SessionKey = {
+                            projectKey: agent.getProjectKey(),
+                            sessionId,
+                        };
+                        try {
+                            await agent.getService().appendEvent(key, e);
+                        } catch {
+                            // 写盘失败不阻断流；live 事件已送达前端
+                        }
+                    }
                     if (e?.type && TERMINAL.has(e.type)) finish();
                 });
                 // 客户端断开（关页面/abort）→ finish → destroy → 真停

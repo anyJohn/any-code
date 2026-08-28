@@ -5,6 +5,7 @@ import {
     SessionMeta,
     createSession,
     entriesToSession,
+    eventToEntry,
     metaEntry,
     messageToEntry,
     titleMetaEntry,
@@ -65,10 +66,10 @@ export class SessionService {
         await this.store.append(key, [messageToEntry(msg), touchMetaEntry()]);
     }
 
-    /** 追加一条非消息事件（如 Error）到 session JSONL，同时刷 touch meta。 */
+    /** 追加一条非消息事件（如 Error）到 session JSONL（与 touch meta 一次写，原子）。
+     *  data 应已是可序列化结构（Error 由 adapter 边界提取，不在 domain 内处理）。 */
     async appendEvent(key: SessionKey, event: AgentEvent): Promise<void> {
-        await this.store.appendEvent(key, event);
-        await this.store.append(key, [touchMetaEntry()]);
+        await this.store.append(key, [eventToEntry(event), touchMetaEntry()]);
     }
 
     /** 更新标题：追加一条新 meta（entriesToSession 取末条 meta 为准） */

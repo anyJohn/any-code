@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { callLLM } from "./llm";
 import { toolCall } from "./tools/toolCall";
 import { AgentLoopResult, ChatMessage } from "./type";
-import { EventType } from "./type";
+import { EventType, serializeError } from "./type";
 import type { ToolContext } from "./context";
 import type { Tool } from "./tools";
 import { compactMessages, AUTO_COMPACT_THRESHOLD } from "./compact";
@@ -65,12 +65,14 @@ export async function agentLoop(
                 if (ctx.signal.aborted) {
                     return { result: "[stopped]", messages };
                 }
-                // 压缩失败不阻断主循环：记错继续原 messages（下轮可能再试）
+                // 压缩失败不阻断主循环：发 Warning（非终态），循环继续原 messages（下轮可能再试）。
+                // web TERMINAL 不含 Warning → 不会误终止 run（SPEC-030 B-003/I-003，修 latent bug）。
                 ctx.eventStream.submit({
-                    type: EventType.ERROR,
+                    type: EventType.WARNING,
                     message: `自动压缩失败：${
                         err instanceof Error ? err.message : String(err)
                     }`,
+                    data: serializeError(err),
                 });
             }
         }

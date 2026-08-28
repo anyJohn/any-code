@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { mkdtempSync, rmSync, existsSync, promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,7 +11,7 @@ const ORIG_HOME = process.env.HOME;
 import { LocalSessionStore } from "../src/session/sessionStore";
 import { SessionService } from "../src/session/sessionService";
 import { entriesToSession, projectKeyOf } from "../src/session/session";
-import type { ChatMessage } from "../src/type";
+import { EventType, type ChatMessage } from "../src/type";
 
 const PK = projectKeyOf("/ws");
 const u = (c: string): ChatMessage => ({ role: "user", content: c }) as never;
@@ -76,5 +76,62 @@ describe("replaceMessages（AC-005 原子重写）", () => {
         expect(msgs).toHaveLength(2);
         expect(msgs.every((e) => (e as { message: ChatMessage }).message.role !== "system")).toBe(true);
         void entriesToSession;
+    });
+});
+
+describe("appendEvent（Error 等非消息事件持久化 + 恢复）", () => {
+    let svc: SessionService;
+    let home: string;
+    beforeEach(() => {
+        home = mkdtempSync(join(tmpdir(), "anycode-event-"));
+        process.env.HOME = home;
+        svc = new SessionService(new LocalSessionStore());
+    });
+    afterEach(() => {
+        rmSync(home, { recursive: true, force: true });
+        if (ORIG_HOME === undefined) delete process.env.HOME;
+        else process.env.HOME = ORIG_HOME;
+    });
+
+    it("appendEvent 写入后 resume 能从 session.events 读回（data 原样）", async () => {
+        const session = await svc.create(PK, "err 会话");
+        const key = { projectKey: PK, sessionId: session.id };
+        await svc.appendMessage(key, u("触发崩溃"));
+        const errEvent = {
+            timestamp: 1234,
+            type: EventType.ERROR,
+            message: "Error executing task: 触发崩溃",
+            data: { message: "boom", name: "Error", stack: "at foo:1" },
+        };
+        await svc.appendEvent(key, errEvent);
+
+        const resumed = await svc.resume(PK, session.id);
+        expect(resumed!.events).toHaveLength(1);
+        expect(resumed!.events[0].type).toBe(EventType.ERROR);
+        expect(resumed!.events[0].message).toBe(
+            "Error executing task: 触发崩溃"
+        );
+        expect(resumed!.events[0].data).toEqual({
+            message: "boom",
+            name: "Error",
+            stack: "at foo:1",
+        });
+    });
+
+    it("原子性：event + touchMeta 一次 appendFile（旧实现是两次）", async () => {
+        const session = await svc.create(PK, "t");
+        const key = { projectKey: PK, sessionId: session.id };
+        const appendSpy = vi.spyOn(fs, "appendFile");
+        await svc.appendEvent(key, {
+            timestamp: 1,
+            type: EventType.ERROR,
+            message: "x",
+            data: { message: "x" },
+        });
+        expect(appendSpy).toHaveBeenCalledTimes(1);
+        // 确认落盘条目 = 1 event + 1 touch meta（同批一次写）
+        const entries = (await new LocalSessionStore().load(key))!;
+        expect(entries.filter((e) => e.kind === "event")).toHaveLength(1);
+        appendSpy.mockRestore();
     });
 });

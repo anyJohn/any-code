@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
     contentToString,
+    mergeEvents,
     messagesToEvents,
     type HistoryMessage,
 } from "@/lib/sseEvents";
@@ -161,6 +162,22 @@ describe("toRenderItems (TEST-005 TC-005.4, B-003 sub-agent)", () => {
             expect(c.event.type).toBe("Compact");
             expect(c.event.message).toContain("1000→200");
         }
+    });
+
+    it("Warning 事件成独立 single 项（SPEC-030 B-003，非终态）", () => {
+        const events: AgentEvent[] = [
+            ev("Iteration", "i1", { turnId: "t1" }),
+            ev("Assistant", "a1", { turnId: "t1" }),
+            ev("Warning", "自动压缩失败：compact boom", {
+                data: { message: "compact boom", name: "Error" },
+            }),
+            ev("Iteration", "i2", { turnId: "t2" }),
+        ];
+        const items = toRenderItems(events);
+        // turn(t1) → single(Warning) → turn(t2) —— Warning 非终态，不进 TERMINAL，不结束流
+        expect(items.map((i) => i.kind)).toEqual(["turn", "single", "turn"]);
+        const w = items[1];
+        if (w.kind === "single") expect(w.event.type).toBe("Warning");
     });
 });
 
@@ -324,5 +341,78 @@ describe("formatToolCall (TEST-005 TC-005.5, B-005)", () => {
     });
     it("未知工具 → 返回 name", () => {
         expect(tc("custom", {})).toBe("custom");
+    });
+});
+
+describe("mergeEvents（持久化 event 并入 messages 重建流，按 user 锚定位置）", () => {
+    it("崩溃后重试成功：error 紧跟触发的 User 之后，不漂到末尾", () => {
+        const msgs: HistoryMessage[] = [
+            { role: "user", content: "do x" }, // 崩溃
+            { role: "user", content: "do x" }, // 重试成功
+            { role: "assistant", content: "ok" },
+        ];
+        const persisted = [
+            {
+                timestamp: 100,
+                type: "Error" as const,
+                message: "Error executing task: do x",
+                data: { message: "boom", name: "Error", stack: "at x" },
+            },
+        ];
+        const merged = mergeEvents(messagesToEvents(msgs), persisted);
+        // error 跟在第一个（崩溃的）user 后，而非末尾
+        expect(merged.map((e) => e.type)).toEqual([
+            "User",
+            "Error",
+            "User",
+            "Iteration",
+            "Assistant",
+        ]);
+        const err = merged[1];
+        expect(err.id).toBeTruthy();
+        expect((err.data as { message: string }).message).toBe("boom");
+    });
+
+    it("一条 user 只认领一个 error；多余 error 末尾追加（降级不丢）", () => {
+        const msgs: HistoryMessage[] = [{ role: "user", content: "do x" }];
+        const persisted = [
+            {
+                timestamp: 1,
+                type: "Error" as const,
+                message: "Error executing task: do x",
+                data: {},
+            },
+            {
+                timestamp: 2,
+                type: "Error" as const,
+                message: "Error executing task: do x",
+                data: {},
+            },
+        ];
+        const merged = mergeEvents(messagesToEvents(msgs), persisted);
+        expect(merged.map((e) => e.type)).toEqual(["User", "Error", "Error"]);
+    });
+
+    it("task 抽不出（message 格式不符）→ 末尾追加，不丢事件", () => {
+        const msgs: HistoryMessage[] = [{ role: "user", content: "hi" }];
+        const persisted = [
+            { timestamp: 1, type: "Error" as const, message: "别的格式", data: {} },
+        ];
+        const merged = mergeEvents(messagesToEvents(msgs), persisted);
+        expect(merged.map((e) => e.type)).toEqual(["User", "Error"]);
+    });
+
+    it("无持久化事件 → 原 message 流（补 id）", () => {
+        const msgs: HistoryMessage[] = [
+            { role: "user", content: "hi" },
+            { role: "assistant", content: "yo" },
+        ];
+        const merged = mergeEvents(messagesToEvents(msgs), []);
+        expect(merged.map((e) => e.type)).toEqual([
+            "User",
+            "Iteration",
+            "Assistant",
+        ]);
+        expect(merged.every((e) => e.id)).toBe(true);
     });
 });

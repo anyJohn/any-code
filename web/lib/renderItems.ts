@@ -140,7 +140,8 @@ export function toRenderItems(events: AgentEvent[]): RenderItem[] {
             e.type === "Done" ||
             e.type === "Stopped" ||
             e.type === "Compact" ||
-            e.type === "Error"
+            e.type === "Error" ||
+            e.type === "Warning"
         ) {
             flushMain();
             flushSub();

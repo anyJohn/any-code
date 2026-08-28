@@ -1,13 +1,12 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import type { ChatMessage, AgentEvent } from "../type";
+import type { ChatMessage } from "../type";
 import {
     SessionEntry,
     SessionKey,
     SessionMeta,
     messageToEntry,
-    eventToEntry,
     metaOf,
 } from "./session";
 
@@ -18,7 +17,6 @@ import {
  */
 export interface SessionStore {
     append(key: SessionKey, entries: SessionEntry[]): Promise<void>;
-    appendEvent(key: SessionKey, event: AgentEvent): Promise<void>;
     /** 原子重写整个 session：保留原 title/createdAt，用给定 messages 替换全部消息。 */
     replaceMessages(key: SessionKey, messages: ChatMessage[]): Promise<void>;
     load(key: SessionKey): Promise<SessionEntry[] | null>;
@@ -70,13 +68,6 @@ export class LocalSessionStore implements SessionStore {
         await fs.mkdir(path.dirname(file), { recursive: true });
         const lines = entries.map((e) => JSON.stringify(e)).join("\n") + "\n";
         await fs.appendFile(file, lines, "utf-8");
-    }
-
-    async appendEvent(key: SessionKey, event: AgentEvent): Promise<void> {
-        const file = fileOf(key);
-        await fs.mkdir(path.dirname(file), { recursive: true });
-        const line = JSON.stringify(eventToEntry(event)) + "\n";
-        await fs.appendFile(file, line, "utf-8");
     }
 
     async replaceMessages(

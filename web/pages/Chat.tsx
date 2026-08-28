@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { apiJson } from "@/lib/api";
 import {
+    mergeEvents,
     messagesToEvents,
     type AgentEvent,
     type HistoryMessage,
@@ -61,6 +62,7 @@ export default function ChatPage() {
             // 真实 sessionId：取历史（含 projectKey）直读盘
             const data = await apiJson<{
                 messages: HistoryMessage[];
+                events: Omit<AgentEvent, "id">[];
                 projectKey: string;
             }>(`/api/sessions/${routeSessionId}/history`);
             if (cancelled) return;
@@ -78,7 +80,10 @@ export default function ChatPage() {
                 rootPath: meta?.rootPath ?? selected?.rootPath ?? data.projectKey,
                 projectKey: data.projectKey,
                 sessionId: routeSessionId,
-                initialEvents: messagesToEvents(data.messages),
+                initialEvents: mergeEvents(
+                    messagesToEvents(data.messages),
+                    data.events ?? []
+                ),
             });
         })();
         return () => {

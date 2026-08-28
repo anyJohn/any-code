@@ -20,6 +20,7 @@ export interface AgentEvent {
         | "Compact"
         | "Interaction"
         | "Error"
+        | "Warning"
         | "Done"
         | "Stopped";
     message: string;
@@ -153,4 +154,48 @@ export function messagesToEvents(msgs: HistoryMessage[]): AgentEvent[] {
         // system / tool / unknown 跳过：system 不入盘也不展示；tool 已被 assistant 消费
     }
     return events;
+}
+
+/** Error 事件 message 的固定前缀（domain main.ts catchError: `Error executing task: ${task}`）。
+ *  task 即触发它的用户消息原文（core.ts:28-29 user 消息 content=task）。据此把 error 定位
+ *  到对应 User 之后；格式若变则匹配失败、退回末尾追加（降级而非出错）。 */
+const ERROR_TASK_PREFIX = "Error executing task: ";
+
+/**
+ * 把持久化事件（Error 等消息无法重建的）并入 messagesToEvents 重建流。
+ * messages 无时间戳（messagesToEvents 全 stamp timestamp:0），无法按时间与事件交错。
+ * 退而求其次用内容锚定：Error 的 message 含触发它的用户消息原文，据此把 error 插到
+ * 对应 User 之后——对"崩溃后重试成功"等有后续内容的场景位置正确；匹配不到则末尾追加。
+ */
+export function mergeEvents(
+    messageEvents: AgentEvent[],
+    persisted: Omit<AgentEvent, "id">[]
+): AgentEvent[] {
+    if (persisted.length === 0) return messageEvents;
+    // 抽出每个 error 触发的用户消息原文；非 error / 前缀不符 → undefined（末尾追加）
+    const pending = persisted.map((e) => {
+        const task =
+            e.type === "Error" &&
+            typeof e.message === "string" &&
+            e.message.startsWith(ERROR_TASK_PREFIX)
+                ? e.message.slice(ERROR_TASK_PREFIX.length)
+                : undefined;
+        return { ev: { ...e, id: nextId("hist") } as AgentEvent, task };
+    });
+    const result: AgentEvent[] = [];
+    for (const m of messageEvents) {
+        result.push(m);
+        if (m.type !== "User") continue;
+        // 认领第一条匹配此 user 的 error（每条 user 消息至多对应一个 error）
+        const idx = pending.findIndex(
+            (p) => p.task != null && p.task === m.message
+        );
+        if (idx >= 0) {
+            result.push(pending[idx].ev);
+            pending.splice(idx, 1);
+        }
+    }
+    // 未匹配（抽不出 task / 找不到对应 user）退回末尾追加，保持原顺序
+    for (const p of pending) result.push(p.ev);
+    return result;
 }

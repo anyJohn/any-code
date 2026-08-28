@@ -5,6 +5,7 @@ import {
     ChatMessage,
     EventType,
     InteractionRequest,
+    serializeError,
 } from "./type";
 import { agentLoop } from "./core";
 import { compactMessages } from "./compact";
@@ -286,29 +287,13 @@ class AnyAgent {
                         takeUntil(this.stop$),
                         catchError((err) => {
                             console.error("Error processing task:", err);
+                            // domain 发出即 plain ErrorPayload（serializeError），raw Error 不离开内核；
+                            // live==persisted by construction，adapter 不再 replacer（SPEC-030 B-002/I-001）。
                             this.eventStream.submit({
                                 type: EventType.ERROR,
                                 message: `Error executing task: ${task}`,
-                                data: err,
+                                data: serializeError(err),
                             });
-                            // 持久化 Error 事件到 session JSONL（页面刷新/恢复后可见）。
-                            // Error 对象不可 JSON 序列化，手动提取 message/name/stack。
-                            if (this.sessionKey) {
-                                const errData =
-                                    err instanceof Error
-                                        ? {
-                                              message: err.message,
-                                              name: err.name,
-                                              stack: err.stack,
-                                          }
-                                        : { message: String(err) };
-                                this.service.appendEvent(this.sessionKey, {
-                                    timestamp: Date.now(),
-                                    type: EventType.ERROR,
-                                    message: `Error executing task: ${task}`,
-                                    data: errData,
-                                });
-                            }
                             return of(null);
                         }),
                         finalize(() => {

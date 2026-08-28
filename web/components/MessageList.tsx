@@ -22,6 +22,7 @@ const tagClass: Record<AgentEvent["type"], string> = {
     Compact: "text-amber-600 dark:text-amber-400",
     Interaction: "text-amber-600 dark:text-amber-400",
     Error: "text-destructive",
+    Warning: "text-amber-600 dark:text-amber-400",
     Done: "text-muted-foreground",
     Stopped: "text-muted-foreground",
 };
