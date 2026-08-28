@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 
-vi.mock("next/navigation", () => ({
-    useRouter: () => ({ push: vi.fn() }),
+vi.mock("react-router-dom", () => ({
+    useNavigate: () => () => {},
 }));
 
 import { useCommand } from "@/hooks/useCommand";

@@ -184,32 +184,27 @@ info "pnpm install（可能数分钟；卡住可 Ctrl+C 后 ANYCODE_MIRROR=cn �
 # CI=true：切换 nodeLinker（isolated→hoisted）等场景 pnpm 要清旧 node_modules，
 # 非交互（curl|bash 无 TTY）时默认 ABORTED_REMOVE_MODULES_DIR；CI 模式直接清理不阻塞。
 CI=true pnpm install --frozen-lockfile
-info "构建 web（next build → standalone）…"
+info "构建 web（vite build → 静态 dist）…"
 pnpm --filter @any-code/web build
+info "构建 server（esbuild → 自包含 server.mjs）…"
+pnpm --filter @any-code/server build
 
-# ---- 4b. standalone post-process：vendor rg / 拷 static / 删 build-only 依赖 ----
-info "post-process standalone..."
-# 1. vendor rg 二进制（standalone 不含 @vscode/ripgrep 平台二进制；直接 find 定位，避开 ESM require 问题）
+# ---- 4b. vendor rg / 删 build-only 依赖 ----
+info "post-process..."
+# vendor rg 二进制：server bundle externalize 了 @vscode/ripgrep（原生二进制），
+# 运行时靠 launcher 注入 ANYCODE_RG_PATH 指向此处（domain ripgrep.ts 降级到此）。
 RG_DIR="$ANYCODE_HOME/runtime/rg"
 mkdir -p "$RG_DIR"
-RG_SRC="$(find "$APP/node_modules/.pnpm" -type f \( -name rg -o -name rg.exe \) 2>/dev/null | head -1)"
+# install.sh 仅 Linux（Windows 走 install.ps1）：找 linux rg 二进制（-name rg，非 rg.exe）。
+# domain 同时 pin 了 linux + win32 ripgrep 平台包，-name rg 只匹配 linux 二进制，避免误选 rg.exe。
+RG_SRC="$(find "$APP/node_modules" -type f -name rg -path '*ripgrep*' 2>/dev/null | head -1)"
 if [ -n "$RG_SRC" ] && [ -f "$RG_SRC" ]; then
     cp "$RG_SRC" "$RG_DIR/$(basename "$RG_SRC")"; chmod +x "$RG_DIR/$(basename "$RG_SRC")"
 else
     err "未找到 ripgrep 二进制（@vscode/ripgrep 平台包）"
 fi
-# 2. 拷 static + public 进 standalone（server.js 从 standalone/web/.next/static 服务）
-STANDALONE_WEB="$APP/web/.next/standalone/web"
-mkdir -p "$STANDALONE_WEB/.next"
-cp -r "$APP/web/.next/static" "$STANDALONE_WEB/.next/static"
-[ -d "$APP/web/public" ] && cp -r "$APP/web/public" "$STANDALONE_WEB/public"
-# 3. 只留 .next/standalone（运行时）；删其余 build traces（~280MB）
-for d in "$APP/web/.next"/*; do
-    [ "$(basename "$d")" = "standalone" ] && continue
-    safe_rm "$d"
-done
-# 4. 删 build-only node_modules（standalone 自包含；~700MB）。safe_rm 锚定守卫。
-#    保留 pnpm（~/.anycode/runtime/pnpm）：未来 anycode update 需要它重建。
+# 删 build-only node_modules（web dist 静态 + server bundle 自包含，运行时不需 node_modules；~700MB）。
+# safe_rm 锚定守卫。保留 pnpm（~/.anycode/runtime/pnpm）：未来 anycode update 需要它重建。
 safe_rm "$APP/node_modules"
 
 # ---- 5. 注册 anycode 到 PATH (generate thin sh shim) ----

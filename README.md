@@ -97,7 +97,8 @@ mcp:                                    # 可选：全局 MCP servers（项目�
 git clone https://github.com/anyJohn/any-code.git any-code
 cd any-code
 pnpm install
-pnpm dev:web          # Web 开发模式（Next.js dev，127.0.0.1:3000）
+pnpm dev:web          # Vite dev（5173），proxy /api → 127.0.0.1:3000
+pnpm dev:server       # hono server dev（tsx watch，127.0.0.1:3000）
 # 或 pnpm dev:tui / pnpm dev:domain
 ```
 
@@ -108,7 +109,7 @@ pnpm build            # 构建所有包（pnpm -r build）
 pnpm test             # 运行所有测试（pnpm -r test）
 ```
 
-> 改 domain 源码后，Next.js dev 会经 `transpilePackages` 重新编译 domain；偶发缓存可 `rm -rf web/.next` 重启。
+> dev：`pnpm dev:server`（tsx watch）+ `pnpm dev:web`（vite 5173，proxy `/api`→3000）；改 domain 源码后 tsx watch 自动重启 server。
 
 ## 架构 · Architecture
 
@@ -117,7 +118,8 @@ monorepo（pnpm workspace）：
 ```text
 any-code/
 ├── domain/   @any-code/domain   核心 Agent 逻辑（纯 ESM，对外暴露 AnyAgent）
-├── web/      @any-code/web       Web UI（Next.js 15 + React 19 + Tailwind v4 + shadcn/ui）
+├── server/   @any-code/server   hono node server（HTTP driving adapter，14 路由，import domain）
+├── web/      @any-code/web       Web UI（Vite SPA + React 19 + react-router + Tailwind v4 + shadcn/ui）
 ├── tui/      @any-code/tui       终端 UI（Ink / React 19，开发中）
 └── build/    安装脚本与启动器（一行安装）
 ```
@@ -142,7 +144,7 @@ submit(task) ──→ task$(Subject) ──→ concatMap ──→ executeTask
             → event$ / history$ → 订阅者（Web SSE / TUI / CLI）
 ```
 
-**Web 数据流：** 浏览器 `EventSource` 连 `POST /api/sessions/:id/run`（SSE 流）提交任务并接增量事件。服务端 `/run` 每 request 创建一个 `AnyAgent`（`AnyAgent.create`），单飞（同一 session 并发跑返 409），终态或客户端断开即 `destroy()` 并 abort 在途 LLM。Next.js App Router（`app/api/*/route.ts`）经 `transpilePackages` 内联打包 domain 的 TS 源码。
+**Web 数据流：** 浏览器 `fetch`+`ReadableStream` 连 `POST /api/sessions/:id/run`（SSE 流）提交任务并接增量事件。服务端 `/run`（`server/src/index.ts`，hono）每 request 创建一个 `AnyAgent`（`AnyAgent.create`），单飞（同一 session 并发跑返 409），终态或客户端断开即 `destroy()` 并 abort 在途 LLM。14 个 API 路由在 `server/src/index.ts`（Web Request/Response 同构）；domain TS 源码经 server 的 esbuild 打进自包含 `dist/server.mjs`，prod 时 launcher 起 server + serve 静态 `web/dist`（无 node_modules、无 junction）。
 
 ## 工具系统 · Tools
 
@@ -193,11 +195,15 @@ domain/src/
 ├── type.ts          类型定义（AgentEvent / EventType / ChatMessage）
 └── cliExample.ts    纯命令行示例入口
 
-web/                  Next.js 15 App Router
-├── app/             api/（sessions/run SSE、sessions/:id/compact、sessions/:id/history、workspaces、search、config、fs 等 route.ts）/ chat/[id] / settings / page / layout
+server/               hono node server（14 API 路由，import domain）
+├── src/             index.ts（hono app + 14 路由 + serveStatic + start）/ main.ts（CLI 入口）/ singleFlight.ts
+└── test/            routes.test.ts
+
+web/                  Vite SPA + react-router（静态 dist/，无 SSR）
+├── pages/           Home / Chat / Settings（react-router 路由）
 ├── components/       AppShell / AppSidebar / ChatView / MessageList / ToolRow / ThinkingBlock / TurnBlock / SubagentBlock / ui/*
 ├── hooks/           useAgent / useCommand / useFileReference / useRedux
-└── lib/              api / atFile / renderItems / server
+└── lib/              api / atFile / renderItems
 
 build/                一行安装脚本（install.sh / install.ps1 / launcher.* / versions.env）
 ```
@@ -228,7 +234,7 @@ anycode 守"最小可读内核"定位：**小而全 + 真协议接入生态 + �
 | contextWindow / maxOutputTokens | 探测 + 表 + 用户取 min / 纯用户覆盖 |
 | 子 agent 委托 | `AgentTool(planAgent)` 声明式子 agent + tagged EventStream |
 | 两层记忆 + save_memory | 全局 `~/.anycode/memory.md` + 项目 `.anycode/memory.md`，LLM 主动调用写入 |
-| 文件系统（ripgrep） | glob/grep/explore 走 @vscode/ripgrep（standalone 走 vendored rg via ANYCODE_RG_PATH）；read 记 mtime、write 原子写 + staleness 检测 |
+| 文件系统（ripgrep） | glob/grep/explore 走 @vscode/ripgrep（server bundle externalize 它，运行时走 vendored rg via ANYCODE_RG_PATH）；read 记 mtime、write 原子写 + staleness 检测 |
 | MCP 真协议连接 | `loadMcpTools` 真建连（stdio spawn / SSE HTTP）+ listTools + call_tool 转发，per-agent 建连/清理，单 server 失败不阻断 |
 | 上下文压缩 | `/compact [focus]` 指令 + agentLoop 75% 自动压缩（旧消息→摘要 + 保留尾部 + tool 配对保护）|
 | 端到端安装（v1） | Linux/Windows 一行安装脚本 + `anycode web`（非技术用户开箱即用）|

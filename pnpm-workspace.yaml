@@ -1,5 +1,6 @@
 packages:
   - "domain"
+  - "server"
   - "tui"
   - "web"
 allowBuilds:
@@ -17,5 +18,3 @@ minimumReleaseAgeExclude:
   - '@vitest/spy@4.1.11'
   - '@vitest/utils@4.1.11'
   - vitest@4.1.11
-nodeLinker: hoisted
-virtualStoreDirMaxLength: 60

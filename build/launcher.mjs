@@ -21,9 +21,12 @@ const ANYCODE_HOME = process.env.ANYCODE_HOME || join(homedir(), ".anycode");
 const APP = join(ANYCODE_HOME, "app");
 const NODE_DIR = join(ANYCODE_HOME, "runtime", "node");
 const NODE_BIN = win ? join(NODE_DIR, "node.exe") : join(NODE_DIR, "bin", "node");
-// standalone layout: app/web/.next/standalone/web/server.js (mirrors repo's web/ subdir)
-const STANDALONE_WEB = join(APP, "web", ".next", "standalone", "web");
-const SERVER_JS = join(STANDALONE_WEB, "server.js");
+// anycode 运行时布局（DEC-007 / SPEC-028）：
+//   app/web/dist/         Vite 静态 SPA（无 node_modules / 无 junction）
+//   app/server/dist/server.mjs  hono server bundle（自包含，external 仅 @vscode/ripgrep）
+// launcher 起 server.mjs，注入 PORT/HOSTNAME/ANYCODE_WEB_DIST/ANYCODE_RG_PATH。
+const WEB_DIST = join(APP, "web", "dist");
+const SERVER_MJS = join(APP, "server", "dist", "server.mjs");
 const RG = join(ANYCODE_HOME, "runtime", "rg", win ? "rg.exe" : "rg");
 
 // ORG/REPO/BRANCH for update (re-fetch installer). Try app's build/versions.env first
@@ -183,8 +186,12 @@ if (!existsSync(NODE_BIN)) {
     console.error("anycode not installed correctly: private node missing (" + NODE_BIN + "). Reinstall.");
     process.exit(1);
 }
-if (!existsSync(SERVER_JS)) {
-    console.error("anycode not installed correctly: web build missing (" + SERVER_JS + "). Reinstall.");
+if (!existsSync(SERVER_MJS)) {
+    console.error("anycode not installed correctly: server bundle missing (" + SERVER_MJS + "). Reinstall.");
+    process.exit(1);
+}
+if (!existsSync(WEB_DIST)) {
+    console.error("anycode not installed correctly: web dist missing (" + WEB_DIST + "). Reinstall.");
     process.exit(1);
 }
 
@@ -213,10 +220,12 @@ const PORT = await freePort(startPort);
 const URL = "http://127.0.0.1:" + PORT;
 console.log(">> Starting anycode web -> " + URL + " (Ctrl+C to stop)");
 
-// standalone server.js reads PORT + HOSTNAME from env. HOSTNAME=127.0.0.1 (localhost-only, security).
+// hono server.mjs reads PORT + HOSTNAME + ANYCODE_WEB_DIST + ANYCODE_RG_PATH from env.
+// HOSTNAME=127.0.0.1 (localhost-only, security — bash 工具跑 LLM 生成的命令，不暴露公网).
 process.env.PORT = String(PORT);
 process.env.HOSTNAME = "127.0.0.1";
-// vendored rg path so domain ripgrep.ts finds it inside standalone (no @vscode/ripgrep binary there)
+process.env.ANYCODE_WEB_DIST = WEB_DIST; // server serve 静态 SPA
+// vendored rg path so domain ripgrep.ts finds it（无 @vscode/ripgrep 二进制时降级到此）
 process.env.ANYCODE_RG_PATH = RG;
 
 function openBrowser(url) {
@@ -248,9 +257,9 @@ function openBrowser(url) {
     }
 })();
 
-// run the standalone server in foreground via private node; Ctrl+C propagates to kill it
-const child = spawn(NODE_BIN, [SERVER_JS], {
-    cwd: STANDALONE_WEB,
+// run the hono server in foreground via private node; Ctrl+C propagates to kill it.
+// server.mjs 自包含（external 仅 @vscode/ripgrep）；不设 cwd，server 读 env 定位 dist + rg。
+const child = spawn(NODE_BIN, [SERVER_MJS], {
     stdio: "inherit",
 });
 child.on("exit", (code) => process.exit(code ?? 0));

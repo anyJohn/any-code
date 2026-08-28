@@ -1,7 +1,5 @@
-"use client";
-
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { apiJson } from "@/lib/api";
 
 export interface CommandItem {
@@ -36,7 +34,7 @@ interface UseCommandDeps {
  * runCommand(name) 从 draft 提取 args，清空 draft 后执行。
  */
 export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, currentSessionId }: UseCommandDeps) {
-    const router = useRouter();
+    const navigate = useNavigate();
     const [customCommands, setCustomCommands] = useState<CommandItem[]>([]);
     const [draft, setDraft] = useState("");
     // /compact 进行中（调摘要 LLM 数秒）：驱动 indeterminate 进度条
@@ -93,10 +91,10 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
                     appendSystem("已清空对话");
                     return;
                 case "new":
-                    router.push("/chat/new");
+                    navigate("/chat/new");
                     return;
                 case "config":
-                    router.push("/settings");
+                    navigate("/settings");
                     return;
                 case "help":
                     appendSystem(buildHelpText());
@@ -277,7 +275,7 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
         [
             clear,
             appendSystem,
-            router,
+            navigate,
             projectKey,
             rootPath,
             currentSessionId,

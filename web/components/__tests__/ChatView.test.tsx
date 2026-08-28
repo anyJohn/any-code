@@ -16,8 +16,8 @@ const { state } = vi.hoisted(() => ({
 vi.mock("@/hooks/useAgent", () => ({
     useAgent: () => state,
 }));
-vi.mock("next/navigation", () => ({
-    useRouter: () => ({ push: () => {} }),
+vi.mock("react-router-dom", () => ({
+    useNavigate: () => () => {},
 }));
 
 import { ChatView } from "@/components/ChatView";

@@ -178,27 +178,26 @@ Info "pnpm install (may take minutes; if stuck, Ctrl+C and set ANYCODE_MIRROR=cn
 $env:CI = 'true'
 pnpm install --frozen-lockfile
 if ($LASTEXITCODE -ne 0) { Die "pnpm install failed (exit $LASTEXITCODE)" }
-Info "build web (next build -> standalone)..."
+Info "build web (vite build -> static dist)..."
 pnpm --filter '@any-code/web' build
-if ($LASTEXITCODE -ne 0) { Die "next build failed (exit $LASTEXITCODE)" }
+if ($LASTEXITCODE -ne 0) { Die "web build failed (exit $LASTEXITCODE)" }
+Info "build server (esbuild -> self-contained server.mjs)..."
+pnpm --filter '@any-code/server' build
+if ($LASTEXITCODE -ne 0) { Die "server build failed (exit $LASTEXITCODE)" }
 
-# ---- 5b. standalone post-process: vendor rg / copy static / drop build-only deps ----
-Info "post-process standalone..."
-# 1. vendor rg binary (standalone lacks @vscode/ripgrep platform binary; locate via Get-ChildItem, avoid ESM require)
+# ---- 5b. vendor rg / drop build-only deps ----
+Info "post-process..."
+# vendor rg binary: server bundle externalized @vscode/ripgrep (native binary);
+# runtime uses ANYCODE_RG_PATH (injected by launcher) -> domain ripgrep.ts falls back here.
 $RgDir = Join-Path $AnycodeHome 'runtime\rg'
 $null = New-Item -ItemType Directory -Force -Path $RgDir
-$rgSrc = Get-ChildItem -Recurse -File (Join-Path $App 'node_modules\.pnpm') -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'rg.exe' -or $_.Name -eq 'rg' } | Select-Object -First 1
+# install.ps1 仅 Windows：找 rg.exe（非 linux rg）。domain 同时 pin linux+win32 ripgrep 包，只取 rg.exe。
+$rgSrc = Get-ChildItem -Recurse -File (Join-Path $App 'node_modules\@vscode') -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'rg.exe' } | Select-Object -First 1
+if (-not $rgSrc) { $rgSrc = Get-ChildItem -Recurse -File (Join-Path $App 'node_modules\.pnpm') -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'rg.exe' } | Select-Object -First 1 }
 if ($rgSrc) { Copy-Item $rgSrc.FullName (Join-Path $RgDir $rgSrc.Name) -Force }
 else { Die "ripgrep binary not found (@vscode/ripgrep platform package)" }
-# 2. copy static + public into standalone (server.js serves from standalone/web/.next/static)
-$StandaloneWeb = Join-Path $App 'web\.next\standalone\web'
-$null = New-Item -ItemType Directory -Force -Path (Join-Path $StandaloneWeb '.next')
-Copy-Item -Recurse -Force (Join-Path $App 'web\.next\static') (Join-Path $StandaloneWeb '.next\static')
-if (Test-Path (Join-Path $App 'web\public')) { Copy-Item -Recurse -Force (Join-Path $App 'web\public') (Join-Path $StandaloneWeb 'public') }
-# 3. keep only .next/standalone (runtime); delete the rest of .next (build traces, ~280MB)
-Get-ChildItem -Force (Join-Path $App 'web\.next') | Where-Object { $_.Name -ne 'standalone' } | ForEach-Object { Safe-Remove $_.FullName }
-# 4. drop build-only node_modules (standalone self-contained; ~700MB). Safe-Remove anchored.
-#    Keep pnpm ($PnpmDir): a future 'anycode update' needs it to rebuild.
+# drop build-only node_modules (web dist static + server bundle self-contained; ~700MB). Safe-Remove anchored.
+# Keep pnpm ($PnpmDir): a future 'anycode update' needs it to rebuild.
 Safe-Remove (Join-Path $App 'node_modules')
 
 # ---- 6. register anycode (generate thin .cmd shim: ASCII + CRLF + BOM-less via .NET) ----

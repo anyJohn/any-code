@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "@/hooks/useRedux";
 import {
     selectWorkspace,
@@ -41,7 +41,7 @@ import {
 import { cn } from "@/lib/utils";
 import { apiJson } from "@/lib/api";
 import { DirectoryPicker } from "./DirectoryPicker";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 
 type SessionsStatus = "loading" | "ready" | "error";
 
@@ -63,7 +63,7 @@ export function AppSidebar({
     const { selected, workspaces, activeSessionId } =
         useAppSelector(selectWorkspace);
     const dispatch = useAppDispatch();
-    const router = useRouter();
+    const navigate = useNavigate();
 
     const [sessionsMap, setSessionsMap] = useState<Record<string, SessionMeta[]>>({});
     const [sessionsStatus, setSessionsStatus] = useState<Record<string, SessionsStatus>>({});
@@ -154,7 +154,7 @@ export function AppSidebar({
         dispatch(setSelected(w));
         setOpenKeys((p) => ({ ...p, [w.projectKey]: true }));
         if (!sessionsMap[w.projectKey]) loadSessions(w);
-        router.push("/");
+        navigate("/");
     };
 
     // newChat/resume 只导航，不建 agent。session 由 useAgent 在首条消息时建（两步法），
@@ -162,13 +162,13 @@ export function AppSidebar({
     const newChat = (w: WorkspaceMeta) => {
         dispatch(setSelected(w));
         dispatch(setActiveSession(null));
-        router.push(`/chat/new`);
+        navigate(`/chat/new`);
     };
 
     const resume = (w: WorkspaceMeta, sessionId: string) => {
         dispatch(setSelected(w));
         dispatch(setActiveSession(sessionId));
-        router.push(`/chat/${sessionId}`);
+        navigate(`/chat/${sessionId}`);
     };
 
     // 搜索 debounce（300ms）→ debounced
@@ -228,7 +228,7 @@ export function AppSidebar({
         dispatch(setSelected(meta));
         dispatch(setActiveSession(hit.sessionId));
         setQuery("");
-        router.push(`/chat/${hit.sessionId}`);
+        navigate(`/chat/${hit.sessionId}`);
     };
     const openSearchWorkspace = (hit: {
         projectKey: string;
@@ -238,7 +238,7 @@ export function AppSidebar({
         const meta = findOrBuildMeta(hit.projectKey, hit.name, hit.rootPath);
         dispatch(setSelected(meta));
         setQuery("");
-        router.push("/");
+        navigate("/");
     };
 
     const confirmDeleteWorkspace = async () => {
@@ -264,7 +264,7 @@ export function AppSidebar({
         if (selected?.projectKey === t.projectKey) {
             dispatch(setSelected(null));
             dispatch(setActiveSession(null));
-            router.push("/");
+            navigate("/");
         }
     };
 
@@ -290,7 +290,7 @@ export function AppSidebar({
         // 删的是当前活动 session → 跳回列表（session 文件已删即可）
         if (activeSessionId === t.s.id) {
             dispatch(setActiveSession(null));
-            router.push("/");
+            navigate("/");
         }
     };
 
@@ -336,7 +336,7 @@ export function AppSidebar({
                 </button>
                 <div className="flex-1" />
                 <Link
-                    href="/settings"
+                    to="/settings"
                     title="设置"
                     className="p-2 rounded-md hover:bg-accent"
                 >
@@ -639,7 +639,7 @@ export function AppSidebar({
 
             <div className="shrink-0 border-t border-border p-2">
                 <Link
-                    href="/settings"
+                    to="/settings"
                     className="flex items-center gap-1.5 w-full px-2 py-1.5 rounded-md text-sm hover:bg-accent"
                 >
                     <Settings className="size-3.5 text-muted-foreground shrink-0" />
