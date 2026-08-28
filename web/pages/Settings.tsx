@@ -365,11 +365,11 @@ export default function SettingsPage() {
                                         <div className="grid grid-cols-1 gap-2">
                                             <label className="flex flex-col gap-1">
                                                 <span className="text-xs text-muted-foreground">
-                                                    Base URL（可选）
+                                                    Base URL（可选）支持 openai 格式 base url
                                                 </span>
                                                 <Input
                                                     className="h-8"
-                                                    placeholder="https://..."
+                                                    placeholder="https://.../v1"
                                                     value={p.baseURL}
                                                     onChange={(e) =>
                                                         patchProvider(i, {

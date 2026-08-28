@@ -160,6 +160,9 @@ export function MessageList({
                         );
                     }
                     // System / Error
+                    const errorData = e.data as
+                        | { message?: string; name?: string; stack?: string }
+                        | undefined;
                     return (
                         <div
                             key={e.id}
@@ -176,6 +179,19 @@ export function MessageList({
                             <span className="text-sm text-foreground whitespace-pre-wrap break-words">
                                 {e.message}
                             </span>
+                            {errorData?.message && (
+                                <span className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
+                                    {errorData.message}
+                                </span>
+                            )}
+                            {errorData?.stack && (
+                                <details className="text-xs text-muted-foreground/70">
+                                    <summary className="cursor-pointer select-none">Stack</summary>
+                                    <pre className="whitespace-pre-wrap break-words mt-1">
+                                        {errorData.stack}
+                                    </pre>
+                                </details>
+                            )}
                         </div>
                     );
                 })}

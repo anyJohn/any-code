@@ -7,6 +7,28 @@ export interface AgentLoopResult {
     messages: ChatMessage[];
 }
 
+/**
+ * 把任意 error 序列化成可 JSON 传输的纯对象（Error 对象的 message/stack/name 不可枚举，
+ * JSON.stringify(err) = {}）。domain 的 ERROR 事件用此函数构造 data，让 interface 层
+ * 拿到完整结构体自己决定怎么展示（不预格式化文案）。
+ */
+export function serializeError(err: unknown): {
+    message: string;
+    name?: string;
+    stack?: string;
+    cause?: string;
+} {
+    if (err instanceof Error) {
+        return {
+            message: err.message,
+            name: err.name,
+            stack: err.stack,
+            cause: err.cause ? String(err.cause) : undefined,
+        };
+    }
+    return { message: String(err) };
+}
+
 export enum EventType {
     SYSTEM = "System",
     USER = "User",

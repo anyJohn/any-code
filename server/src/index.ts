@@ -296,7 +296,23 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
                 const send = (e: unknown) => {
                     if (closed) return;
                     try {
-                        controller.enqueue(enc.encode(`data: ${JSON.stringify(e)}\n\n`));
+                        // Error 对象的 message/stack/name 不可枚举，JSON.stringify(err) = {}；
+                        // replacer 在序列化边界提取，让 interface 层拿到完整错误结构体。
+                        controller.enqueue(
+                            enc.encode(
+                                `data: ${JSON.stringify(e, (_k, v) => {
+                                    if (v instanceof Error) {
+                                        return {
+                                            message: v.message,
+                                            name: v.name,
+                                            stack: v.stack,
+                                            ...(v.cause ? { cause: String(v.cause) } : {}),
+                                        };
+                                    }
+                                    return v;
+                                })}\n\n`,
+                            ),
+                        );
                     } catch {
                         // controller 已关
                     }
