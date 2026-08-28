@@ -1,4 +1,4 @@
-import { ChatMessage } from "../type";
+import { ChatMessage, AgentEvent } from "../type";
 import {
     Session,
     SessionKey,
@@ -63,6 +63,12 @@ export class SessionService {
     async appendMessage(key: SessionKey, msg: ChatMessage): Promise<void> {
         if (msg.role === "system") return;
         await this.store.append(key, [messageToEntry(msg), touchMetaEntry()]);
+    }
+
+    /** 追加一条非消息事件（如 Error）到 session JSONL，同时刷 touch meta。 */
+    async appendEvent(key: SessionKey, event: AgentEvent): Promise<void> {
+        await this.store.appendEvent(key, event);
+        await this.store.append(key, [touchMetaEntry()]);
     }
 
     /** 更新标题：追加一条新 meta（entriesToSession 取末条 meta 为准） */

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ChatMessage } from "../type";
+import { ChatMessage, AgentEvent } from "../type";
 
 /**
  * Session 模块 - 类型 + 纯函数（无 IO，可被任何存储后端复用）
@@ -10,6 +10,7 @@ export interface Session {
     id: string;
     title: string;
     messages: ChatMessage[];
+    events: AgentEvent[];
     createdAt: number;
     updatedAt: number;
 }
@@ -19,12 +20,11 @@ export interface SessionKey {
     sessionId: string;
 }
 
-/** JSONL 的一行：meta 记录标题/时间，message 记录一条对话消息 */
+/** JSONL 的一行：meta 记录标题/时间，message 记录一条对话消息，event 记录非消息事件（如 Error） */
 export type SessionEntry =
-    // title 可选：appendMessage 每次追加的 touch meta 只刷 updatedAt 不带 title，
-    // 读取时从最近一条带 title 的 meta 沿用标题
     | { kind: "meta"; title?: string; updatedAt: number }
-    | { kind: "message"; message: ChatMessage };
+    | { kind: "message"; message: ChatMessage }
+    | { kind: "event"; event: AgentEvent };
 
 /** list() 返回的轻量元数据，不含 messages 数组 */
 export interface SessionMeta {
@@ -38,6 +38,11 @@ export const DEFAULT_TITLE = "New Session";
 
 type MetaEntry = Extract<SessionEntry, { kind: "meta" }>;
 type MessageEntry = Extract<SessionEntry, { kind: "message" }>;
+type EventEntry = Extract<SessionEntry, { kind: "event" }>;
+
+export function eventToEntry(event: AgentEvent): SessionEntry {
+    return { kind: "event", event };
+}
 
 /** 将工作目录编码为 projectKey（保留 unicode 便于调试） */
 export function projectKeyOf(cwd: string): string {
@@ -50,6 +55,7 @@ export function createSession(title: string = DEFAULT_TITLE): Session {
         id: randomUUID(),
         title,
         messages: [],
+        events: [],
         createdAt: now,
         updatedAt: now,
     };
@@ -78,6 +84,10 @@ function isMeta(e: SessionEntry): e is MetaEntry {
 
 function isMessage(e: SessionEntry): e is MessageEntry {
     return e.kind === "message";
+}
+
+function isEvent(e: SessionEntry): e is EventEntry {
+    return e.kind === "event";
 }
 
 /**
@@ -111,8 +121,9 @@ function summarizeMetas(metas: MetaEntry[]): {
 export function entriesToSession(id: string, entries: SessionEntry[]): Session {
     const metas = entries.filter(isMeta);
     const messages = entries.filter(isMessage).map((e) => e.message);
+    const events = entries.filter(isEvent).map((e) => e.event);
     const { title, createdAt, updatedAt } = summarizeMetas(metas);
-    return { id, title, messages, createdAt, updatedAt };
+    return { id, title, messages, events, createdAt, updatedAt };
 }
 
 /** 从条目提取轻量元数据（list 用，只需 meta 行） */

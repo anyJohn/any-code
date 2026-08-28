@@ -291,6 +291,24 @@ class AnyAgent {
                                 message: `Error executing task: ${task}`,
                                 data: err,
                             });
+                            // 持久化 Error 事件到 session JSONL（页面刷新/恢复后可见）。
+                            // Error 对象不可 JSON 序列化，手动提取 message/name/stack。
+                            if (this.sessionKey) {
+                                const errData =
+                                    err instanceof Error
+                                        ? {
+                                              message: err.message,
+                                              name: err.name,
+                                              stack: err.stack,
+                                          }
+                                        : { message: String(err) };
+                                this.service.appendEvent(this.sessionKey, {
+                                    timestamp: Date.now(),
+                                    type: EventType.ERROR,
+                                    message: `Error executing task: ${task}`,
+                                    data: errData,
+                                });
+                            }
                             return of(null);
                         }),
                         finalize(() => {

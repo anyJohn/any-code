@@ -400,6 +400,7 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         if (!found) return c.json({ statusMessage: "session not found" }, 404);
         return c.json({
             messages: found.session.messages,
+            events: found.session.events ?? [],
             projectKey: found.key.projectKey,
         });
     });
