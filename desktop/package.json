@@ -10,8 +10,8 @@
         "build:main": "node esbuild.config.js",
         "stage": "node scripts/stage-resources.mjs",
         "build": "npm run stage && npm run build:main && electron-builder --config electron-builder.config.js",
-        "build:linux": "npm run build -- --linux",
-        "build:win": "npm run build -- --win",
+        "build:linux": "npm run stage && npm run build:main && electron-builder --config electron-builder.config.js --linux",
+        "build:win": "npm run stage && npm run build:main && electron-builder --config electron-builder.config.js --win",
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
