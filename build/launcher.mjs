@@ -43,6 +43,15 @@ function readRepoRef() {
 const REF = readRepoRef();
 const RAW_BASE = `https://raw.githubusercontent.com/${REF.org}/${REF.repo}/${REF.branch}/build`;
 
+// If ANYCODE_GH_PROXY is set, prefix a chosen public proxy to the raw.githubusercontent URL
+// (we don't hardcode one -- public proxies are unstable). Lets CN users unblock the update
+// bootstrap fetch. Env (ANYCODE_MIRROR / ANYCODE_GH_PROXY / ...) is inherited by the spawned
+// installer, so the installer then auto-detects CN and honors it for the heavy downloads too.
+function ghProxy(url) {
+    const p = process.env.ANYCODE_GH_PROXY;
+    return p ? `${p.replace(/\/+$/, "")}/${url}` : url;
+}
+
 // Subcommand dispatch. Commands: web | update | uninstall | help. `--help`/`-h` flag → help.
 // Bare `anycode` → help (CLI mode not shipped). Unknown command → error. Dispatch runs before
 // install-state checks so help/update/uninstall/error work even on a mis-installed machine.
@@ -78,13 +87,16 @@ if (sub === "update") {
 // ===== update / uninstall =====
 
 /** update = re-run the platform installer (idempotent: node/pnpm skip if present,
- *  re-fetches repo zip + rebuilds). Uses the same one-line install the user ran. */
+ *  re-fetches repo zip + rebuilds). Uses the same one-line install the user ran.
+ *  Bootstrap fetch gets --retry/--max-time so a stalled raw.githubusercontent connection
+ *  (common in CN) times out + retries instead of hanging silently; honors ANYCODE_GH_PROXY. */
 function runUpdate() {
     console.log(">> anycode update — re-fetching + rebuilding via the installer...");
+    const installerUrl = ghProxy(`${RAW_BASE}/install.${win ? "ps1" : "sh"}`);
     const cmd = win
         ? ["powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-c",
-              `iwr -useb ${RAW_BASE}/install.ps1 | iex`]]
-        : ["bash", ["-c", `curl -fsSL ${RAW_BASE}/install.sh | bash`]];
+              `iwr -useb -TimeoutSec 120 '${installerUrl}' | iex`]]
+        : ["bash", ["-c", `curl -fsSL --connect-timeout 30 --max-time 120 --retry 3 --retry-delay 5 '${installerUrl}' | bash`]];
     const child = spawn(cmd[0], cmd[1], { stdio: "inherit" });
     child.on("exit", (code) => {
         if (code === 0) console.log(">> update done. Run 'anycode web'.");

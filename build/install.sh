@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # anycode Linux 一行安装器（curl | bash 拉取执行）。
-# 流程：私有 provision node（nodejs.org tarball）+ pnpm standalone（绕开 corepack 0.29 验签 bug）
+# 流程：私有 provision node（nodejs.org / npmmirror 镜像）+ pnpm standalone（绕开 corepack 0.29 验签 bug）
 # → 拉仓库 tarball（不依赖 git）→ pnpm install + next build → 注册 anycode 到 PATH。
 # 不碰系统 PATH、不要 sudo；用户机仅需 curl + tar。
+#
+# 中国用户：ANYCODE_MIRROR=cn 走 npmmirror 镜像（默认 auto=按时区自动判中国）。
+#   - node → cdn.npmmirror.com/binaries/node；pnpm install → registry.npmmirror.com（rg 平台子包随之走镜像）
+#   - pnpm standalone / repo tarball 仍在 GitHub：靠 download() 超时+重试兜底；仍卡可设 ANYCODE_GH_PROXY
 set -euo pipefail
 
 # ===== CONFIG（与 versions.env 同值）=====
@@ -31,16 +35,69 @@ safe_rm() {
     esac
 }
 
+# ===== 镜像探测（auto=时区判中国，隐私友好不调 IP 服务；ANYCODE_MIRROR=cn|none 覆盖）=====
+detect_cn_tz() {
+    local tz="${TZ:-}"
+    if [ -z "$tz" ] && [ -r /etc/timezone ]; then
+        tz="$(cat /etc/timezone 2>/dev/null | tr -d '[:space:]')"
+    fi
+    if [ -z "$tz" ]; then
+        tz="$(readlink /etc/localtime 2>/dev/null)"
+        tz="${tz##*zoneinfo/}"
+    fi
+    case "$tz" in
+        Asia/Shanghai|Asia/Hong_Kong|Asia/Urumqi|Asia/Taipei|Asia/Chongqing|Asia/Harbin|Asia/Chungking|PRC|ROC) return 0 ;;
+    esac
+    return 1
+}
+case "${ANYCODE_MIRROR:-auto}" in
+    cn)   USE_MIRROR=1 ;;
+    none) USE_MIRROR=0 ;;
+    auto) if detect_cn_tz; then USE_MIRROR=1; else USE_MIRROR=0; fi ;;
+    *)    err "ANYCODE_MIRROR 仅接受 cn|auto|none（当前：$ANYCODE_MIRROR）" ;;
+esac
+# 镜像源（per-source env 优先；否则按探测结果取默认；否则直连）
+if [ "$USE_MIRROR" = 1 ]; then
+    DEF_NODE_BASE="https://cdn.npmmirror.com/binaries/node"
+    DEF_NPM_REGISTRY="https://registry.npmmirror.com"
+else
+    DEF_NODE_BASE="https://nodejs.org/dist"
+    DEF_NPM_REGISTRY=""
+fi
+NODE_BASE="${ANYCODE_NODE_BASE:-$DEF_NODE_BASE}"
+NPM_REGISTRY="${ANYCODE_NPM_REGISTRY:-$DEF_NPM_REGISTRY}"
+GH_PROXY="${ANYCODE_GH_PROXY:-}"
+if [ -n "$NPM_REGISTRY" ]; then
+    info "镜像：npmmirror（ANYCODE_MIRROR=${ANYCODE_MIRROR:-auto}；node=$NODE_BASE，pnpm registry=$NPM_REGISTRY）"
+else
+    info "镜像：直连（ANYCODE_MIRROR=${ANYCODE_MIRROR:-auto}）。中国用户若卡住：ANYCODE_MIRROR=cn 重试"
+fi
+
+# 带超时+重试+进度的下载；失败给中国用户指引（不再静默挂死）。
+download() {  # $1=url  $2=outfile
+    info "下载 $1"
+    curl -fSL --connect-timeout 30 --max-time 600 --retry 3 --retry-delay 5 --progress-bar "$1" -o "$2" \
+        || err "下载失败：$1（网络问题？中国用户可 ANYCODE_MIRROR=cn 重试；GitHub 源可设 ANYCODE_GH_PROXY）"
+}
+# 若设了 ANYCODE_GH_PROXY，把 GitHub URL 前拼代理（用户自选公共代理，脚本不硬编码——公共代理不稳）。
+gh_url() {  # $1=https://github.com/... 或 https://raw.githubusercontent.com/...
+    if [ -n "$GH_PROXY" ]; then
+        printf '%s/%s\n' "${GH_PROXY%/}" "$1"
+    else
+        printf '%s\n' "$1"
+    fi
+}
+
 command -v curl >/dev/null 2>&1 || err "需要 curl（请先安装）"
 command -v tar >/dev/null 2>&1 || err "需要 tar（请先安装）"
 
 # OS 探测：Windows（Git Bash / MSYS / Cygwin）改走 install.ps1——复用 PowerShell 的 Windows
-# 安装逻辑（win 平台 node zip + pnpm win zip + PortableGit + config.gitBashPath），不在 bash 重写。
+# 安装逻辑（win 平台 node zip + pnpm win zip + busybox + config.gitBashPath），不在 bash 重写。
 KERNEL="$(uname -s)"
 case "$KERNEL" in
     MINGW*|MSYS*|CYGWIN*)
         info "检测到 Windows（$KERNEL，Git Bash/MSYS/Cygwin）——改走 install.ps1（PowerShell）执行 Windows 安装…"
-        PS_URL="https://raw.githubusercontent.com/$ORG/$REPO/$BRANCH/build/install.ps1"
+        PS_URL="$(gh_url "https://raw.githubusercontent.com/$ORG/$REPO/$BRANCH/build/install.ps1")"
         powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr -useb '$PS_URL' | iex" \
             || err "install.ps1 执行失败（见上方输出）"
         exit 0
@@ -71,9 +128,8 @@ NODE_DIR="$ANYCODE_HOME/runtime/node"
 if [ ! -x "$NODE_DIR/bin/node" ]; then
     info "下载 node $NODE_VERSION ($NODE_ARCH)…"
     TARBALL="node-$NODE_VERSION-$NODE_ARCH.tar.xz"
-    URL="https://nodejs.org/dist/$NODE_VERSION/$TARBALL"
-    curl -fsSL "$URL" -o "$TMP/$TARBALL" || err "下载 node 失败：$URL"
-    curl -fsSL "https://nodejs.org/dist/$NODE_VERSION/SHASUMS256.txt" -o "$TMP/SHASUMS256.txt"
+    download "$NODE_BASE/$NODE_VERSION/$TARBALL" "$TMP/$TARBALL"
+    download "$NODE_BASE/$NODE_VERSION/SHASUMS256.txt" "$TMP/SHASUMS256.txt"
     ( cd "$TMP" && grep "  $TARBALL$" SHASUMS256.txt | sha256sum -c - ) || err "node 下载 sha256 校验失败"
     command -v xz >/dev/null 2>&1 || command -v unxz >/dev/null 2>&1 || err "需要 xz（解压 node tar.xz）"
     info "解压 node…"
@@ -94,9 +150,8 @@ if [ ! -x "$PNPM_DIR/pnpm" ]; then
             aarch64|arm64) PNPM_ASSET="pnpm-linux-arm64.tar.gz" ;;
         esac
     fi
-    info "下载 pnpm $PNPM_VERSION ($PNPM_ASSET)…"
-    URL="https://github.com/pnpm/pnpm/releases/download/v$PNPM_VERSION/$PNPM_ASSET"
-    curl -fsSL "$URL" -o "$TMP/pnpm.tgz" || err "下载 pnpm 失败：$URL"
+    URL="$(gh_url "https://github.com/pnpm/pnpm/releases/download/v$PNPM_VERSION/$PNPM_ASSET")"
+    download "$URL" "$TMP/pnpm.tgz"
     mkdir -p "$PNPM_DIR"
     tar -xzf "$TMP/pnpm.tgz" -C "$PNPM_DIR"
 fi
@@ -106,10 +161,11 @@ info "pnpm: $(pnpm --version)"
 # ---- 3. 拉仓库 ----
 APP="$ANYCODE_HOME/app"
 if [ ! -f "$APP/package.json" ]; then
-    # REPO_TARBALL_URL 覆盖：支持自定义 fork/mirror/离线 file:// 快照。默认 GitHub codeload。
-    REPO_URL="${REPO_TARBALL_URL:-https://github.com/$ORG/$REPO/archive/refs/heads/$BRANCH.tar.gz}"
+    # REPO_TARBALL_URL 覆盖：支持自定义 fork/mirror/离线 file:// 快照。默认 GitHub codeload（可经 ANYCODE_GH_PROXY 代理）。
+    DEFAULT_REPO_URL="https://github.com/$ORG/$REPO/archive/refs/heads/$BRANCH.tar.gz"
+    REPO_URL="${REPO_TARBALL_URL:-$(gh_url "$DEFAULT_REPO_URL")}"
     info "拉取仓库（$REPO_URL，不依赖 git）…"
-    curl -fsSL "$REPO_URL" -o "$TMP/repo.tar.gz" || err "下载仓库失败：$REPO_URL"
+    download "$REPO_URL" "$TMP/repo.tar.gz"
     tar -xzf "$TMP/repo.tar.gz" -C "$TMP"
     EXTRACTED="$(find "$TMP" -maxdepth 1 -mindepth 1 -type d | head -1)"
     [ -n "$EXTRACTED" ] && [ -f "$EXTRACTED/package.json" ] || err "仓库解压后未找到 package.json"
@@ -119,7 +175,12 @@ fi
 
 # ---- 4. 构建 ----
 cd "$APP"
-info "pnpm install（可能数分钟）…"
+# pnpm install 走镜像 registry（mirror on 时）：rg 等平台子包随之从镜像装，不碰 GitHub。
+# 写 .npmrc 是 pnpm 可靠读取的方式（npm_config_registry env 不一定被 pnpm 采纳）。
+if [ -n "$NPM_REGISTRY" ]; then
+    echo "registry=$NPM_REGISTRY" > "$APP/.npmrc"
+fi
+info "pnpm install（可能数分钟；卡住可 Ctrl+C 后 ANYCODE_MIRROR=cn 重试）…"
 pnpm install --frozen-lockfile
 info "构建 web（next build → standalone）…"
 pnpm --filter @any-code/web build

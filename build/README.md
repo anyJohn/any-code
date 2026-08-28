@@ -35,6 +35,29 @@ anycode web
 | `anycode uninstall [-y]` | 卸载（删 `~/.anycode`；默认二次确认） |
 | `anycode help` / `anycode --help` | 打印用法 |
 
+## 中国用户 / 镜像
+
+国内网络下 GitHub 与 npm 常被限速，安装可能"卡住"（下载静默挂死）。安装器内置镜像与下载硬化（超时 + 重试 + 进度）：
+
+| 环境变量 | 作用 | 默认 |
+|---|---|---|
+| `ANYCODE_MIRROR` | `auto`（按本机时区自动判中国）/ `cn`（强制镜像）/ `none`（强制直连） | `auto` |
+| `ANYCODE_NPM_REGISTRY` | `pnpm install` 走的 registry | 自动：cn→`registry.npmmirror.com` |
+| `ANYCODE_NODE_BASE` | node 下载源 | 自动：cn→`cdn.npmmirror.com/binaries/node` |
+| `ANYCODE_GH_PROXY` | GitHub 下载（pnpm standalone / 仓库 tarball / `anycode update` 拉脚本）前拼的代理 | 空（直连） |
+| `REPO_TARBALL_URL` | 仓库 tarball 完整 URL（fork / mirror / 离线快照） | GitHub codeload |
+
+镜像开启时：node 从 `cdn.npmmirror.com` 下、`pnpm install` 走 `registry.npmmirror.com`（含 ripgrep 平台子包，一并走镜像）。pnpm standalone 与仓库 tarball 仍在 GitHub，靠下载超时 + 重试兜底；若仍卡，设 `ANYCODE_GH_PROXY=https://ghproxy.com/`（公共代理不稳，自行选可用者）。
+
+强制走镜像（一行安装）：
+
+```bash
+export ANYCODE_MIRROR=cn
+curl -fsSL https://raw.githubusercontent.com/anyJohn/any-code/main/build/install.sh | bash
+```
+
+> `curl | bash` 管道下，`bash` 继承的是当前 shell 已 `export` 的环境变量；故需先 `export ANYCODE_MIRROR=cn` 再跑一行安装（`ANYCODE_MIRROR=cn curl ... | bash` 这样写只对 `curl` 生效，对 `bash` 无效）。
+
 ## 安装器做了什么
 
 1. **私有 provision node**：下载 nodejs.org LTS 到 `~/.anycode/runtime/node`。下载 pnpm standalone（`pnpm/pnpm` releases）到 `~/.anycode/runtime/pnpm`（绕开 corepack 0.29 验签 bug）。不写系统 PATH、不要 sudo / admin。
