@@ -6,6 +6,7 @@ import os from "node:os";
 import {
     AnyAgent,
     Config,
+    DURABLE_TYPES,
     createWorkspace,
     maskApiKey,
     projectKeyOf,
@@ -30,10 +31,7 @@ import { runningSessions } from "./singleFlight.js";
  */
 const TERMINAL = new Set(["Done", "Error", "Stopped"]);
 
-/** 需持久化到 session JSONL 的事件类型（消息无法重建的那类；Error 等）。
- *  其余事件（Iteration/AssistantDelta/Tool/Usage/…）不入盘：User/Assistant/Tool
- *  由 messages 重建，deltas/usage 刷新即丢——只有"异常终态"值得留存。 */
-const DURABLE = new Set(["Error"]);
+// durable 事件集由 domain DURABLE_TYPES 定义（SPEC-030 B-004/C-003）；server 仅调用持久化。
 
 // events 已可序列化 by construction（domain serializeError 把 Error 转 plain ErrorPayload），
 // SSE 与持久化均直接 JSON.stringify，无需 replacer（SPEC-030 B-002/B-010/I-001）。
@@ -339,9 +337,9 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
                 for (const e of agent.eventHistory$.value) send(e);
                 sub = agent.eventStream$.subscribe(async (e: AgentEvent) => {
                     send(e);
-                    // 持久化可留存事件（Error）到 session JSONL：e 已可序列化（domain serializeError），
-                    // 直接写盘，live==persisted shape。仅 live 新事件写，replay 不重复。
-                    if (e?.type && DURABLE.has(e.type)) {
+                    // 持久化 durable 事件到 session JSONL：e 已可序列化（domain serializeError），
+                    // 直接写盘，live==persisted shape。仅 live 新事件写，replay 不重复（SPEC-030 B-005）。
+                    if (e?.type && DURABLE_TYPES.has(e.type)) {
                         const key: SessionKey = {
                             projectKey: agent.getProjectKey(),
                             sessionId,

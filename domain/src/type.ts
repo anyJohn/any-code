@@ -28,6 +28,23 @@ export enum EventType {
     STOPPED = "Stopped",
 }
 
+/** durable 事件集：持久化到 session JSONL，作 reload UI 真值（SPEC-030 B-004/I-005）。
+ *  ephemeral（AssistantDelta/ToolStart/ToolProgress/ToolArgProgress/System/Planning/Interaction）
+ *  live-only 不持久——deltas/progress 是实时 UX，reload 不重建。 */
+export const DURABLE_TYPES: ReadonlySet<EventType> = new Set<EventType>([
+    EventType.USER,
+    EventType.ITERATION,
+    EventType.THINKING,
+    EventType.ASSISTANT,
+    EventType.TOOL,
+    EventType.USAGE,
+    EventType.COMPACT,
+    EventType.ERROR,
+    EventType.WARNING,
+    EventType.DONE,
+    EventType.STOPPED,
+]);
+
 /**
  * assistant message 的非标准 sidecar（命名空间化，避免和 provider 的 reasoning_content 字段撞）。
  * reasoning：思考内容全文，随 message 落盘，回放时重建 Thinking 事件（SPEC-017）。

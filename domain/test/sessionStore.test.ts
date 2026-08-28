@@ -134,4 +134,22 @@ describe("appendEvent（Error 等非消息事件持久化 + 恢复）", () => {
         expect(entries.filter((e) => e.kind === "event")).toHaveLength(1);
         appendSpy.mockRestore();
     });
+
+    it("AC-010（SPEC-030）Tool 事件带大 result 全量持久 + 读回不截断", async () => {
+        const session = await svc.create(PK, "tool 会话");
+        const key = { projectKey: PK, sessionId: session.id };
+        const big = "x".repeat(5000);
+        await svc.appendEvent(key, {
+            timestamp: 1,
+            type: EventType.TOOL,
+            message: "read",
+            data: { name: "read", args: { filePath: "/a" }, result: big },
+            turnId: "t1",
+        });
+        const resumed = await svc.resume(PK, session.id);
+        expect(resumed!.events).toHaveLength(1);
+        const tool = resumed!.events[0];
+        expect(tool.type).toBe(EventType.TOOL);
+        expect((tool.data as { result: string }).result).toBe(big);
+    });
 });

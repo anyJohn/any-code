@@ -1,11 +1,5 @@
 import { describe, it, expect } from "vitest";
 import {
-    contentToString,
-    mergeEvents,
-    messagesToEvents,
-    type HistoryMessage,
-} from "@/lib/sseEvents";
-import {
     groupByTurn,
     toRenderItems,
     formatToolCall,
@@ -22,78 +16,6 @@ const ev = (
     type,
     message,
     ...extra,
-});
-
-describe("contentToString (TEST-005 TC-005.1)", () => {
-    it("string 直返", () => {
-        expect(contentToString("hi")).toBe("hi");
-    });
-    it("null/undefined → 空", () => {
-        expect(contentToString(null)).toBe("");
-        expect(contentToString(undefined)).toBe("");
-    });
-    it("多模态数组拼接 text 片段", () => {
-        expect(contentToString(["a", { type: "text", text: "b" }, "c"])).toBe(
-            "abc"
-        );
-    });
-});
-
-describe("messagesToEvents (TEST-005 TC-005.2, B-002)", () => {
-    it("assistant 开新回合，tool_calls 关联 tool 结果", () => {
-        const msgs: HistoryMessage[] = [
-            { role: "user", content: "hi" },
-            {
-                role: "assistant",
-                content: "thinking",
-                tool_calls: [
-                    {
-                        id: "call_1",
-                        function: { name: "bash", arguments: '{"command":"ls"}' },
-                    },
-                ],
-            },
-            { role: "tool", tool_call_id: "call_1", content: "file1\nfile2" },
-        ];
-        const events = messagesToEvents(msgs);
-        // User, Iteration, Assistant, Tool
-        expect(events.map((e) => e.type)).toEqual([
-            "User",
-            "Iteration",
-            "Assistant",
-            "Tool",
-        ]);
-        const tool = events.find((e) => e.type === "Tool")!;
-        expect(tool.data).toEqual({
-            name: "bash",
-            args: { command: "ls" },
-            result: "file1\nfile2",
-        });
-        // 同回合 turnId 一致
-        const turn = events.find((e) => e.type === "Iteration")!.turnId;
-        expect(events.find((e) => e.type === "Assistant")!.turnId).toBe(turn);
-        expect(tool.turnId).toBe(turn);
-    });
-
-    it("非法 JSON arguments → 空 args", () => {
-        const msgs: HistoryMessage[] = [
-            {
-                role: "assistant",
-                content: "x",
-                tool_calls: [{ id: "c", function: { name: "read", arguments: "{bad" } }],
-            },
-        ];
-        const tool = messagesToEvents(msgs).find((e) => e.type === "Tool")!;
-        expect(tool.data).toEqual({ name: "read", args: {}, result: "" });
-    });
-
-    it("assistant 无文本时不出 Assistant 事件", () => {
-        const msgs: HistoryMessage[] = [
-            { role: "assistant", content: null, tool_calls: [] },
-        ];
-        const types = messagesToEvents(msgs).map((e) => e.type);
-        expect(types).toEqual(["Iteration"]); // 仅回合标记
-    });
 });
 
 describe("groupByTurn (TEST-005 TC-005.3, B-003)", () => {
@@ -178,36 +100,6 @@ describe("toRenderItems (TEST-005 TC-005.4, B-003 sub-agent)", () => {
         expect(items.map((i) => i.kind)).toEqual(["turn", "single", "turn"]);
         const w = items[1];
         if (w.kind === "single") expect(w.event.type).toBe("Warning");
-    });
-});
-
-describe("messagesToEvents 思考落盘回放（SPEC-017 AC-003/005）", () => {
-    it("AC-003 assistant 带 _meta.reasoning → 产 Thinking 事件（在 ASSISTANT 前，同 turnId）", () => {
-        const msgs: HistoryMessage[] = [
-            { role: "user", content: "hi" },
-            {
-                role: "assistant",
-                content: "answer",
-                _meta: { reasoning: "think-full" },
-            },
-        ];
-        const events = messagesToEvents(msgs);
-        const types = events.map((e) => e.type);
-        // Iteration, Thinking, Assistant
-        expect(types).toEqual(["User", "Iteration", "Thinking", "Assistant"]);
-        const turn = events.find((e) => e.type === "Iteration")!.turnId;
-        const thinking = events.find((e) => e.type === "Thinking")!;
-        expect(thinking.message).toBe("think-full");
-        expect(thinking.turnId).toBe(turn);
-        expect(events.find((e) => e.type === "Assistant")!.turnId).toBe(turn);
-    });
-
-    it("AC-005 历史 assistant 无 _meta → 不产 Thinking（向后兼容）", () => {
-        const msgs: HistoryMessage[] = [
-            { role: "assistant", content: "answer" },
-        ];
-        const types = messagesToEvents(msgs).map((e) => e.type);
-        expect(types).not.toContain("Thinking");
     });
 });
 
@@ -301,16 +193,6 @@ describe("groupByTurn 流式 delta 累积", () => {
         expect(turns).toHaveLength(1);
         expect(turns[0].assistant?.message).toBe("hello");
     });
-
-    it("历史回放不产 AssistantDelta（只产整段 Assistant）", () => {
-        const msgs: HistoryMessage[] = [
-            { role: "user", content: "hi" },
-            { role: "assistant", content: "hello" },
-        ];
-        const types = messagesToEvents(msgs).map((e) => e.type);
-        expect(types).not.toContain("AssistantDelta");
-        expect(types).toContain("Assistant");
-    });
 });
 
 describe("formatToolCall (TEST-005 TC-005.5, B-005)", () => {
@@ -344,75 +226,45 @@ describe("formatToolCall (TEST-005 TC-005.5, B-005)", () => {
     });
 });
 
-describe("mergeEvents（持久化 event 并入 messages 重建流，按 user 锚定位置）", () => {
-    it("崩溃后重试成功：error 紧跟触发的 User 之后，不漂到末尾", () => {
-        const msgs: HistoryMessage[] = [
-            { role: "user", content: "do x" }, // 崩溃
-            { role: "user", content: "do x" }, // 重试成功
-            { role: "assistant", content: "ok" },
-        ];
-        const persisted = [
-            {
-                timestamp: 100,
-                type: "Error" as const,
-                message: "Error executing task: do x",
+describe("reload 重放 durable 事件日志（SPEC-030 AC-009/010，定位 by construction）", () => {
+    it("AC-009 崩溃后重试成功：error 在对应回合位置，不漂末尾（日志有序，非 content-match）", () => {
+        // 持久化事件日志即顺序：User1 → Error(t1) → User2 → Iteration(t2) → Assistant(t2)
+        const events: AgentEvent[] = [
+            ev("User", "do x"),
+            ev("Error", "Error executing task: do x", {
                 data: { message: "boom", name: "Error", stack: "at x" },
-            },
+            }),
+            ev("User", "do x"),
+            ev("Iteration", "Iter 1", { turnId: "t2" }),
+            ev("Assistant", "ok", { turnId: "t2" }),
         ];
-        const merged = mergeEvents(messagesToEvents(msgs), persisted);
-        // error 跟在第一个（崩溃的）user 后，而非末尾
-        expect(merged.map((e) => e.type)).toEqual([
-            "User",
-            "Error",
-            "User",
-            "Iteration",
-            "Assistant",
+        const items = toRenderItems(events);
+        // single(User1) → single(Error) → single(User2) → turn(t2)
+        // error 在 index 1（两 user 之间），末项是 turn 而非 error——退役 mergeEvents content-match
+        expect(items.map((i) => i.kind)).toEqual([
+            "single",
+            "single",
+            "single",
+            "turn",
         ]);
-        const err = merged[1];
-        expect(err.id).toBeTruthy();
-        expect((err.data as { message: string }).message).toBe("boom");
+        expect(items.at(-1)!.kind).toBe("turn");
+        const err = items[1];
+        if (err.kind === "single") expect(err.event.type).toBe("Error");
     });
 
-    it("一条 user 只认领一个 error；多余 error 末尾追加（降级不丢）", () => {
-        const msgs: HistoryMessage[] = [{ role: "user", content: "do x" }];
-        const persisted = [
-            {
-                timestamp: 1,
-                type: "Error" as const,
-                message: "Error executing task: do x",
-                data: {},
-            },
-            {
-                timestamp: 2,
-                type: "Error" as const,
-                message: "Error executing task: do x",
-                data: {},
-            },
+    it("AC-010 Tool 事件带全量 result（reloaded 与 live 一致，无截断）", () => {
+        const big = "x".repeat(5000);
+        const events: AgentEvent[] = [
+            ev("Iteration", "i1", { turnId: "t1" }),
+            ev("Tool", "read", {
+                turnId: "t1",
+                data: { name: "read", args: { filePath: "/a" }, result: big },
+            }),
         ];
-        const merged = mergeEvents(messagesToEvents(msgs), persisted);
-        expect(merged.map((e) => e.type)).toEqual(["User", "Error", "Error"]);
-    });
-
-    it("task 抽不出（message 格式不符）→ 末尾追加，不丢事件", () => {
-        const msgs: HistoryMessage[] = [{ role: "user", content: "hi" }];
-        const persisted = [
-            { timestamp: 1, type: "Error" as const, message: "别的格式", data: {} },
-        ];
-        const merged = mergeEvents(messagesToEvents(msgs), persisted);
-        expect(merged.map((e) => e.type)).toEqual(["User", "Error"]);
-    });
-
-    it("无持久化事件 → 原 message 流（补 id）", () => {
-        const msgs: HistoryMessage[] = [
-            { role: "user", content: "hi" },
-            { role: "assistant", content: "yo" },
-        ];
-        const merged = mergeEvents(messagesToEvents(msgs), []);
-        expect(merged.map((e) => e.type)).toEqual([
-            "User",
-            "Iteration",
-            "Assistant",
-        ]);
-        expect(merged.every((e) => e.id)).toBe(true);
+        const items = toRenderItems(events);
+        const turn = items[0];
+        if (turn.kind === "turn") {
+            expect((turn.tools[0].data as { result: string }).result).toBe(big);
+        }
     });
 });

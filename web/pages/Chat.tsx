@@ -13,8 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { apiJson } from "@/lib/api";
 import {
-    mergeEvents,
-    messagesToEvents,
+    nextId,
     type AgentEvent,
     type HistoryMessage,
 } from "@/lib/sseEvents";
@@ -80,10 +79,10 @@ export default function ChatPage() {
                 rootPath: meta?.rootPath ?? selected?.rootPath ?? data.projectKey,
                 projectKey: data.projectKey,
                 sessionId: routeSessionId,
-                initialEvents: mergeEvents(
-                    messagesToEvents(data.messages),
-                    data.events ?? []
-                ),
+                initialEvents: (data.events ?? []).map((e) => ({
+                    ...e,
+                    id: nextId("hist"),
+                })),
             });
         })();
         return () => {
