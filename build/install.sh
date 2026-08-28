@@ -181,7 +181,9 @@ if [ -n "$NPM_REGISTRY" ]; then
     echo "registry=$NPM_REGISTRY" > "$APP/.npmrc"
 fi
 info "pnpm install（可能数分钟；卡住可 Ctrl+C 后 ANYCODE_MIRROR=cn 重试）…"
-pnpm install --frozen-lockfile
+# CI=true：切换 nodeLinker（isolated→hoisted）等场景 pnpm 要清旧 node_modules，
+# 非交互（curl|bash 无 TTY）时默认 ABORTED_REMOVE_MODULES_DIR；CI 模式直接清理不阻塞。
+CI=true pnpm install --frozen-lockfile
 info "构建 web（next build → standalone）…"
 pnpm --filter @any-code/web build
 

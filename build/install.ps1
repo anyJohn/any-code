@@ -173,6 +173,9 @@ if ($NpmRegistry) {
     Set-Content -Path (Join-Path $App '.npmrc') -Value "registry=$NpmRegistry" -NoNewline
 }
 Info "pnpm install (may take minutes; if stuck, Ctrl+C and set ANYCODE_MIRROR=cn)..."
+# CI=true: switching nodeLinker (isolated->hoisted) makes pnpm purge old node_modules,
+# which aborts with ABORTED_REMOVE_MODULES_DIR_NO_TTY in a non-interactive (iwr|iex) run. CI mode proceeds.
+$env:CI = 'true'
 pnpm install --frozen-lockfile
 if ($LASTEXITCODE -ne 0) { Die "pnpm install failed (exit $LASTEXITCODE)" }
 Info "build web (next build -> standalone)..."
