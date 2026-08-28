@@ -32,5 +32,6 @@ module.exports = {
     nsis: {
         oneClick: false,
         allowToChangeInstallationDirectory: true,
+        include: "installer.nsh", // 卸载时弹确认删 ~/.anycode
     },
 };
