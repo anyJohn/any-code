@@ -93,12 +93,14 @@
 ## Desktop Features
 
 - Electron + hono sidecar：嵌入 server（不 spawn 子进程，用 Electron 自带 node 跑），关窗 = server.stop 无后台残留
-- 自包含 bundle：web-dist + rg + (win) busybox 全打进 resources/，双击即用、不依赖 prior install
+- 自包含 bundle：web-dist + rg（四个平台二进制独立命名，main 按 platform+arch 选）+ (win) busybox 全打进 resources/，一份 resources 跨平台、双击即用、不依赖 prior install
 - 无边框窗口（`frame:false`）+ app 图标 = anycode logo + 内置窗口控件（TitleBar：最小化 / 最大化·还原 / 关闭，整栏可拖窗）
 - Windows：NSIS 安装器（可选安装目录、卸载时确认删 `~/.anycode`）
 - Linux：AppImage
 - macOS：arm64 zip + 解包 .app（Linux 交叉构建，未签名 → Gatekeeper 需右键→打开；关窗驻 Dock、activate 重开）；dmg + 代码签名需 macOS（后续）
-- 更新：新版本提示 + 自动更新（todo；设计见 auto-update 方案——`electron-updater` + GitHub Releases，Win 全自动差分、Linux AppImage 自动 + 降级打开下载页；前提需先建 GitHub Releases 发布流）
+- 打包脚本：`build:linux` / `build:win` / `build:mac`（arm64，另有 `build:mac:x64` / `build:mac:universal`）
+- app.asar 瘦身（todo）：domain/server 已由 esbuild 内联进 main.cjs，运行期无需再打包，挪 devDependencies 可减 ~30MB 产物
+- 更新：新版本提示 + 自动更新（设计已定：`electron-updater` + GitHub Releases，Win 全自动差分、Linux AppImage 自动 + 降级打开下载页；待实现；前提需先建 GitHub Releases 发布流）
 
 ## Tui Features
 
