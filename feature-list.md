@@ -20,6 +20,7 @@
   - 召回层：暂无计划，可后续用 RAG 将各 Session History 向量化存储 + 召回
 - Sessions
   - 持久化（thinking、tool calling、报错信息、usage、压缩事件等全覆盖）
+  - 首条任务用 LLM 自动起简短名（≤12 字、同语言；独立短调用、不进事件流；失败回退任务文本截断）
   - 支持 Session 重命名与删除
 - Workspace / Project
   - 添加 / 删除 workspace
