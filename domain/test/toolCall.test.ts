@@ -151,4 +151,22 @@ describe("toolCall（tools/toolCall.ts）", () => {
             ctx
         );
     });
+
+    it("防御：tool_calls 含空条目/缺 function 头的项 → 跳过不崩，正常项照常执行（dashscope/GLM 兼容层实测）", async () => {
+        const handler = vi.fn(async () => "ok");
+        const tools = [mkTool("fakeTool", handler)];
+        const ctx = mkCtx();
+        const out = await toolCall(
+            [
+                null as never,
+                {} as never,
+                { id: "x" } as never,
+                mkCall("fakeTool", "tc-ok"),
+            ],
+            ctx,
+            tools
+        );
+        expect(handler).toHaveBeenCalledTimes(1);
+        expect(out.some((m) => m.content === "ok")).toBe(true);
+    });
 });
