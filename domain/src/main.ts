@@ -13,6 +13,7 @@ import { loadRule } from "./rule";
 import { resolveSkills, renderSkillCatalog } from "./skill";
 // 注册内置连接器能力（FE-022）：import 副作用——registry 常驻，Settings/initMcp 可枚举
 import "./builtin";
+import { seedBuiltinSkills } from "./seed";
 import { EventStream } from "./eventStream";
 import { SessionService, Session, SessionKey, projectKeyOf } from "./session";
 import { createWorkspace, Workspace } from "./workspace";
@@ -23,10 +24,7 @@ import { loadMcpTools, loadProjectMcp, type McpServerConfig } from "./mcp";
 import { getRegisteredAbilities, isAbilityEnabled } from "./abilities";
 import { Config, type LlmProvider } from "./config";
 import { workspaceNote, memoryNote } from "./prompt";
-import {
-    detectContextWindow,
-    resolveContextWindow,
-} from "./config";
+import { detectContextWindow, resolveContextWindow } from "./config";
 import {
     BehaviorSubject,
     catchError,
@@ -85,6 +83,12 @@ class AnyAgent {
         this.projectKey = projectKeyOf(this.workspace.rootPath);
         this.definition = opts.definition ?? mainAgent;
         this.tools = [...this.definition.tools, ...(opts.extraTools ?? [])];
+        // 内置技能 seed（首启部署）：随包技能目录 → ~/.anycode/skills/，幂等（已有跳过）。
+        // 落地即普通全局技能，进入 resolveSkills 目录；用户可改、项目层可覆盖。
+        const seeded = seedBuiltinSkills();
+        if (seeded.length) {
+            console.info(`[Seed] 内置技能已就位：${seeded.join(", ")}`);
+        }
         this.initProcessor();
     }
 
@@ -128,7 +132,10 @@ class AnyAgent {
             //   内置连接器（启用的 kind:mcp abilities，最低） < 全局 config.mcpServers < 项目 mcp.yaml
             const builtinMcp: Record<string, McpServerConfig> = {};
             for (const a of getRegisteredAbilities()) {
-                if (a.kind !== "mcp" || !isAbilityEnabled(this.config, a.name)) {
+                if (
+                    a.kind !== "mcp" ||
+                    !isAbilityEnabled(this.config, a.name)
+                ) {
                     continue;
                 }
                 // 能力私有 config（provider/apiKey 等）以 ABILITY_CONFIG JSON 注入 server env
@@ -252,9 +259,7 @@ class AnyAgent {
      * 压缩后整体重写 session.jsonl（保留 title/createdAt）。返回压缩前后 token 数。
      * 与 submit 驱动的 agentLoop 自动压缩共用 compactMessages，仅触发方式不同（手动 vs 75% 阈值）。
      */
-    async compact(
-        focus?: string
-    ): Promise<{
+    async compact(focus?: string): Promise<{
         beforeTokens: number;
         afterTokens: number;
         compacted: boolean;
@@ -375,8 +380,7 @@ class AnyAgent {
             ctx,
             this.tools,
             // 自动压缩落盘：agentLoop 原地替换 messages 后回调重写 session.jsonl
-            async (msgs) =>
-                this.service.replaceMessages(sessionKey, msgs)
+            async (msgs) => this.service.replaceMessages(sessionKey, msgs)
         );
         // 记忆由 save_memory 工具触发（LLM 在循环内主动调用）
         this.abortController = null;
@@ -403,8 +407,7 @@ class AnyAgent {
         // 拼装 system prompt：instruction + workspace/memory 注入段 + memory/skills/rule。
         // 所有 prompt 文本集中存于 ./prompt.ts，此处只拼装。
         let sysPrompt =
-            this.definition.instruction +
-            workspaceNote(workspace.rootPath);
+            this.definition.instruction + workspaceNote(workspace.rootPath);
         if (memory) {
             sysPrompt += memory;
         }

@@ -12,7 +12,7 @@
   - Project 级别 Skill（`<root>/.anycode/skills/`）
   - Global 级别 Skill（`~/.anycode/skills/`）
   - 兼容 `~/.agents/skills/` 目录下 Skill（已实现，最低用户层）
-  - 技能即文件：目录制 `<name>/SKILL.md`（可带 `references/scripts/assets` 子目录，agent 可读）或平铺 `<name>.md`；内置技能 = 安装时 seed 进 `~/.anycode/skills/` 的普通技能（无特殊内置层，FE-022）
+  - 技能即文件：目录制 `<name>/SKILL.md`（可带 `references/scripts/assets` 子目录，agent 可读）或平铺 `<name>.md`；内置技能 = seed 机制（首启把随包技能拷进 `~/.anycode/skills/`，幂等不覆盖用户修改，落地即普通全局技能，FE-022）
   - 内置连接器（abilities 注册器——仅 mcp：web-fetch / web-search / browser-use 真浏览器 CDP，可开关不可删，FE-022）
 - Memory
   - 原文层：Session History（durable 事件日志，含 thinking / tool call / 报错 / usage 等，reload 重放）
