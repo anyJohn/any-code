@@ -25,8 +25,15 @@ const isWin = process.platform === "win32";
 const webDist = path.join(resourcesDir, "web-dist");
 const rgDir = path.join(resourcesDir, "rg");
 
-// domain ripgrep.ts 读 ANYCODE_RG_PATH（server bundle externalize 了 @vscode/ripgrep，降级到此）
-process.env.ANYCODE_RG_PATH = path.join(rgDir, isWin ? "rg.exe" : "rg");
+// domain ripgrep.ts 读 ANYCODE_RG_PATH（server bundle externalize 了 @vscode/ripgrep，降级到此）。
+// resources/rg/ 里按平台独立命名（stage-resources 拷入），按 platform+arch 挑：win→rg.exe，
+// darwin→arm64/x64 分开（一份 resources 跨平台）；linux→rg。
+const rgBin = isWin
+    ? "rg.exe"
+    : process.platform === "darwin"
+      ? process.arch === "arm64" ? "rg-darwin-arm64" : "rg-darwin-x64"
+      : "rg";
+process.env.ANYCODE_RG_PATH = path.join(rgDir, rgBin);
 // Windows: 捆绑的 busybox（sh.exe）给 domain bash.ts 用（同 ANYCODE_RG_PATH 模式）
 if (isWin) {
     process.env.ANYCODE_BASH_PATH = path.join(resourcesDir, "busybox-win", "sh.exe");
@@ -57,6 +64,9 @@ function freePort(startPort: number): Promise<number> {
 }
 
 async function boot() {
+    // 防双启动：mac 关窗后 app 驻 Dock，activate 重触发 boot 时 server/窗口还在就直接返回。
+    if (serverHandle || mainWindow) return;
+
     const port = await freePort(3000);
     try {
         serverHandle = await start({
@@ -113,12 +123,15 @@ async function boot() {
 app.whenReady().then(boot);
 
 app.on("window-all-closed", () => {
-    // 关窗 = stop server（无后台残留，SPEC-029 B-002 / I-002）。macOS 会保留，但本 RR 无 mac。
-    serverHandle?.close();
-    app.quit();
+    // 关窗 = 无后台残留（SPEC-029 B-002 / I-002）：非 mac 直接退出。
+    // mac 关窗后 app 驻 Dock，activate 触发 boot() 重开（server 在 boot 里重启）。
+    if (process.platform !== "darwin") {
+        serverHandle?.close();
+        app.quit();
+    }
 });
 
-// macOS dock 点击重新开窗（本 RR 不发 mac，但标准 Electron 写法）
+// mac Dock 点击重新开窗；window-all-closed 后 app 仍存活，boot() 防双启动直接重建。
 app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) boot();
 });

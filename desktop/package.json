@@ -12,13 +12,18 @@
         "build": "npm run stage && npm run build:main && electron-builder --config electron-builder.config.js",
         "build:linux": "npm run stage && npm run build:main && electron-builder --config electron-builder.config.js --linux",
         "build:win": "npm run stage && npm run build:main && electron-builder --config electron-builder.config.js --win",
-        "typecheck": "tsc --noEmit"
+        "typecheck": "tsc --noEmit",
+        "build:mac": "npm run stage && npm run build:main && electron-builder --config electron-builder.config.js --mac --arm64",
+        "build:mac:x64": "npm run stage && npm run build:main && electron-builder --config electron-builder.config.js --mac --x64",
+        "build:mac:universal": "npm run stage && npm run build:main && electron-builder --config electron-builder.config.js --mac --universal"
     },
     "dependencies": {
         "@any-code/domain": "workspace:*",
         "@any-code/server": "workspace:*"
     },
     "devDependencies": {
+        "@vscode/ripgrep-darwin-arm64": "1.18.0",
+        "@vscode/ripgrep-darwin-x64": "1.18.0",
         "electron": "^35.0.0",
         "electron-builder": "^26.0.0",
         "esbuild": "^0.27.4",

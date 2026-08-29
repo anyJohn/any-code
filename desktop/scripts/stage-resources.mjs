@@ -24,11 +24,13 @@ function copy(src, dst) {
     return true;
 }
 
-/** 用 find 定位 ripgrep 平台二进制（跟 install.sh 一样；isolated 下 require.resolve 找不到传递依赖） */
-function findRg(name) {
+/** 用 find 定位 ripgrep 平台二进制（跟 install.sh 一样；isolated 下 require.resolve 找不到传递依赖）。
+ *  pkgPart 匹配 pnpm 目录里的包名片段（如 'ripgrep-darwin-arm64'），bin 是包内二进制名。 */
+function findRg(pkgPart, bin) {
     try {
-        return execSync(`find "${NODE_MODULES}" -type f -name '${name}' -path '*ripgrep*' 2>/dev/null | head -1`)
-            .toString().trim();
+        return execSync(
+            `find "${NODE_MODULES}" -path "*${pkgPart}*/bin/${bin}" -type f 2>/dev/null | head -1`,
+        ).toString().trim();
     } catch {
         return "";
     }
@@ -41,14 +43,20 @@ mkdirSync(RESOURCES, { recursive: true });
 // 1. web/dist → resources/web-dist（静态 SPA）
 copy(join(ROOT, "web", "dist"), join(RESOURCES, "web-dist"));
 
-// 2. ripgrep 平台二进制 → resources/rg/（domain 同时 pin 了 linux + win32，都拷进来跨平台打包用）
+// 2. ripgrep 平台二进制 → resources/rg/（linux/win/2×darwin 全拷、各自独立文件名，
+//    main.ts 按 process.platform+arch 挑——一份 resources 跨平台通用）
 mkdirSync(join(RESOURCES, "rg"), { recursive: true });
-const rgLinux = findRg("rg");
-if (rgLinux) copy(rgLinux, join(RESOURCES, "rg", "rg"));
-else console.warn("  ⚠ linux rg not found");
-const rgWin = findRg("rg.exe");
-if (rgWin) copy(rgWin, join(RESOURCES, "rg", "rg.exe"));
-else console.warn("  ⚠ win rg.exe not found");
+const rgPlatforms = [
+    ["ripgrep-linux-x64", "rg", "rg"],
+    ["ripgrep-win32-x64", "rg.exe", "rg.exe"],
+    ["ripgrep-darwin-arm64", "rg", "rg-darwin-arm64"],
+    ["ripgrep-darwin-x64", "rg", "rg-darwin-x64"],
+];
+for (const [pkgPart, bin, outName] of rgPlatforms) {
+    const src = findRg(pkgPart, bin);
+    if (src) copy(src, join(RESOURCES, "rg", outName));
+    else console.warn(`  ⚠ ${pkgPart} rg not found`);
+}
 
 // 3. busybox-w32（win bash 工具）→ resources/busybox-win/sh.exe
 //    从仓库 assets/busybox-win/sh.exe 拷贝（git-tracked，不依赖外部下载）。

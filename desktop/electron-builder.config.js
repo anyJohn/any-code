@@ -31,6 +31,13 @@ module.exports = {
         target: ["nsis"],
         icon: "assets/icon/icon.ico",
     },
+    // macOS：zip（可直接运行/分发）+ dir（解包 .app 便于测试）。dmg 需 macOS 上 hdiutil，Linux 构建不出。
+    // 未签名 → Gatekeeper 需右键→打开。icon 给 ≥512 png，electron-builder 内置转 icns。
+    mac: {
+        target: ["zip", "dir"],
+        category: "public.app-category.developer-tools",
+        icon: "assets/icon/icon-1024.png",
+    },
     nsis: {
         oneClick: false,
         allowToChangeInstallationDirectory: true,
