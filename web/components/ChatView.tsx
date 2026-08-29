@@ -1,10 +1,12 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toRenderItems } from "@/lib/renderItems";
+import { useAppDispatch } from "@/hooks/useRedux";
 import { useAgent } from "@/hooks/useAgent";
 import { useCommand } from "@/hooks/useCommand";
 import { useFileReference } from "@/hooks/useFileReference";
+import { bumpSessions } from "@/store/workspaceSlice";
 import type { AgentEvent } from "@/lib/sseEvents";
 import { InputBox } from "./InputBox";
 import { MessageList } from "./MessageList";
@@ -44,6 +46,17 @@ export function ChatView({
         draft: command.draft,
         setDraft: command.setDraft,
     });
+
+    // 新对话建会话完成（currentSessionId: null → sid）：bumpSessions 让侧栏刷新会话列表。
+    // replaceState 改 URL 不触发路由渲染，侧栏无从得知新会话——靠此信号重拉（bugfix）。
+    const dispatch = useAppDispatch();
+    const prevSessionId = useRef<string | null>(currentSessionId);
+    useEffect(() => {
+        if (prevSessionId.current === null && currentSessionId !== null) {
+            dispatch(bumpSessions());
+        }
+        prevSessionId.current = currentSessionId;
+    }, [currentSessionId, dispatch]);
 
     const [openTools, setOpenTools] = useState<Record<string, boolean>>({});
     const [openSubs, setOpenSubs] = useState<Record<string, boolean>>({});

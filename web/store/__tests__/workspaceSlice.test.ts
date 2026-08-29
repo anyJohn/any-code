@@ -5,6 +5,7 @@ import {
     setSelected,
     setWorkspaces,
     setActiveSession,
+    bumpSessions,
     refreshWorkspaces,
 } from "@/store/workspaceSlice";
 import type { WorkspaceMeta } from "@any-code/domain";
@@ -23,6 +24,13 @@ describe("workspaceSlice reducers (TEST-003 TC-003.1/.2)", () => {
         expect(s.activeSessionId).toBe("s1");
         s = workspaceReducer(s, setActiveSession(null));
         expect(s.activeSessionId).toBeNull();
+    });
+
+    it("bumpSessions：会话列表脏信号递增（新会话创建后侧栏据此重拉）", () => {
+        let s = workspaceReducer(undefined, bumpSessions());
+        expect(s.sessionsVersion).toBe(1);
+        s = workspaceReducer(s, bumpSessions());
+        expect(s.sessionsVersion).toBe(2);
     });
 
     it("setWorkspaces 清理已删选中项", () => {

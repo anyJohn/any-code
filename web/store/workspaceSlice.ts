@@ -5,17 +5,20 @@ import { apiJson } from "@/lib/api";
 
 /**
  * workspaceSlice —— 跨页面共享 selected / workspaces / activeSessionId；事件流不在此。
+ * sessionsVersion：会话列表"脏"信号——新会话创建后 bump，侧栏据此重拉 sessions。
  */
 interface WorkspaceState {
     selected: WorkspaceMeta | null;
     workspaces: WorkspaceMeta[];
     activeSessionId: string | null;
+    sessionsVersion: number;
 }
 
 const initialState: WorkspaceState = {
     selected: null,
     workspaces: [],
     activeSessionId: null,
+    sessionsVersion: 0,
 };
 
 export const refreshWorkspaces = createAsyncThunk<WorkspaceMeta[]>(
@@ -49,6 +52,9 @@ const workspaceSlice = createSlice({
         setActiveSession(state, action: PayloadAction<string | null>) {
             state.activeSessionId = action.payload;
         },
+        bumpSessions(state) {
+            state.sessionsVersion += 1;
+        },
     },
     extraReducers: (builder) => {
         builder.addCase(refreshWorkspaces.fulfilled, (state, action) => {
@@ -65,7 +71,7 @@ const workspaceSlice = createSlice({
     },
 });
 
-export const { setSelected, setWorkspaces, setActiveSession } =
+export const { setSelected, setWorkspaces, setActiveSession, bumpSessions } =
     workspaceSlice.actions;
 export const selectWorkspace = (s: AppState) => s.workspace;
 export const workspaceReducer = workspaceSlice.reducer;

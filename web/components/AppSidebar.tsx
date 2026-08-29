@@ -61,7 +61,7 @@ export function AppSidebar({
     onCollapse: () => void;
     onExpand: () => void;
 }) {
-    const { selected, workspaces, activeSessionId } =
+    const { selected, workspaces, activeSessionId, sessionsVersion } =
         useAppSelector(selectWorkspace);
     const dispatch = useAppDispatch();
     const navigate = useNavigate();
@@ -114,6 +114,13 @@ export function AppSidebar({
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selected]);
+
+    // 会话列表变更信号（新会话创建后 bumpSessions）→ 重拉当前工作区 sessions。
+    // 初值 0 跳过（挂载时上面 [selected] effect 已拉过）。
+    useEffect(() => {
+        if (selected && sessionsVersion > 0) loadSessions(selected);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sessionsVersion]);
 
     const loadSessions = async (w: WorkspaceMeta) => {
         setSessionsStatus((p) => ({ ...p, [w.projectKey]: "loading" }));
