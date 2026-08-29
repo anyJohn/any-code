@@ -21,9 +21,12 @@ interface StatusInfo {
 export function StatusBar({
     projectKey,
     events,
+    pending,
 }: {
     projectKey: string;
     events: AgentEvent[];
+    /** run 进行中——pending 变化（run 开始/结束）时重拉 status，让 agent 改 config 后下条 run 反映 */
+    pending: boolean;
 }) {
     const [status, setStatus] = useState<StatusInfo>({
         provider: "",
@@ -56,7 +59,7 @@ export function StatusBar({
         return () => {
             cancelled = true;
         };
-    }, [projectKey]);
+    }, [projectKey, pending]);
 
     // 最新 Usage 事件 → 实时 token 用量
     let promptTokens = 0;

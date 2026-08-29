@@ -164,7 +164,11 @@ export function ChatView({
             />
 
             {projectKey && (
-                <StatusBar projectKey={projectKey} events={events} />
+                <StatusBar
+                    projectKey={projectKey}
+                    events={events}
+                    pending={pending}
+                />
             )}
 
             {pendingInteraction && (
