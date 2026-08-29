@@ -277,6 +277,17 @@ export default function SettingsPage() {
         "loading"
     );
     const [saving, setSaving] = useState(false);
+    // 单个 provider 表单折叠态（index → open；缺省展开）
+    const [providerOpen, setProviderOpen] = useState<Record<number, boolean>>(
+        {}
+    );
+    // 提交（Enter/blur）后的 provider 名：卡头标题 / 默认提供方下拉只读它——输入修改完毕才更新。
+    // 输入中 p.name 是草稿态；提交时才同步到 nameCommitted。
+    const [nameCommitted, setNameCommitted] = useState<Record<number, string>>(
+        {}
+    );
+    // name 必填校验：空（或全空白）→ 红框 + 提示，且不提交
+    const [nameError, setNameError] = useState<Record<number, boolean>>({});
 
     useEffect(() => {
         setStatus("loading");
@@ -287,6 +298,9 @@ export default function SettingsPage() {
             }
             const { providers: ps, default: d, mcp: ms } = fromResponse(res);
             setProviders(ps);
+            setNameCommitted(
+                Object.fromEntries(ps.map((p, i) => [i, p.name.trim()]))
+            );
             setDef(d);
             setMcp(ms);
             setStatus("ready");
@@ -300,6 +314,22 @@ export default function SettingsPage() {
     const addProvider = () => setProviders((p) => [...p, emptyProvider()]);
     const removeProvider = (i: number) =>
         setProviders((p) => p.filter((_, idx) => idx !== i));
+
+    /** 名称提交（Enter/blur）：trim 非空才生效——更新卡头标题 / 默认提供方下拉。
+     *  空则红框 + 提示、不提交。重命名的是当前默认提供方 → def 跟随新名，避免指向不存在名字。 */
+    const commitName = (i: number) => {
+        const trimmed = providers[i].name.trim();
+        setNameError((err) => {
+            const next = { ...err };
+            if (!trimmed) next[i] = true;
+            else delete next[i];
+            return next;
+        });
+        if (!trimmed) return;
+        const old = nameCommitted[i];
+        setNameCommitted((c) => ({ ...c, [i]: trimmed }));
+        if (old && def === old) setDef(trimmed);
+    };
 
     const patchMcp = (i: number, patch: Partial<McpForm>) =>
         setMcp((p) => p.map((x, idx) => (idx === i ? { ...x, ...patch } : x)));
@@ -375,7 +405,9 @@ export default function SettingsPage() {
                                 onChange={(e) => setDef(e.target.value)}
                             >
                                 {providers
-                                    .map((p) => p.name.trim())
+                                    .map((p, i) =>
+                                        (nameCommitted[i] ?? "").trim()
+                                    )
                                     .filter(Boolean)
                                     .map((name) => (
                                         <option key={name} value={name}>
@@ -399,225 +431,341 @@ export default function SettingsPage() {
                             }
                         >
                             {providers.map((p, i) => (
-                                <div
+                                <Collapsible
                                     key={i}
-                                    className="flex flex-col gap-2 rounded-lg border border-border p-3"
+                                    open={providerOpen[i] ?? true}
+                                    onOpenChange={(v) =>
+                                        setProviderOpen((prev) => ({
+                                            ...prev,
+                                            [i]: v,
+                                        }))
+                                    }
                                 >
-                                    <div className="flex items-center gap-2">
-                                        <Input
-                                            className="h-8 flex-1"
-                                            placeholder="名称（如 openai）"
-                                            value={p.name}
-                                            onChange={(e) =>
-                                                patchProvider(i, {
-                                                    name: e.target.value,
-                                                })
-                                            }
-                                        />
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="size-8"
-                                            onClick={() => removeProvider(i)}
-                                            title="删除"
-                                        >
-                                            <Trash2 className="size-3.5 text-muted-foreground" />
-                                        </Button>
-                                    </div>
-                                    <label className="flex flex-col gap-1">
-                                        <span className="text-xs text-muted-foreground">
-                                            API Key
-                                            {p.maskedKey &&
-                                                ` （当前 ${p.maskedKey}，留空不改）`}
-                                        </span>
-                                        <Input
-                                            className="h-8 font-mono"
-                                            type="password"
-                                            placeholder="留空保留原值"
-                                            value={p.apiKey}
-                                            onChange={(e) =>
-                                                patchProvider(i, {
-                                                    apiKey: e.target.value,
-                                                })
-                                            }
-                                        />
-                                    </label>
-                                    <div className="grid grid-cols-1 gap-2">
-                                        <label className="flex flex-col gap-1">
-                                            <span className="text-xs text-muted-foreground">
-                                                Base URL（可选）支持 openai 格式
-                                                base url
-                                            </span>
-                                            <Input
-                                                className="h-8"
-                                                placeholder="https://.../v1"
-                                                value={p.baseURL}
-                                                onChange={(e) =>
-                                                    patchProvider(i, {
-                                                        baseURL: e.target.value,
-                                                    })
-                                                }
-                                            />
-                                        </label>
-                                        <label className="flex flex-col gap-1">
-                                            <span className="text-xs text-muted-foreground">
-                                                上下文窗口（留空=自动探测）
-                                            </span>
-                                            <Input
-                                                className="h-8 font-mono"
-                                                type="number"
-                                                placeholder="留空自动，或填上限（与探测取最小）"
-                                                value={p.contextWindow}
-                                                onChange={(e) =>
-                                                    patchProvider(i, {
-                                                        contextWindow:
-                                                            e.target.value,
-                                                    })
-                                                }
-                                            />
-                                        </label>
-                                        <label className="flex flex-col gap-1">
-                                            <span className="text-xs text-muted-foreground">
-                                                最大输出 token（留空=自动）
-                                            </span>
-                                            <Input
-                                                className="h-8 font-mono"
-                                                type="number"
-                                                placeholder="留空自动，或填上限（与探测取最小）"
-                                                value={p.maxOutputTokens}
-                                                onChange={(e) =>
-                                                    patchProvider(i, {
-                                                        maxOutputTokens:
-                                                            e.target.value,
-                                                    })
-                                                }
-                                            />
-                                        </label>
-                                    </div>
-                                    <div className="flex flex-col gap-1.5">
-                                        <span className="text-xs text-muted-foreground">
-                                            模型列表
-                                        </span>
-                                        {p.models.map((m, mi) => (
-                                            <div
-                                                key={mi}
-                                                className="flex items-center gap-2"
-                                            >
-                                                <Input
-                                                    className="h-8 font-mono"
-                                                    placeholder="model id（如 gpt-4o）"
-                                                    value={m.id}
-                                                    onChange={(e) =>
-                                                        patchProvider(i, {
-                                                            models: p.models.map(
-                                                                (x, xidx) =>
-                                                                    xidx === mi
-                                                                        ? {
-                                                                              ...x,
-                                                                              id: e
-                                                                                  .target
-                                                                                  .value,
-                                                                          }
-                                                                        : x
-                                                            ),
-                                                        })
-                                                    }
+                                    <div className="rounded-lg border border-border overflow-hidden">
+                                        <CollapsibleTrigger asChild>
+                                            <div className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none">
+                                                <ChevronRight
+                                                    className={cn(
+                                                        "size-4 shrink-0 text-muted-foreground transition-transform",
+                                                        (providerOpen[i] ??
+                                                            true) &&
+                                                            "rotate-90"
+                                                    )}
                                                 />
-                                                <Input
-                                                    className="h-8"
-                                                    placeholder="展示名（可选）"
-                                                    value={m.name}
-                                                    onChange={(e) =>
-                                                        patchProvider(i, {
-                                                            models: p.models.map(
-                                                                (x, xidx) =>
-                                                                    xidx === mi
-                                                                        ? {
-                                                                              ...x,
-                                                                              name: e
-                                                                                  .target
-                                                                                  .value,
-                                                                          }
-                                                                        : x
-                                                            ),
-                                                        })
+                                                <span className="text-sm font-medium truncate">
+                                                    {nameCommitted[i] ||
+                                                        "未命名提供方"}
+                                                </span>
+                                                {p.defaultModel && (
+                                                    <span className="text-xs text-muted-foreground shrink-0">
+                                                        默认 {p.defaultModel}
+                                                    </span>
+                                                )}
+                                                <div className="flex-1" />
+                                                <span
+                                                    className="shrink-0"
+                                                    onClick={(e) =>
+                                                        e.stopPropagation()
                                                     }
-                                                />
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="size-8"
-                                                    onClick={() =>
-                                                        patchProvider(i, {
-                                                            models: p.models.filter(
-                                                                (_, xidx) =>
-                                                                    xidx !== mi
-                                                            ),
-                                                        })
-                                                    }
-                                                    title="删除模型"
                                                 >
-                                                    <Trash2 className="size-3.5 text-muted-foreground" />
-                                                </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="size-8"
+                                                        onClick={() =>
+                                                            removeProvider(i)
+                                                        }
+                                                        title="删除"
+                                                    >
+                                                        <Trash2 className="size-3.5 text-muted-foreground" />
+                                                    </Button>
+                                                </span>
                                             </div>
-                                        ))}
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="w-fit"
-                                            onClick={() =>
-                                                patchProvider(i, {
-                                                    models: [
-                                                        ...p.models,
-                                                        { id: "", name: "" },
-                                                    ],
-                                                })
-                                            }
-                                        >
-                                            <Plus className="size-3.5" />{" "}
-                                            添加模型
-                                        </Button>
+                                        </CollapsibleTrigger>
+                                        <CollapsibleContent>
+                                            <div className="flex flex-col gap-2 px-3 pb-3">
+                                                <label className="flex flex-col gap-1">
+                                                    <span className="text-xs text-muted-foreground">
+                                                        名称
+                                                    </span>
+                                                    <Input
+                                                        className={cn(
+                                                            "h-8 flex-1",
+                                                            nameError[i] &&
+                                                                "border-destructive"
+                                                        )}
+                                                        placeholder="名称（如 openai）"
+                                                        value={p.name}
+                                                        onChange={(e) =>
+                                                            patchProvider(i, {
+                                                                name: e.target
+                                                                    .value,
+                                                            })
+                                                        }
+                                                        onBlur={() =>
+                                                            commitName(i)
+                                                        }
+                                                        onKeyDown={(e) => {
+                                                            if (
+                                                                e.key ===
+                                                                "Enter"
+                                                            )
+                                                                commitName(i);
+                                                        }}
+                                                    />
+                                                    {nameError[i] && (
+                                                        <span className="text-xs text-destructive">
+                                                            名称不能为空
+                                                        </span>
+                                                    )}
+                                                </label>
+                                                <label className="flex flex-col gap-1">
+                                                    <span className="text-xs text-muted-foreground">
+                                                        Base URL（可选）支持
+                                                        openai 格式 base url
+                                                    </span>
+                                                    <Input
+                                                        className="h-8"
+                                                        placeholder="https://.../v1"
+                                                        value={p.baseURL}
+                                                        onChange={(e) =>
+                                                            patchProvider(i, {
+                                                                baseURL:
+                                                                    e.target
+                                                                        .value,
+                                                            })
+                                                        }
+                                                    />
+                                                </label>
+                                                <label className="flex flex-col gap-1">
+                                                    <span className="text-xs text-muted-foreground">
+                                                        API Key
+                                                        {p.maskedKey &&
+                                                            ` （当前 ${p.maskedKey}，留空不改）`}
+                                                    </span>
+                                                    <Input
+                                                        className="h-8 font-mono"
+                                                        type="password"
+                                                        placeholder="留空保留原值"
+                                                        value={p.apiKey}
+                                                        onChange={(e) =>
+                                                            patchProvider(i, {
+                                                                apiKey: e.target
+                                                                    .value,
+                                                            })
+                                                        }
+                                                    />
+                                                </label>
+                                                <div className="grid grid-cols-1 gap-2">
+                                                    <label className="flex flex-col gap-1">
+                                                        <span className="text-xs text-muted-foreground">
+                                                            上下文窗口（留空=自动探测）
+                                                        </span>
+                                                        <Input
+                                                            className="h-8 font-mono"
+                                                            type="number"
+                                                            placeholder="留空自动，或填上限（与探测取最小）"
+                                                            value={
+                                                                p.contextWindow
+                                                            }
+                                                            onChange={(e) =>
+                                                                patchProvider(
+                                                                    i,
+                                                                    {
+                                                                        contextWindow:
+                                                                            e
+                                                                                .target
+                                                                                .value,
+                                                                    }
+                                                                )
+                                                            }
+                                                        />
+                                                    </label>
+                                                    <label className="flex flex-col gap-1">
+                                                        <span className="text-xs text-muted-foreground">
+                                                            最大输出
+                                                            token（留空=自动）
+                                                        </span>
+                                                        <Input
+                                                            className="h-8 font-mono"
+                                                            type="number"
+                                                            placeholder="留空自动，或填上限（与探测取最小）"
+                                                            value={
+                                                                p.maxOutputTokens
+                                                            }
+                                                            onChange={(e) =>
+                                                                patchProvider(
+                                                                    i,
+                                                                    {
+                                                                        maxOutputTokens:
+                                                                            e
+                                                                                .target
+                                                                                .value,
+                                                                    }
+                                                                )
+                                                            }
+                                                        />
+                                                    </label>
+                                                </div>
+                                                <div className="flex flex-col gap-1.5">
+                                                    <span className="text-xs text-muted-foreground">
+                                                        模型列表
+                                                    </span>
+                                                    {p.models.map((m, mi) => (
+                                                        <div
+                                                            key={mi}
+                                                            className="flex items-center gap-2"
+                                                        >
+                                                            <Input
+                                                                className="h-8 font-mono"
+                                                                placeholder="model id（如 gpt-4o）"
+                                                                value={m.id}
+                                                                onChange={(e) =>
+                                                                    patchProvider(
+                                                                        i,
+                                                                        {
+                                                                            models: p.models.map(
+                                                                                (
+                                                                                    x,
+                                                                                    xidx
+                                                                                ) =>
+                                                                                    xidx ===
+                                                                                    mi
+                                                                                        ? {
+                                                                                              ...x,
+                                                                                              id: e
+                                                                                                  .target
+                                                                                                  .value,
+                                                                                          }
+                                                                                        : x
+                                                                            ),
+                                                                        }
+                                                                    )
+                                                                }
+                                                            />
+                                                            <Input
+                                                                className="h-8"
+                                                                placeholder="展示名（可选）"
+                                                                value={m.name}
+                                                                onChange={(e) =>
+                                                                    patchProvider(
+                                                                        i,
+                                                                        {
+                                                                            models: p.models.map(
+                                                                                (
+                                                                                    x,
+                                                                                    xidx
+                                                                                ) =>
+                                                                                    xidx ===
+                                                                                    mi
+                                                                                        ? {
+                                                                                              ...x,
+                                                                                              name: e
+                                                                                                  .target
+                                                                                                  .value,
+                                                                                          }
+                                                                                        : x
+                                                                            ),
+                                                                        }
+                                                                    )
+                                                                }
+                                                            />
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="size-8"
+                                                                onClick={() =>
+                                                                    patchProvider(
+                                                                        i,
+                                                                        {
+                                                                            models: p.models.filter(
+                                                                                (
+                                                                                    _,
+                                                                                    xidx
+                                                                                ) =>
+                                                                                    xidx !==
+                                                                                    mi
+                                                                            ),
+                                                                        }
+                                                                    )
+                                                                }
+                                                                title="删除模型"
+                                                            >
+                                                                <Trash2 className="size-3.5 text-muted-foreground" />
+                                                            </Button>
+                                                        </div>
+                                                    ))}
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="w-fit"
+                                                        onClick={() =>
+                                                            patchProvider(i, {
+                                                                models: [
+                                                                    ...p.models,
+                                                                    {
+                                                                        id: "",
+                                                                        name: "",
+                                                                    },
+                                                                ],
+                                                            })
+                                                        }
+                                                    >
+                                                        <Plus className="size-3.5" />{" "}
+                                                        添加模型
+                                                    </Button>
+                                                </div>
+                                                <label className="flex flex-col gap-1">
+                                                    <span className="text-xs text-muted-foreground">
+                                                        默认模型
+                                                    </span>
+                                                    <select
+                                                        className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                                        value={p.defaultModel}
+                                                        onChange={(e) =>
+                                                            patchProvider(i, {
+                                                                defaultModel:
+                                                                    e.target
+                                                                        .value,
+                                                            })
+                                                        }
+                                                    >
+                                                        {p.models
+                                                            .map((m) =>
+                                                                m.id.trim()
+                                                            )
+                                                            .filter(Boolean)
+                                                            .map((id) => (
+                                                                <option
+                                                                    key={id}
+                                                                    value={id}
+                                                                >
+                                                                    {id}
+                                                                </option>
+                                                            ))}
+                                                    </select>
+                                                </label>
+                                                <label className="flex items-center gap-2">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="size-3.5 accent-primary"
+                                                        checked={p.streaming}
+                                                        onChange={(e) =>
+                                                            patchProvider(i, {
+                                                                streaming:
+                                                                    e.target
+                                                                        .checked,
+                                                            })
+                                                        }
+                                                    />
+                                                    <span className="text-xs text-muted-foreground">
+                                                        流式输出
+                                                    </span>
+                                                </label>
+                                            </div>
+                                        </CollapsibleContent>
                                     </div>
-                                    <label className="flex flex-col gap-1">
-                                        <span className="text-xs text-muted-foreground">
-                                            默认模型
-                                        </span>
-                                        <select
-                                            className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                            value={p.defaultModel}
-                                            onChange={(e) =>
-                                                patchProvider(i, {
-                                                    defaultModel:
-                                                        e.target.value,
-                                                })
-                                            }
-                                        >
-                                            {p.models
-                                                .map((m) => m.id.trim())
-                                                .filter(Boolean)
-                                                .map((id) => (
-                                                    <option key={id} value={id}>
-                                                        {id}
-                                                    </option>
-                                                ))}
-                                        </select>
-                                    </label>
-                                    <label className="flex items-center gap-2">
-                                        <input
-                                            type="checkbox"
-                                            className="size-3.5 accent-primary"
-                                            checked={p.streaming}
-                                            onChange={(e) =>
-                                                patchProvider(i, {
-                                                    streaming: e.target.checked,
-                                                })
-                                            }
-                                        />
-                                        <span className="text-xs text-muted-foreground">
-                                            流式输出
-                                        </span>
-                                    </label>
-                                </div>
+                                </Collapsible>
                             ))}
                         </CollapsibleCard>
 
