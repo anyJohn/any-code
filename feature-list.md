@@ -13,6 +13,7 @@
   - Global 级别 Skill（`~/.anycode/skills/`）
   - 兼容 `~/.agents/skills/` 目录下 Skill（已实现，最低用户层）
   - 技能即文件：目录制 `<name>/SKILL.md`（可带 `references/scripts/assets` 子目录，agent 可读）或平铺 `<name>.md`；内置技能 = seed 机制（首启把随包技能拷进 `~/.anycode/skills/`，幂等不覆盖用户修改，落地即普通全局技能，FE-022）
+  - 已内置 anycode-docs 技能（AnyCode 自身配置与管理手册：改 config/mcp/abilities/skills/rules/memory + 生效时机，让 agent 能自我管理配置）
   - 已内置 office-mcp 技能（Office 39 工具：Word/Excel/PPT/PDF/OCR，MIT + 三审；未发 npm，需首次 clone+build 配 MCP）
   - 内置连接器（abilities 注册器——仅 mcp：web-fetch / web-search / browser-use 真浏览器 CDP，可开关不可删，FE-022）
 - Memory
