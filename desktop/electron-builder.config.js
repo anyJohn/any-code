@@ -25,9 +25,11 @@ module.exports = {
     linux: {
         target: ["AppImage"],
         category: "Development",
+        icon: "assets/icon/icon-512.png",
     },
     win: {
         target: ["nsis"],
+        icon: "assets/icon/icon.ico",
     },
     nsis: {
         oneClick: false,

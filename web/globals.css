@@ -165,6 +165,15 @@
     );
 }
 
+/* 桌面端无边框窗口拖拽区（Electron -webkit-app-region）：
+   .app-drag 标题栏可拖窗；.app-no-drag 标在交互元素上恢复点击。浏览器模式无副作用。 */
+.app-drag {
+    -webkit-app-region: drag;
+}
+.app-no-drag {
+    -webkit-app-region: no-drag;
+}
+
 /* 上下文压缩不确定进度条：内部滑块左右往复（真实 % 无法知，只表示"进行中"）。 */
 @keyframes compact-slide {
     0% {

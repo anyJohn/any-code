@@ -8,7 +8,7 @@
  *
  * 自包含：web/dist + rg + (win) busybox 全 bundle 进 resources/，双击即用、不依赖 prior install。
  */
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, ipcMain, Menu } from "electron";
 import { createServer } from "node:net";
 import path from "node:path";
 import { start } from "@any-code/server";
@@ -34,6 +34,14 @@ if (isWin) {
 
 let serverHandle: { port: number; close: () => void } | null = null;
 let mainWindow: BrowserWindow | null = null;
+
+// 窗口控制 IPC（渲染进程经 preload 的 window.anycode 调用）。模块级注册一次。
+ipcMain.on("anycode:win-minimize", () => mainWindow?.minimize());
+ipcMain.on("anycode:win-toggle-maximize", () => {
+    if (!mainWindow) return;
+    mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
+});
+ipcMain.on("anycode:win-close", () => mainWindow?.close());
 
 /** 从 startPort 试到空闲端口（复用 launcher freePort 思路） */
 function freePort(startPort: number): Promise<number> {
@@ -62,17 +70,37 @@ async function boot() {
         return;
     }
 
+    // frameless：去 OS 标题栏，窗口控件内置到 web UI（TitleBar）；杀默认菜单栏避免残栏。
+    Menu.setApplicationMenu(null);
+
+    // 窗口图标：打包后读 resources/icon.png（stage-resources 拷入），开发读 committed 源 png。
+    const iconPath = app.isPackaged
+        ? path.join(process.resourcesPath, "icon.png")
+        : path.join(__dirname, "..", "..", "assets", "icon", "icon-512.png");
+
     mainWindow = new BrowserWindow({
         width: 1080,
         height: 720,
         minWidth: 720,
         minHeight: 520,
         title: "AnyCode",
+        frame: false, // 无边框，控件由 web TitleBar 承载
+        icon: iconPath,
         webPreferences: {
             contextIsolation: true,
             nodeIntegration: false,
+            preload: path.join(__dirname, "preload.cjs"),
         },
     });
+
+    // 最大化状态变化回传渲染进程（TitleBar 切换 ▢/还原图标）。建后发一次初值。
+    const sendMaxState = () =>
+        mainWindow?.webContents.send(
+            "anycode:win-maximized",
+            mainWindow.isMaximized(),
+        );
+    mainWindow.on("maximize", sendMaxState);
+    mainWindow.on("unmaximize", sendMaxState);
 
     const url = `http://127.0.0.1:${port}`;
     console.log(`>> anycode desktop -> ${url}`);

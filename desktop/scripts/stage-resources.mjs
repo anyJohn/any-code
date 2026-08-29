@@ -62,4 +62,7 @@ if (existsSync(bundledBusybox)) {
     console.warn("  ⚠ busybox sh.exe not in assets/busybox-win/ — Windows bash 不可用");
 }
 
+// 4. app 图标（512 png）→ resources/icon.png（main.ts BrowserWindow 运行时读它）
+copy(join(__dirname, "..", "assets", "icon", "icon-512.png"), join(RESOURCES, "icon.png"));
+
 console.log(">> resources staged.");

@@ -61,7 +61,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }, [collapsed]);
 
     return (
-        <div ref={containerRef} className="h-screen flex p-2 app-shell-bg">
+        <div ref={containerRef} className="flex-1 min-h-0 flex p-2">
             <aside
                 style={{ width: collapsed ? COLLAPSED_W : sidebarWidth }}
                 className="shrink-0 rounded-lg border border-border bg-background overflow-hidden flex flex-col transition-[width] duration-150"
