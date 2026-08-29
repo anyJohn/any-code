@@ -46,6 +46,8 @@ Rules:
 
 // ===== system prompt 注入段（getSystemMessage 拼装）=====
 
+import type { ShellKind } from "./tools/functions/bash";
+
 /** Workspace 上下文注入：告知 LLM 工作根目录，使其能把工具输出里的绝对路径对应到根。 */
 export function workspaceNote(rootPath: string): string {
     return (
@@ -53,6 +55,34 @@ export function workspaceNote(rootPath: string): string {
         `Your working root directory is ${rootPath}. ` +
         `When you analyze absolute paths in tool output, map them against this root directory.`
     );
+}
+
+/**
+ * Shell 兼容性提示：按当前平台/二进制注入，让 LLM 生成可执行命令。
+ * - busybox（Windows 安装器下发）：POSIX 子集，禁 bash 4+ 特性与 GNU 长选项
+ * - git-bash（Windows 系统 Git）：POSIX 兼容，提示路径风格
+ * - sh（unix /bin/sh）：默认无特殊提示
+ * - none（Windows 未配 bash）：静默（bash 工具运行时会报错）
+ */
+export function shellNote(kind: ShellKind): string {
+    if (kind === "busybox") {
+        return (
+            `\n\n# Shell\n` +
+            `The bash tool runs on **busybox** (Windows, POSIX subset — not GNU bash). ` +
+            `Avoid bash 4+ features and GNU-isms: no associative arrays, no \`mapfile\`/\`readarray\`, ` +
+            `no \`<<<\` here-strings, no \`|&\`, no \`**\` globstar, no \`read -d\`. ` +
+            `Prefer plain POSIX (\`sed\`/\`awk\`/\`tr\`/\`cut\`) over bash-specific parameter expansion. ` +
+            `Paths: use /c/Users/... form or relative; busybox translates MSYS internally.`
+        );
+    }
+    if (kind === "git-bash") {
+        return (
+            `\n\n# Shell\n` +
+            `The bash tool runs on **Git Bash** (Windows). Use POSIX-style paths ` +
+            `(/c/Users/... or relative); avoid Windows-only cmd/PowerShell commands.`
+        );
+    }
+    return "";
 }
 
 /** save_memory 工具引导注入：引导 LLM 在确有必要时主动记值得跨会话记住的信息。 */
@@ -133,7 +163,8 @@ export function buildCompactionPrompt(
             `<previous-summary>\n${previousSummary}\n</previous-summary>\n\n` +
             `${COMPACT_UPDATE_INSTRUCTIONS}\n\n`;
     } else {
-        p += "Create a structured summary of this so another agent can continue the work.\n\n";
+        p +=
+            "Create a structured summary of this so another agent can continue the work.\n\n";
     }
     p += COMPACT_SUMMARY_TEMPLATE;
     if (focus) {

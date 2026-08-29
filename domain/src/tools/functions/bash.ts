@@ -53,6 +53,30 @@ export function resolveShell(
     return { binary, cwd };
 }
 
+/** 当前生效 shell 的种类——用于注入 system prompt 提示 LLM 命令兼容性。 */
+export type ShellKind = "sh" | "git-bash" | "busybox" | "unknown" | "none";
+
+/**
+ * 解析 shell 种类（供 prompt 注入；不抛错——Windows 无 bash 时返回 none，prompt 静默跳过）。
+ * - unix：/bin/sh（sh）
+ * - Windows：binary 路径含 busybox → busybox（POSIX 子集）；含 git/bash → git-bash；否则 unknown
+ */
+export function resolveShellKind(cwd: string, gitBashPath?: string): ShellKind {
+    if (process.platform !== "win32") return "sh";
+    const candidates = [
+        process.env.ANYCODE_BASH_PATH,
+        gitBashPath,
+        join(globalConfigDir(), "runtime", "busybox", "sh.exe"),
+        SYSTEM_GIT_BASH,
+    ].filter((x): x is string => !!x && existsSync(x));
+    const binary = candidates[0];
+    if (!binary) return "none";
+    const lower = binary.toLowerCase();
+    if (lower.includes("busybox")) return "busybox";
+    if (lower.includes("git") || lower.includes("bash")) return "git-bash";
+    return "unknown";
+}
+
 /**
  * 执行 bash 命令。显式 spawn(binary, ["-c", command])：规避 Node 的 shell:<bash.exe>
  * 在 Windows 会传 /d /s /c（cmd 语法）bash 不认的问题（DEC-089）。stdout/stderr 逐 chunk

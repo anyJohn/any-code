@@ -23,7 +23,8 @@ import type { Tool } from "./tools";
 import { loadMcpTools, loadProjectMcp, type McpServerConfig } from "./mcp";
 import { getRegisteredAbilities, isAbilityEnabled } from "./abilities";
 import { Config, type LlmProvider } from "./config";
-import { workspaceNote, memoryNote } from "./prompt";
+import { workspaceNote, memoryNote, shellNote } from "./prompt";
+import { resolveShellKind } from "./tools/functions/bash";
 import { detectContextWindow, resolveContextWindow } from "./config";
 import {
     BehaviorSubject,
@@ -412,6 +413,10 @@ class AnyAgent {
             sysPrompt += memory;
         }
         sysPrompt += memoryNote;
+        // shell 兼容性提示（Windows busybox/git-bash 告知 LLM 命令边界；unix 静默）
+        sysPrompt += shellNote(
+            resolveShellKind(workspace.rootPath, this.config.gitBashPath)
+        );
         if (skills) {
             sysPrompt += skills;
         }
