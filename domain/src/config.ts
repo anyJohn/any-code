@@ -105,6 +105,14 @@ export interface ConfigShape {
     mcp?: Record<string, McpServerConfig>;
     /** Windows 上 agent bash 工具用的 Git Bash 路径（config.yaml 配，非 env）。安装器下发 PortableGit 后写入。 */
     gitBashPath?: string;
+    /** 内置能力开关（SPEC-031）：未配置 = 不启用；随包默认 config 预置三能力开。条目可带 config（provider/连接器参数）。 */
+    abilities?: Record<string, AbilityConfig>;
+}
+
+/** 单个能力配置：enabled 开关 + 能力私有 config（如 web-search 的 provider/apiKey）。 */
+export interface AbilityConfig {
+    enabled?: boolean;
+    config?: Record<string, unknown>;
 }
 
 /** apiKey 脱敏（前4后4，过短则 ****） */
@@ -149,23 +157,28 @@ export class Config {
     mcpServers: Record<string, McpServerConfig>;
     /** Windows agent bash 用的 Git Bash 路径（~/.anycode/config.yaml 顶层 gitBashPath）。 */
     gitBashPath?: string;
+    /** 内置能力开关（SPEC-031 B-002）：未配置 = 不启用。 */
+    abilities: Record<string, AbilityConfig>;
 
     private constructor(
         providers: Record<string, LlmProvider>,
         def: string,
         mcpServers: Record<string, McpServerConfig>,
-        gitBashPath?: string
+        gitBashPath: string | undefined,
+        abilities: Record<string, AbilityConfig>
     ) {
         this.providers = providers;
         this.default = def;
         this.mcpServers = mcpServers;
         this.gitBashPath = gitBashPath;
+        this.abilities = abilities;
     }
 
     static load(): Config {
         const file = globalConfigFile();
         if (!existsSync(file)) {
-            // 首次启动：自动创建默认配置模板（用户经 /settings 填 apiKey）
+            // 首次启动：自动创建默认配置模板（用户经 /settings 填 apiKey）。
+            // abilities：随包默认 config 预置三内置能力开启（SPEC-031 B-002 / AC-003）。
             Config.save({
                 providers: {
                     default: {
@@ -177,6 +190,14 @@ export class Config {
                     },
                 },
                 default: "default",
+                abilities: {
+                    "web-fetch": { enabled: true },
+                    "web-search": {
+                        enabled: true,
+                        config: { provider: "ddg", apiKey: "" },
+                    },
+                    "browser-use": { enabled: true },
+                },
             });
         }
         const parsed = yaml.load(readFileSync(file, "utf-8")) as ConfigShape | null;
@@ -194,7 +215,13 @@ export class Config {
             }
         }
         const mcpServers = parsed?.mcp ?? {};
-        return new Config(providers, resolvedDef, mcpServers, parsed?.gitBashPath);
+        return new Config(
+            providers,
+            resolvedDef,
+            mcpServers,
+            parsed?.gitBashPath,
+            parsed?.abilities ?? {}
+        );
     }
 
     /** 当前生效 provider（按 default 字段） */
@@ -202,12 +229,13 @@ export class Config {
         return this.providers[this.default];
     }
 
-    /** 热更新：重读配置文件，新 default/provider/mcp 生效（下次 callLLM/initMcp 用新值） */
+    /** 热更新：重读配置文件，新 default/provider/mcp/abilities 生效（下次 callLLM/initMcp/getSystemMessage 用新值） */
     reload(): void {
         const fresh = Config.load();
         this.providers = fresh.providers;
         this.default = fresh.default;
         this.mcpServers = fresh.mcpServers;
+        this.abilities = fresh.abilities;
     }
 
     /** 校验 + 写回 ~/.anycode/config.yaml（js-yaml dump）。覆盖前先备份原配置到 config.yaml.bak，供误配置回滚。 */
@@ -256,6 +284,7 @@ export class Config {
                 default: def,
                 mcp: data.mcp ?? {},
                 gitBashPath: data.gitBashPath,
+                abilities: data.abilities ?? {},
             }),
             "utf-8"
         );

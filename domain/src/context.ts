@@ -1,6 +1,7 @@
 import type { Workspace } from "./workspace";
 import type { AgentEventPayload } from "./type";
 import type { LlmProvider } from "./config";
+import type { SkillEntry } from "./skill";
 
 /** 最小事件发射接口。EventStream 实现它;AgentTool 的 tagged proxy 也实现它。 */
 export interface EventEmitter {
@@ -30,4 +31,6 @@ export interface ToolContext {
     fileState?: Map<string, number>;
     /** Windows agent bash 用的 Git Bash 路径（来自 config.gitBashPath，bash.ts resolveShell 用）。 */
     gitBashPath?: string;
+    /** 技能目录合并表（resolveSkills 结果）：skill 工具按 name 取全文。SPEC-031 B-005 */
+    skills?: Map<string, SkillEntry>;
 }

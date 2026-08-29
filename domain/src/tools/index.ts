@@ -10,6 +10,7 @@ import {
     executeBashSchema,
     saveMemorySchema,
     askQuestionSchema,
+    skillSchema,
 } from "./schema";
 import { executeBashFunc } from "./functions/bash";
 import { readFunc } from "./functions/read";
@@ -20,6 +21,7 @@ import { globFunc } from "./functions/glob";
 import { grepFunc } from "./functions/grep";
 import { saveMemoryFunc } from "./functions/saveMemory";
 import { askQuestionFunc } from "./functions/askQuestion";
+import { skillFunc } from "./functions/skill";
 
 /**
  * Tool = schema（给 LLM）+ handler（执行）。统一内置工具与 AgentTool，
@@ -45,6 +47,8 @@ const askQuestionTool: Tool = {
     schema: askQuestionSchema,
     handler: askQuestionFunc,
 };
+/** skill 工具：按需读技能全文（SPEC-031 B-005）。只读；模型经 <available_skills> 目录触发。 */
+const skillTool: Tool = { schema: skillSchema, handler: skillFunc };
 
 // plan 由 AgentTool(planAgent) 提供（见 agent.ts）。
 const ToolKit = {
@@ -58,8 +62,9 @@ const ToolKit = {
         grepTool,
         saveMemoryTool,
         askQuestionTool,
+        skillTool,
     ],
-    readOnlyTools: [readTool, exploreTool, globTool, grepTool],
+    readOnlyTools: [readTool, exploreTool, globTool, grepTool, skillTool],
     executeTools: [
         bashTool,
         readTool,
@@ -70,6 +75,7 @@ const ToolKit = {
         grepTool,
         saveMemoryTool,
         askQuestionTool,
+        skillTool,
     ],
 };
 

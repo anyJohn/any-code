@@ -65,7 +65,10 @@
   - `@` 引用文件
   - Skill 注入 Command（todo）
   - `/rename` (todo)
-
+- Rule
+  - 支持 .anycode 目录下的 AGENTS.md 规则文件(todo)
+  - 支持 .agents 目录下的 AGENTS.md 规则文件(todo)
+  - 支持 Workspace 目录下的 AGENTS.md 规则文件(todo)
 - Plugin（todo，暂不实现）
   - 拓展 Command
   - 拓展 subagents

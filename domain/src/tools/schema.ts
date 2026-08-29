@@ -273,4 +273,25 @@ export {
     executeBashSchema,
     saveMemorySchema,
     askQuestionSchema,
+    skillSchema,
+};
+
+/** skill 工具 schema（SPEC-031 B-005）：按 name 取技能全文。 */
+const skillSchema: ChatCompletionTool = {
+    type: "function",
+    function: {
+        name: ToolName.Skill,
+        description:
+            "Load a skill's full content by name. Skills are listed (name + description) in <available_skills> in your instructions; call this when a task matches a skill's description to read its procedure before acting. Read-only.",
+        parameters: {
+            type: "object",
+            properties: {
+                name: {
+                    type: "string",
+                    description: "技能名（<available_skills> 中列出的 name）",
+                },
+            },
+            required: ["name"],
+        },
+    },
 };

@@ -2,18 +2,26 @@ import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { loadSkills } from "../src/skill";
+import { resolveSkills } from "../src/skill";
 import { loadRule } from "../src/rule";
 import { loadProjectMcp } from "../src/mcp";
 import { createWorkspace } from "../src/workspace";
+import type { Config } from "../src/config";
+// 注册内置能力；abilities 全关时内置层应不可见（SPEC-031 AC-002）
+import "../src/builtin";
 
-// 两层合并：全局层用临时 HOME（~/.anycode），项目层用临时 workspace（.anycode）
+// 四层技能合并：全局层用临时 HOME（~/.anycode + ~/.agents），项目层用临时 workspace（.anycode）。
+// 旧两层全量注入（SPEC-013）已 superseded（SPEC-031 场景 B），测试按新语义更新。
 const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "anycode-layers-home-"));
 const tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), "anycode-layers-proj-"));
 const ws = createWorkspace(tmpProject);
 
+// abilities 空 → 无内置层（AC-002）
+const cfg = { abilities: {} } as unknown as Config;
+
 const globalSub = (sub: string) => path.join(tmpHome, ".anycode", sub);
 const projectSub = (sub: string) => path.join(tmpProject, ".anycode", sub);
+const agentsSkillsDir = path.join(tmpHome, ".agents", "skills");
 const writeFile = (dir: string, file: string, content: string) => {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, file), content);
@@ -22,6 +30,7 @@ const writeFile = (dir: string, file: string, content: string) => {
 beforeEach(() => {
     process.env.HOME = tmpHome;
     fs.rmSync(path.join(tmpHome, ".anycode"), { recursive: true, force: true });
+    fs.rmSync(path.join(tmpHome, ".agents"), { recursive: true, force: true });
     fs.rmSync(path.join(tmpProject, ".anycode"), { recursive: true, force: true });
 });
 
@@ -30,19 +39,37 @@ afterAll(() => {
     fs.rmSync(tmpProject, { recursive: true, force: true });
 });
 
-describe("两层合并（SPEC-013）", () => {
-    it("AC-001 skills 全局+项目合并，同名项目覆盖全局", () => {
+describe("四层技能合并（SPEC-031 B-003）", () => {
+    it("AC-001 并集 + 同名项目覆盖全局 + .agents 参与；abilities 空 → 无内置", () => {
         writeFile(globalSub("skills"), "a.md", "GLOBAL-A");
         writeFile(globalSub("skills"), "b.md", "GLOBAL-B");
         writeFile(projectSub("skills"), "a.md", "PROJ-A");
         writeFile(projectSub("skills"), "c.md", "PROJ-C");
-        const out = loadSkills(ws);
-        expect(out).toContain("PROJ-A");
-        expect(out).not.toContain("GLOBAL-A"); // 同名 a 被项目覆盖
-        expect(out).toContain("GLOBAL-B");
-        expect(out).toContain("PROJ-C");
+        writeFile(agentsSkillsDir, "d.md", "AGENTS-D");
+        const map = resolveSkills(ws, cfg);
+        expect(map.get("a")?.content).toBe("PROJ-A"); // 项目覆盖全局同名
+        expect(map.get("b")?.content).toBe("GLOBAL-B");
+        expect(map.get("c")?.content).toBe("PROJ-C");
+        expect(map.get("d")?.content).toBe("AGENTS-D");
+        expect(map.get("d")?.origin).toBe("agents");
+        expect(map.has("browser-use")).toBe(false); // abilities 空 → 内置不注入
     });
 
+    it("AC-004 项目同名覆盖 .agents（.agents 最低用户层）", () => {
+        writeFile(agentsSkillsDir, "x.md", "AGENTS-X");
+        writeFile(projectSub("skills"), "x.md", "PROJ-X");
+        const map = resolveSkills(ws, cfg);
+        expect(map.get("x")?.content).toBe("PROJ-X");
+    });
+
+    it("AC-004b 无全局/项目层 → 仅 .agents", () => {
+        writeFile(agentsSkillsDir, "only.md", "AGENTS-ONLY");
+        const map = resolveSkills(ws, cfg);
+        expect(map.get("only")?.content).toBe("AGENTS-ONLY");
+    });
+});
+
+describe("rules（AGENTS.md，P3 后语义）与 MCP（SPEC-013 保留）", () => {
     it("AC-002 rules 全局+项目合并，同名项目覆盖", () => {
         writeFile(globalSub("rules"), "r1.md", "GLOBAL-R1");
         writeFile(projectSub("rules"), "r1.md", "PROJ-R1");
@@ -65,17 +92,5 @@ describe("两层合并（SPEC-013）", () => {
 
     it("AC-003b loadProjectMcp 无文件 → 空", () => {
         expect(Object.keys(loadProjectMcp(ws))).toHaveLength(0);
-    });
-
-    it("AC-004 无全局层 → 仅项目（向后兼容）", () => {
-        writeFile(projectSub("skills"), "only.md", "PROJ-ONLY");
-        const out = loadSkills(ws);
-        expect(out).toContain("PROJ-ONLY");
-    });
-
-    it("AC-004b 无项目层 → 仅全局", () => {
-        writeFile(globalSub("skills"), "g.md", "GLOBAL-ONLY");
-        const out = loadSkills(ws);
-        expect(out).toContain("GLOBAL-ONLY");
     });
 });
