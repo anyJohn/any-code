@@ -11,6 +11,8 @@ import { agentLoop } from "./core";
 import { compactMessages } from "./compact";
 import { loadRule } from "./rule";
 import { resolveSkills, renderSkillCatalog } from "./skill";
+// 注册内置能力（FE-022）：import 副作用——registry 常驻，Settings/initMcp 可枚举
+import "./builtin";
 import { EventStream } from "./eventStream";
 import { SessionService, Session, SessionKey, projectKeyOf } from "./session";
 import { createWorkspace, Workspace } from "./workspace";

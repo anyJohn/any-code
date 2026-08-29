@@ -8,3 +8,5 @@ export * from "./agent";
 export * from "./config";
 export * from "./ripgrep";
 export * from "./pendingInteractions";
+export * from "./abilities";
+export * from "./builtin";
