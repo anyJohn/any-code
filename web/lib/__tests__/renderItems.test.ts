@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-    groupByTurn,
-    toRenderItems,
-    formatToolCall,
-} from "@/lib/renderItems";
+import { groupByTurn, toRenderItems, formatToolCall } from "@/lib/renderItems";
 import type { AgentEvent } from "@/lib/sseEvents";
 
 const ev = <T extends AgentEvent["type"]>(
@@ -25,7 +21,10 @@ describe("groupByTurn (TEST-005 TC-005.3, B-003)", () => {
             ev("System", "sys"),
             ev("Iteration", "Iter 1", { turnId: "t1" }),
             ev("Assistant", "hello", { turnId: "t1" }),
-            ev("Tool", "bash", { turnId: "t1", data: { name: "bash", args: {}, result: "" } }),
+            ev("Tool", "bash", {
+                turnId: "t1",
+                data: { name: "bash", args: {}, result: "" },
+            }),
         ];
         const turns = groupByTurn(events);
         expect(turns).toHaveLength(1);
@@ -52,13 +51,25 @@ describe("toRenderItems (TEST-005 TC-005.4, B-003 sub-agent)", () => {
         const events: AgentEvent[] = [
             ev("Iteration", "i1", { turnId: "t1" }),
             ev("Assistant", "a1", { turnId: "t1" }),
-            ev("Iteration", "sub-i", { runId: "r1", author: "plan", turnId: "st1" }),
-            ev("Assistant", "sub-a", { runId: "r1", author: "plan", turnId: "st1" }),
+            ev("Iteration", "sub-i", {
+                runId: "r1",
+                author: "plan",
+                turnId: "st1",
+            }),
+            ev("Assistant", "sub-a", {
+                runId: "r1",
+                author: "plan",
+                turnId: "st1",
+            }),
             ev("Done", "done"),
         ];
         const items = toRenderItems(events);
         // turn(t1) → subagent(r1) → single(Done)
-        expect(items.map((i) => i.kind)).toEqual(["turn", "subagent", "single"]);
+        expect(items.map((i) => i.kind)).toEqual([
+            "turn",
+            "subagent",
+            "single",
+        ]);
         const sub = items[1];
         expect(sub.kind).toBe("subagent");
         if (sub.kind === "subagent") {
@@ -141,7 +152,10 @@ describe("groupByTurn Thinking 累积（SPEC-015 AC-003/005）", () => {
         const events: AgentEvent[] = [
             ev("Iteration", "i1", { turnId: "t1" }),
             ev("Thinking", "reasoning", { turnId: "t1" }),
-            ev("ToolStart", "bash", { turnId: "t1", data: { name: "bash", args: {} } }),
+            ev("ToolStart", "bash", {
+                turnId: "t1",
+                data: { name: "bash", args: {} },
+            }),
             ev("ToolProgress", "out", { turnId: "t1" }),
         ];
         const turns = groupByTurn(events);
@@ -210,10 +224,12 @@ describe("formatToolCall (TEST-005 TC-005.5, B-005)", () => {
     it("edit → edit <filePath>  «oldBrief»", () => {
         expect(
             tc("edit", { filePath: "/a.ts", oldString: "line1\nline2" })
-        ).toBe('edit /a.ts  «line1»');
+        ).toBe("edit /a.ts  «line1»");
     });
     it("glob/grep → pattern @ path", () => {
-        expect(tc("glob", { pattern: "*.ts", path: "/src" })).toBe('glob "*.ts" @ /src');
+        expect(tc("glob", { pattern: "*.ts", path: "/src" })).toBe(
+            'glob "*.ts" @ /src'
+        );
         expect(tc("grep", { pattern: "foo" })).toBe('grep "foo"');
     });
     it("explore → explore <dir>", () => {
@@ -221,6 +237,14 @@ describe("formatToolCall (TEST-005 TC-005.5, B-005)", () => {
     });
     it("plan → plan <task>", () => {
         expect(tc("plan", { task: "do x" })).toBe("plan do x");
+    });
+    it("web_search → 显示搜索词；web_fetch → 显示 url（不展内容）", () => {
+        expect(tc("web_search", { query: "nodejs" })).toBe(
+            'web_search "nodejs"'
+        );
+        expect(tc("web_fetch", { url: "https://example.com/x" })).toBe(
+            "web_fetch https://example.com/x"
+        );
     });
     it("未知工具 → 返回 name", () => {
         expect(tc("custom", {})).toBe("custom");

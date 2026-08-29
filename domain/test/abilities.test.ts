@@ -1,12 +1,13 @@
 import { describe, it, expect } from "vitest";
+import { join } from "node:path";
 import { registerAbility, getRegisteredAbilities, isAbilityEnabled, getAbility } from "../src/abilities";
 import type { Config } from "../src/config";
-// import builtin.ts 触发三能力注册（SPEC-031 B-008~B-010）
+// import builtin.ts 触发内置注册（SPEC-031 B-008~B-010）
 import "../src/builtin";
 
 // SPEC-031 AC-001 / AC-002 / AC-003 / B-001 / B-002 / C-001
 describe("abilities 注册器（SPEC-031）", () => {
-    it("builtin 注册三能力：web-fetch/web-search 为 mcp、browser-use 为 skill", () => {
+    it("builtin 注册三个连接器能力：web-fetch/web-search/browser-use 均为 mcp", () => {
         const names = getRegisteredAbilities().map((a) => a.name);
         expect(names).toContain("web-fetch");
         expect(names).toContain("web-search");
@@ -19,11 +20,14 @@ describe("abilities 注册器（SPEC-031）", () => {
         expect(srv?.type).toBe("stdio");
         expect(srv?.command).toBe(process.execPath);
 
+        // browser-use = 真浏览器连接器（CDP），描述为面向用户的短文案
         const browse = getAbility("browser-use");
-        expect(browse?.kind).toBe("skill");
-        expect((browse as { content?: string })?.content?.length).toBeGreaterThan(
-            200
+        expect(browse?.kind).toBe("mcp");
+        const browseSrv = (browse as { server?: { args?: string[] } })?.server;
+        expect(browseSrv?.args?.[0]).toContain(
+            join("builtin", "browser-use", "server.mjs")
         );
+        expect(browse?.description?.length).toBeLessThan(60);
         expect(fetchA?.description).toBeTruthy();
     });
 

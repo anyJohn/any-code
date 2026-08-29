@@ -5,8 +5,9 @@ import { fileURLToPath } from "node:url";
 import { join, dirname } from "node:path";
 
 // 内置连接器冒烟（SPEC-031 AC-009/010）：经生产同款 SDK（Client + StdioClientTransport）真握手 + 真调用。
+// 连接器按 src/builtin/<name>/server.mjs 布局分发。
 const here = dirname(fileURLToPath(import.meta.url));
-const SERVERS = join(here, "..", "src", "builtin-servers");
+const SERVERS = join(here, "..", "src", "builtin");
 
 async function call(serverFile: string, tool: string, args: object, env: Record<string, string> = {}) {
     const client = new Client({ name: "anycode-test", version: "1.0.0" });
@@ -35,33 +36,33 @@ function extractText(res: unknown): string {
 }
 
 describe("内置连接器（SPEC-031 B-008/B-009，经 SDK 真连）", () => {
-    it("AC-009a web-fetch：tools/list 含 fetch_url；真抓 example.com 返回文本", async () => {
+    it("AC-009a web-fetch：tools/list 含 web_fetch；真抓 example.com 返回文本", async () => {
         const r = await call(
-            "web-fetch-server.mjs",
-            "fetch_url",
+            "web-fetch/server.mjs",
+            "web_fetch",
             { url: "https://example.com" }
         );
-        expect(r.toolNames).toContain("fetch_url");
+        expect(r.toolNames).toContain("web_fetch");
         expect(r.text).toContain("Example Domain");
     });
 
     it("AC-009b web-fetch：http 明文被拒绝；超限截断", async () => {
-        const bad = await call("web-fetch-server.mjs", "fetch_url", {
+        const bad = await call("web-fetch/server.mjs", "web_fetch", {
             url: "http://example.com",
         });
         expect(bad.text).toMatch(/https/);
-        const tiny = await call("web-fetch-server.mjs", "fetch_url", {
+        const tiny = await call("web-fetch/server.mjs", "web_fetch", {
             url: "https://example.com",
             maxChars: 50,
         });
         expect(tiny.text.length).toBeLessThanOrEqual(60);
     });
 
-    it("AC-010 web-search：tools/list 含 search；ddg 尽力模式可调（网络允许时返回结果，被墙则 isError 文案，不崩）", async () => {
-        const r = await call("web-search-server.mjs", "search", {
+    it("AC-010 web-search：tools/list 含 web_search；ddg 尽力模式可调（网络允许时返回结果，被墙则 isError 文案，不崩）", async () => {
+        const r = await call("web-search/server.mjs", "web_search", {
             query: "nodejs",
         });
-        expect(r.toolNames).toContain("search");
+        expect(r.toolNames).toContain("web_search");
         // 沙箱外网受限时 DDG 可能 fetch 失败 → 错误文案；正常时结果数组
         expect(r.text.length).toBeGreaterThan(0);
     }, 30000);

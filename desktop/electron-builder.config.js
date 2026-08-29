@@ -17,6 +17,9 @@ module.exports = {
         "dist/main/**/*",
         "package.json",
     ],
+    // 内置能力目录解包出 asar：MCP 连接器经子进程 spawn（asar 内文件不可被执行），
+    // 技能 references/scripts 也需给外部 bash 真实路径（builtinRoot() 自动映射 app.asar.unpacked）
+    asarUnpack: ["dist/main/builtin/**"],
     extraResources: [
         { from: "resources/web-dist", to: "web-dist" },
         { from: "resources/rg", to: "rg" },

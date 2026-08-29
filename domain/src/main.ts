@@ -11,7 +11,7 @@ import { agentLoop } from "./core";
 import { compactMessages } from "./compact";
 import { loadRule } from "./rule";
 import { resolveSkills, renderSkillCatalog } from "./skill";
-// 注册内置能力（FE-022）：import 副作用——registry 常驻，Settings/initMcp 可枚举
+// 注册内置连接器能力（FE-022）：import 副作用——registry 常驻，Settings/initMcp 可枚举
 import "./builtin";
 import { EventStream } from "./eventStream";
 import { SessionService, Session, SessionKey, projectKeyOf } from "./session";
@@ -363,8 +363,8 @@ class AnyAgent {
             llm: this.config.getCurrentProvider(),
             fileState: new Map<string, number>(),
             gitBashPath: this.config.gitBashPath,
-            // 技能目录合并表：skill 工具按 name 取全文（SPEC-031 B-005）
-            skills: resolveSkills(this.workspace, this.config),
+            // 技能目录合并表：use_skill 工具按 name 取全文（SPEC-031 B-005）
+            skills: resolveSkills(this.workspace),
         };
         await agentLoop(
             task,
@@ -399,9 +399,7 @@ class AnyAgent {
         const memory = loadMemory(workspace);
         const rule = loadRule(workspace);
         // 技能目录注入（SPEC-031 B-004）：只注入 name+description 的 <available_skills>，不加正文。
-        const skills = renderSkillCatalog(
-            resolveSkills(workspace, this.config).values()
-        );
+        const skills = renderSkillCatalog(resolveSkills(workspace).values());
         // 拼装 system prompt：instruction + workspace/memory 注入段 + memory/skills/rule。
         // 所有 prompt 文本集中存于 ./prompt.ts，此处只拼装。
         let sysPrompt =

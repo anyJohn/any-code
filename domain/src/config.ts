@@ -178,7 +178,8 @@ export class Config {
         const file = globalConfigFile();
         if (!existsSync(file)) {
             // 首次启动：自动创建默认配置模板（用户经 /settings 填 apiKey）。
-            // abilities：随包默认 config 预置三内置能力开启（SPEC-031 B-002 / AC-003）。
+            // abilities：随包默认 config 预置 web-fetch/web-search 开启（SPEC-031 B-002 / AC-003）；
+            // browser-use（CDP）需 cdpUrl 默认关，用户配了再开。
             Config.save({
                 providers: {
                     default: {
@@ -196,7 +197,6 @@ export class Config {
                         enabled: true,
                         config: { provider: "ddg", apiKey: "" },
                     },
-                    "browser-use": { enabled: true },
                 },
             });
         }

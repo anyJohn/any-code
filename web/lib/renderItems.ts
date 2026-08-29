@@ -47,7 +47,12 @@ export function groupByTurn(events: AgentEvent[]): TurnItem[] {
     for (const e of events) {
         if (e.type === "Iteration") {
             flush();
-            cur = { kind: "turn", turnId: e.turnId ?? "", iteration: e, tools: [] };
+            cur = {
+                kind: "turn",
+                turnId: e.turnId ?? "",
+                iteration: e,
+                tools: [],
+            };
         } else if (e.type === "Thinking") {
             // 思考内容：累积进当前回合的 thinking 字段
             if (!cur) cur = { kind: "turn", turnId: e.turnId ?? "", tools: [] };
@@ -74,12 +79,21 @@ export function groupByTurn(events: AgentEvent[]): TurnItem[] {
                 cur.assistant = e;
             } else {
                 flush();
-                cur = { kind: "turn", turnId: e.turnId ?? "", assistant: e, tools: [] };
+                cur = {
+                    kind: "turn",
+                    turnId: e.turnId ?? "",
+                    assistant: e,
+                    tools: [],
+                };
             }
         } else if (e.type === "Usage") {
             // 状态元数据，落在 Assistant 与 Tool 之间：不打断当前回合，也不入盘。
             continue;
-        } else if (e.type === "ToolStart" || e.type === "ToolProgress" || e.type === "ToolArgProgress") {
+        } else if (
+            e.type === "ToolStart" ||
+            e.type === "ToolProgress" ||
+            e.type === "ToolArgProgress"
+        ) {
             // 流式工具实时事件（不入盘，仅 SSE）：不打断回合分组；
             // 活动工具卡片由 MessageList 从原始 events 直接算（见 activeTool）。
             // ToolArgProgress 也算思考结束（思考完→调工具的 arguments 流式）→ 标记 thinkingFinished。
@@ -105,7 +119,8 @@ export function groupByTurn(events: AgentEvent[]): TurnItem[] {
 export function toRenderItems(events: AgentEvent[]): RenderItem[] {
     const items: RenderItem[] = [];
     let mainBuf: AgentEvent[] = [];
-    let sub: { runId: string; author: string; events: AgentEvent[] } | null = null;
+    let sub: { runId: string; author: string; events: AgentEvent[] } | null =
+        null;
     const flushMain = () => {
         for (const t of groupByTurn(mainBuf)) items.push(t);
         mainBuf = [];
@@ -187,6 +202,11 @@ export function formatToolCall(data: unknown): string {
             return `explore ${arg("directoryPath") || ""}`.trim();
         case "plan":
             return `plan ${arg("task") || ""}`.trim();
+        // 联网工具（内置连接器）：回显只显"搜了什么 / 抓了哪个 url"，不显内容详情
+        case "web_search":
+            return `web_search "${arg("query") || ""}"`.trim();
+        case "web_fetch":
+            return `web_fetch ${arg("url") || ""}`.trim();
         default:
             return d.name;
     }
@@ -194,4 +214,9 @@ export function formatToolCall(data: unknown): string {
 
 export function toolResult(data: unknown): string {
     return (data as ToolCallData | undefined)?.result ?? "";
+}
+
+/** 回显不展结果的工具（联网类）：摘要即全部——搜索词 / 抓取 URL，结果内容交给模型即可。 */
+export function toolHidesResult(name: string): boolean {
+    return name === "web_search" || name === "web_fetch";
 }

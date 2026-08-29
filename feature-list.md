@@ -11,8 +11,9 @@
 - Skill
   - Project 级别 Skill（`<root>/.anycode/skills/`）
   - Global 级别 Skill（`~/.anycode/skills/`）
-  - 兼容 `~/.agents/skills/` 目录下 Skill（已实现，四层最低用户层）
-  - 内置能力（abilities 注册器，可开关不可删；web-fetch/web-search/browser 连接器 + browser-use 编排技能，FE-022）
+  - 兼容 `~/.agents/skills/` 目录下 Skill（已实现，最低用户层）
+  - 技能即文件：目录制 `<name>/SKILL.md`（可带 `references/scripts/assets` 子目录，agent 可读）或平铺 `<name>.md`；内置技能 = 安装时 seed 进 `~/.anycode/skills/` 的普通技能（无特殊内置层，FE-022）
+  - 内置连接器（abilities 注册器——仅 mcp：web-fetch / web-search / browser-use 真浏览器 CDP，可开关不可删，FE-022）
 - Memory
   - 原文层：Session History（durable 事件日志，含 thinking / tool call / 报错 / usage 等，reload 重放）
   - 摘要层：Global + Workspace/project 的跨 Session 摘要，经 `save_memory` agent tool 主动写入（LLM 决定记什么）
@@ -33,6 +34,8 @@
   - `write`，原子写 + staleness 检测
   - `save_memory`，写入项目级与用户级记忆
   - `ask_question`，向 human 提问 / 让 human 选择（经 InteractionModal）
+  - `use_skill`，按名读技能全文（目录注入 <available_skills>，正文按需取）
+  - 内置连接器工具：`web_search` / `web_fetch`（联网，回显只显搜索词与 URL）、browser-use（`browser_navigate/content/eval` 真 CDP）
 - compact（上下文压缩）
   - 单 session 真实 usage ≥ 75% 自动压缩
   - 手动指令 `/compact [聚焦]` 压缩
@@ -87,7 +90,7 @@
 - 交互 InteractionModal：`ask_question` 工具向 human 提问 / 选择
 - 输入 InputBox：slash 命令补全、`@` 文件引用、上下文压缩 indeterminate 进度条、停止 / 发送
 - 状态栏 StatusBar：模型 / Provider、上下文用量进度、Skill 数、MCP 数
-- 设置 Settings：`config.yaml` 图形化编辑（provider / apiKey / baseURL / models / contextWindow / maxOutputTokens / MCP），热生效
+- 设置 Settings：`config.yaml` 图形化编辑，卡片可折叠（默认提供方 → 模型提供方 → 内置能力 → MCP 服务，FE-022）；内置能力开关用 Switch、web-search 行内 provider（ddg/tavily/bing）+ API Key 配置，热生效
 - 品牌识别：Logo（badge / glyph 双变体）+ 品牌靛蓝主题（`--primary`）+ favicon；选中色 / 细滚动条
 - Markdown 渲染（prose）+ 代码块
 - 历史持久化重放：durable 事件日志作 reload 真值，退役反推重建（SPEC-030）

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { join, dirname } from "node:path";
 
 const dir = dirname(fileURLToPath(import.meta.url));
-const SERVER_DIR = join(dir, "..", "src", "builtin-servers");
+const SERVER_DIR = join(dir, "..", "src", "builtin");
 
 function handshake(script, args, label) {
   return new Promise((resolve, reject) => {
@@ -72,7 +72,7 @@ function handshake(script, args, label) {
 }
 
 // 顺序：web-fetch（真抓 example.com）→ web-search（ddg 尽力）
-await handshake("web-fetch-server.mjs", { callArgs: { url: "https://example.com" } }, "web-fetch");
-await handshake("web-search-server.mjs", { callArgs: { query: "nodejs" } }, "web-search(ddg)");
+await handshake("web-fetch/server.mjs", { callArgs: { url: "https://example.com" } }, "web-fetch");
+await handshake("web-search/server.mjs", { callArgs: { query: "nodejs" } }, "web-search(ddg)");
 console.log("SMOKE OK");
 process.exit(0);

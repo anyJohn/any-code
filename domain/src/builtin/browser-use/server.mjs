@@ -1,10 +1,10 @@
-// 内置连接器：browser（SPEC-031 DEC-031-6 v2 真 CDP 浏览器）。
+// 内置连接器：browser-use（SPEC-031 DEC-031-6 v2 真 CDP 浏览器）。
 // 零依赖 MCP-lite stdio server + CDP（Chromium DevTools Protocol）WebSocket 客户端。
 // 连接任意外部 CDP 源：chrome/edge `--remote-debugging-port=9222` 的 page 级 ws（/devtools/page/<id>），
 // 或未来 desktop 内嵌 offscreen window。cdpUrl 经 ABILITY_CONFIG（JSON）env 注入。
 // 工具：browser_navigate（导航+等加载）、browser_content（URL/标题/正文）、browser_eval（任意 JS）。
 
-const SERVER = "browser";
+const SERVER = "browser-use";
 const VERSION = "1.0.0";
 const NAV_TIMEOUT_MS = 15_000;
 const TEXT_LIMIT = 20_000;

@@ -6,18 +6,14 @@ import { resolveSkills } from "../src/skill";
 import { loadRule } from "../src/rule";
 import { loadProjectMcp } from "../src/mcp";
 import { createWorkspace } from "../src/workspace";
-import type { Config } from "../src/config";
-// 注册内置能力；abilities 全关时内置层应不可见（SPEC-031 AC-002）
+// 注册内置连接器（技能是纯文件：项目/全局/.agents 三层，无内置技能层）
 import "../src/builtin";
 
-// 四层技能合并：全局层用临时 HOME（~/.anycode + ~/.agents），项目层用临时 workspace（.anycode）。
+// 三层技能合并：全局层用临时 HOME（~/.anycode + ~/.agents），项目层用临时 workspace（.anycode）。
 // 旧两层全量注入（SPEC-013）已 superseded（SPEC-031 场景 B），测试按新语义更新。
 const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "anycode-layers-home-"));
 const tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), "anycode-layers-proj-"));
 const ws = createWorkspace(tmpProject);
-
-// abilities 空 → 无内置层（AC-002）
-const cfg = { abilities: {} } as unknown as Config;
 
 const globalSub = (sub: string) => path.join(tmpHome, ".anycode", sub);
 const projectSub = (sub: string) => path.join(tmpProject, ".anycode", sub);
@@ -39,32 +35,39 @@ afterAll(() => {
     fs.rmSync(tmpProject, { recursive: true, force: true });
 });
 
-describe("四层技能合并（SPEC-031 B-003）", () => {
-    it("AC-001 并集 + 同名项目覆盖全局 + .agents 参与；abilities 空 → 无内置", () => {
+describe("三层技能合并（SPEC-031 B-003）", () => {
+    it("AC-001 并集 + 同名项目覆盖全局 + .agents 参与", () => {
         writeFile(globalSub("skills"), "a.md", "GLOBAL-A");
         writeFile(globalSub("skills"), "b.md", "GLOBAL-B");
         writeFile(projectSub("skills"), "a.md", "PROJ-A");
         writeFile(projectSub("skills"), "c.md", "PROJ-C");
         writeFile(agentsSkillsDir, "d.md", "AGENTS-D");
-        const map = resolveSkills(ws, cfg);
+        const map = resolveSkills(ws);
         expect(map.get("a")?.content).toBe("PROJ-A"); // 项目覆盖全局同名
         expect(map.get("b")?.content).toBe("GLOBAL-B");
         expect(map.get("c")?.content).toBe("PROJ-C");
         expect(map.get("d")?.content).toBe("AGENTS-D");
         expect(map.get("d")?.origin).toBe("agents");
-        expect(map.has("browser-use")).toBe(false); // abilities 空 → 内置不注入
+    });
+
+    it("目录制技能跨层同样受优先级约束（项目目录制覆盖全局平铺同名）", () => {
+        writeFile(globalSub("skills"), "dup.md", "GLOBAL-DUP");
+        writeFile(path.join(projectSub("skills"), "dup"), "SKILL.md", "PROJ-DUP-DIR");
+        const map = resolveSkills(ws);
+        expect(map.get("dup")?.content).toBe("PROJ-DUP-DIR");
+        expect(map.get("dup")?.origin).toBe("project");
     });
 
     it("AC-004 项目同名覆盖 .agents（.agents 最低用户层）", () => {
         writeFile(agentsSkillsDir, "x.md", "AGENTS-X");
         writeFile(projectSub("skills"), "x.md", "PROJ-X");
-        const map = resolveSkills(ws, cfg);
+        const map = resolveSkills(ws);
         expect(map.get("x")?.content).toBe("PROJ-X");
     });
 
     it("AC-004b 无全局/项目层 → 仅 .agents", () => {
         writeFile(agentsSkillsDir, "only.md", "AGENTS-ONLY");
-        const map = resolveSkills(ws, cfg);
+        const map = resolveSkills(ws);
         expect(map.get("only")?.content).toBe("AGENTS-ONLY");
     });
 });

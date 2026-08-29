@@ -17,7 +17,7 @@ const apiKey = typeof cfg.apiKey === "string" ? cfg.apiKey : "";
 
 const TOOLS = [
   {
-    name: "search",
+    name: "web_search",
     description:
       "网页搜索，返回标题/URL/摘要列表。query 建议带关键词组合或 site:；maxResults 缺省 8。",
     inputSchema: {
@@ -152,7 +152,7 @@ function handle(msg) {
     writeMessage({ jsonrpc: "2.0", id: msg.id, result: { tools: TOOLS } });
   } else if (msg.method === "tools/call") {
     const name = msg.params?.name;
-    if (name !== "search") {
+    if (name !== "web_search") {
       writeMessage({
         jsonrpc: "2.0",
         id: msg.id,

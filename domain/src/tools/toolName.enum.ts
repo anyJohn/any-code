@@ -9,7 +9,7 @@ enum ToolName {
     Grep = "grep",
     SaveMemory = "save_memory",
     AskQuestion = "ask_question",
-    Skill = "skill",
+    Skill = "use_skill",
 }
 
 export { ToolName };

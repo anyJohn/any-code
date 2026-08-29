@@ -4,7 +4,7 @@
 
 const SERVER = "web-fetch";
 const VERSION = "1.0.0";
-const TOOL_NAME = "fetch_url";
+const TOOL_NAME = "web_fetch";
 const TEXT_LIMIT = 50_000;
 const TIMEOUT_MS = 15_000;
 

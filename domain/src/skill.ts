@@ -2,21 +2,23 @@ import fs from "node:fs";
 import { join } from "node:path";
 import type { Workspace } from "./workspace";
 import { workspaceConfigDir, globalConfigDir } from "./workspace";
-import type { Config } from "./config";
-import { getRegisteredAbilities, isAbilityEnabled } from "./abilities";
 
 /**
  * 技能系统（RR-025 / SPEC-031 B-003~B-005）——整体替换旧"两层全量注入"。
- * 四层来源（优先级 高→低）：项目 .anycode/skills > 全局 ~/.anycode/skills > .agents ~/.agents/skills > 内置(启用的 skill abilities)。
- * 同名后层覆盖 + warning；prompt 只注入目录（name+description），正文经 skill 工具按需取（I-004）。
+ * 三层来源（优先级 高→低）：项目 .anycode/skills > 全局 ~/.anycode/skills > .agents ~/.agents/skills。
+ * 技能是文件（目录制 <name>/SKILL.md，可带 references/scripts/assets 子目录；或平铺 <name>.md），
+ * 无"内置技能"特殊层——随包自带技能由安装/首次启动 seed 进 ~/.anycode/skills/ 即复用同一机制。
+ * 同名后层覆盖 + warning；prompt 只注入目录（name+description），正文经 use_skill 工具按需取（I-004）。
  */
 
-/** 技能目录项：目录只含 name/description；content 只经 skill 工具返回。 */
+/** 技能目录项：目录只含 name/description；content 只经 use_skill 工具返回。
+ *  dir 仅目录制技能有值（<name>/SKILL.md 所在目录）——agent 可经 read/glob/explore 用它下面的 references/scripts/assets。 */
 export interface SkillEntry {
     name: string;
     description: string;
     content: string;
-    origin: "builtin" | "agents" | "global" | "project";
+    origin: "agents" | "global" | "project";
+    dir?: string;
 }
 
 /** 目录 description 截断上限（SPEC-031 B-004 / Q-4，quota 后置）。 */
@@ -55,39 +57,51 @@ export function parseSkillMeta(
     return { name, description };
 }
 
+/**
+ * 层内加载：skills/<name>.md（平铺，兼容旧格式）或 skills/<name>/SKILL.md（目录制，
+ * 可带 references/scripts/assets 等资源，条目附 dir）。目录制优先级同文件，混用合法。
+ */
 function loadDirSkills(
     dir: string,
     origin: SkillEntry["origin"]
 ): Map<string, SkillEntry> {
     const out = new Map<string, SkillEntry>();
     if (!fs.existsSync(dir)) return out;
-    let files: string[];
+    let entries: fs.Dirent[];
     try {
-        files = fs.readdirSync(dir);
+        entries = fs.readdirSync(dir, { withFileTypes: true });
     } catch {
         return out;
     }
-    for (const f of files.filter((f) => f.endsWith(".md")).sort()) {
-        const content = fs.readFileSync(join(dir, f), "utf-8");
-        const meta = parseSkillMeta(content, f.slice(0, -3));
+    for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+        let file = "";
+        let skillDir: string | undefined;
+        if (e.isFile() && e.name.endsWith(".md")) {
+            file = join(dir, e.name);
+        } else if (e.isDirectory() && fs.existsSync(join(dir, e.name, "SKILL.md"))) {
+            file = join(dir, e.name, "SKILL.md");
+            skillDir = join(dir, e.name);
+        }
+        if (!file) continue;
+        const fallback = e.isDirectory() ? e.name : e.name.slice(0, -3);
+        const content = fs.readFileSync(file, "utf-8");
+        const meta = parseSkillMeta(content, fallback);
         out.set(meta.name, {
             name: meta.name,
             description: meta.description,
             content,
             origin,
+            dir: skillDir,
         });
     }
     return out;
 }
 
 /**
- * 四层技能合并（SPEC-031 B-003 / I-002）：确定性函数(config.abilities ∪ 注册表 ∪ 磁盘层快照)。
+ * 三层技能合并（SPEC-031 B-003 / I-002）：确定性函数（项目 > 全局 > .agents）。
  * 同名后层覆盖 + warning（不静默，抄 opencode duplicate warning）。
  */
-export function resolveSkills(
-    workspace: Workspace,
-    config: Config
-): Map<string, SkillEntry> {
+export function resolveSkills(workspace: Workspace): Map<string, SkillEntry> {
     const merged = new Map<string, SkillEntry>();
     const add = (e: SkillEntry) => {
         const prev = merged.get(e.name);
@@ -98,17 +112,6 @@ export function resolveSkills(
         }
         merged.set(e.name, e);
     };
-    // 最低层：内置（仅启用的 kind:skill abilities）
-    for (const a of getRegisteredAbilities()) {
-        if (a.kind === "skill" && isAbilityEnabled(config, a.name)) {
-            add({
-                name: a.name,
-                description: a.description,
-                content: a.content,
-                origin: "builtin",
-            });
-        }
-    }
     // ~/.agents/skills → ~/.anycode/skills → <ws>/.anycode/skills（优先级升序）
     const layers: Array<[string, SkillEntry["origin"]]> = [
         [join(globalConfigDir(), "..", ".agents", "skills"), "agents"],
@@ -123,7 +126,7 @@ export function resolveSkills(
 
 /**
  * 目录渲染（SPEC-031 B-004）：只含 name + description 的 <available_skills> 块。
- * 附一句"按需用 skill 工具读全文"训导（对齐生态 progressive disclosure）。
+ * 附一句"按需用 use_skill 工具读全文"训导（对齐生态 progressive disclosure）。
  */
 export function renderSkillCatalog(entries: Iterable<SkillEntry>): string {
     const arr = [...entries];
@@ -136,7 +139,7 @@ export function renderSkillCatalog(entries: Iterable<SkillEntry>): string {
         .join("\n");
     return [
         "\n# Available Skills",
-        "任务匹配某技能 description 时，先调 skill 工具读它的全文再执行。",
+        "任务匹配某技能 description 时，先调 use_skill 工具读它的全文再执行。",
         "<available_skills>",
         xml,
         "</available_skills>",

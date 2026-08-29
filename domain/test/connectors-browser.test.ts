@@ -7,10 +7,10 @@ import { join, dirname } from "node:path";
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 
-// browser 连接器（CDP v2）：真 headless chromium --remote-debugging-port + SDK 真连。
+// browser-use 连接器（CDP v2）：真 headless chromium --remote-debugging-port + SDK 真连。
 // chromium 不存在时整组 skip（CI/无 playwright 缓存环境）。
 const here = dirname(fileURLToPath(import.meta.url));
-const SERVERS = join(here, "..", "src", "builtin-servers");
+const SERVERS = join(here, "..", "src", "builtin");
 const home = process.env.HOME ?? "";
 const chromeBin = [
     `${home}/.cache/ms-playwright/chromium-1237/chrome-linux64/chrome`,
@@ -58,7 +58,7 @@ async function call(browserTool: string, args: object, extra: object = {}) {
     const client = new Client({ name: "t", version: "0" });
     const transport = new StdioClientTransport({
         command: process.execPath,
-        args: [join(SERVERS, "browser-server.mjs")],
+        args: [join(SERVERS, "browser-use", "server.mjs")],
         env: { ...process.env, ABILITY_CONFIG: JSON.stringify({ cdpUrl: pageWs, ...extra }) },
     });
     await client.connect(transport);

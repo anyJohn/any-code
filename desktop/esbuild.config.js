@@ -1,15 +1,12 @@
-// 内置连接器（零依赖 .mjs）随桌面 main bundle 同目录分发（builtin.ts import.meta.url → dist/main → builtin-servers/）
+// 内置能力目录（连接器 server.mjs + 未来 SKILL.md 等）随桌面 main bundle 同目录分发
+// （builtin.ts / skill.ts 的 import.meta.url → dist/main → builtin/）
 import { cpSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 await (async () => {
     const here = dirname(fileURLToPath(import.meta.url));
-    mkdirSync(join(here, "dist", "main", "builtin-servers"), { recursive: true });
-    for (const f of ["web-fetch-server.mjs", "web-search-server.mjs", "browser-server.mjs"]) {
-        try {
-            cpSync(join(here, "..", "domain", "src", "builtin-servers", f), join(here, "dist", "main", "builtin-servers", f));
-        } catch {}
-    }
+    mkdirSync(join(here, "dist", "main", "builtin"), { recursive: true });
+    cpSync(join(here, "..", "domain", "src", "builtin"), join(here, "dist", "main", "builtin"), { recursive: true });
 })();
 
 import esbuild from "esbuild";
