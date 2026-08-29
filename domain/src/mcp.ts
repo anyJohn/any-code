@@ -36,17 +36,20 @@ export interface StdioServerConfig {
     args?: string[];
     env?: Record<string, string>;
     disabled?: boolean;
+    /** 显式启用控制（enabled:false 同 disabled:true；缺省 undefined=启用）。SPEC-031 B-007 */
+    enabled?: boolean;
 }
 export interface SseServerConfig {
     type: "sse";
     url: string;
     headers?: Record<string, string>;
     disabled?: boolean;
+    enabled?: boolean;
 }
 export type McpServerConfig =
     | StdioServerConfig
     | SseServerConfig
-    | { type?: undefined; disabled?: boolean };
+    | { type?: undefined; disabled?: boolean; enabled?: boolean };
 
 /** MCP 连接管理器：工具集 + 清理函数。per-agent 生命周期绑定。 */
 export interface McpManager {
@@ -97,7 +100,8 @@ export async function loadMcpTools(
     const cleanups: Array<() => Promise<void>> = [];
 
     for (const [serverName, serverConfig] of Object.entries(mcpServers)) {
-        if (serverConfig.disabled) continue;
+        // 既有 disabled 字段 + 新 enabled:false 双语义（SPEC-031 AC-008）：保留定义、运行时不建连。
+        if (serverConfig.disabled || serverConfig.enabled === false) continue;
         if (serverConfig.type !== "stdio" && serverConfig.type !== "sse") {
             // 要求 type 字段；无 type 的旧格式不识别，跳过记错
             console.error(

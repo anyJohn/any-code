@@ -69,13 +69,30 @@ describe("四层技能合并（SPEC-031 B-003）", () => {
     });
 });
 
-describe("rules（AGENTS.md，P3 后语义）与 MCP（SPEC-013 保留）", () => {
-    it("AC-002 rules 全局+项目合并，同名项目覆盖", () => {
-        writeFile(globalSub("rules"), "r1.md", "GLOBAL-R1");
-        writeFile(projectSub("rules"), "r1.md", "PROJ-R1");
+describe("rules（AGENTS.md，SPEC-031 B-006）与 MCP（SPEC-013 保留）", () => {
+    it("AC-007 AGENTS.md 三层 additive + 同目录 override 优先；rules/ 永不再读", () => {
+        writeFile(path.join(tmpHome, ".anycode"), "AGENTS.md", "GLOBAL-RULES");
+        writeFile(
+            path.join(tmpHome, ".anycode"),
+            "AGENTS.override.md",
+            "GLOBAL-OVERRIDE"
+        );
+        writeFile(path.join(tmpHome, ".agents"), "AGENTS.md", "AGENTS-RULES");
+        writeFile(tmpProject, "AGENTS.md", "PROJ-RULES");
+        // 旧 rules/ 目录（superseded 机制）不应再被读取（SPEC-031 I-003）
+        writeFile(globalSub("rules"), "old.md", "OLD-RULES");
         const out = loadRule(ws);
-        expect(out).toContain("PROJ-R1");
-        expect(out).not.toContain("GLOBAL-R1");
+        expect(out).toContain("GLOBAL-OVERRIDE"); // 同目录 override 顶掉 AGENTS.md
+        expect(out).not.toContain("GLOBAL-RULES");
+        expect(out).toContain("AGENTS-RULES"); // .agents 层参与 additive
+        expect(out).toContain("PROJ-RULES"); // 项目层参与 additive
+        expect(out).not.toContain("OLD-RULES"); // rules/ 退役
+    });
+
+    it("AGENTS.override.md 单独存在（无 AGENTS.md）也生效", () => {
+        writeFile(path.join(tmpHome, ".anycode"), "AGENTS.override.md", "ONLY-OVERRIDE");
+        const out = loadRule(ws);
+        expect(out).toContain("ONLY-OVERRIDE");
     });
 
     it("AC-003 loadProjectMcp 读项目 mcp.yaml（flat servers）", () => {

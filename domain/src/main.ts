@@ -17,7 +17,8 @@ import { createWorkspace, Workspace } from "./workspace";
 import { mainAgent } from "./agent";
 import type { AgentDefinition } from "./agent";
 import type { Tool } from "./tools";
-import { loadMcpTools, loadProjectMcp } from "./mcp";
+import { loadMcpTools, loadProjectMcp, type McpServerConfig } from "./mcp";
+import { getRegisteredAbilities, isAbilityEnabled } from "./abilities";
 import { Config, type LlmProvider } from "./config";
 import { workspaceNote, memoryNote } from "./prompt";
 import {
@@ -121,8 +122,28 @@ class AnyAgent {
     /** 加载 MCP 工具（真协议连接），追加到工具集，per-agent 生命周期绑定。 */
     private async initMcp(): Promise<void> {
         try {
-            // 合并全局 config.mcpServers + 项目 mcp.yaml（项目覆盖全局同名）
+            // 三层合并（SPEC-031 B-007，整条覆盖：后层整条替换低层同名）：
+            //   内置连接器（启用的 kind:mcp abilities，最低） < 全局 config.mcpServers < 项目 mcp.yaml
+            const builtinMcp: Record<string, McpServerConfig> = {};
+            for (const a of getRegisteredAbilities()) {
+                if (a.kind !== "mcp" || !isAbilityEnabled(this.config, a.name)) {
+                    continue;
+                }
+                // 能力私有 config（provider/apiKey 等）以 ABILITY_CONFIG JSON 注入 server env
+                const extra = this.config.abilities[a.name]?.config ?? {};
+                builtinMcp[a.name] =
+                    a.server.type === "stdio" && Object.keys(extra).length
+                        ? {
+                              ...a.server,
+                              env: {
+                                  ...a.server.env,
+                                  ABILITY_CONFIG: JSON.stringify(extra),
+                              },
+                          }
+                        : a.server;
+            }
             const merged = {
+                ...builtinMcp,
                 ...this.config.mcpServers,
                 ...loadProjectMcp(this.workspace),
             };
