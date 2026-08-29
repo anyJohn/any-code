@@ -25,7 +25,7 @@
   - workspace 持久化（`~/.anycode/projects/<projectKey>/`，按工作区隔离、可 resume）
 - Tools（Function Calling）
   - `bash`，执行 shell 命令（流式上抛输出）
-  - `edit`，按 old string 精确替换编辑
+  - `edit`，按 old string 精确替换编辑（唯一匹配校验；staleness：mtime 漂移→警告不阻断，写后记新 mtime，SPEC-022）
   - `explore`，探索目录结构
   - `glob`，文件名模式匹配（ripgrep）
   - `grep`，内容正则搜索（ripgrep，性能强，尊重 .gitignore）
