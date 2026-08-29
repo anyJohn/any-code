@@ -41,6 +41,7 @@ import {
 import { cn } from "@/lib/utils";
 import { apiJson } from "@/lib/api";
 import { DirectoryPicker } from "./DirectoryPicker";
+import { Logo } from "./Logo";
 import { Link } from "react-router-dom";
 
 type SessionsStatus = "loading" | "ready" | "error";
@@ -323,10 +324,17 @@ export function AppSidebar({
         setRenameTarget(null);
     };
 
-    // 折叠态：rail（展开按钮 + 设置图标）
+    // 折叠态：rail（logo + 展开按钮 + 设置图标）
     if (collapsed) {
         return (
             <div className="h-full flex flex-col items-center py-2 gap-1">
+                <Link
+                    to="/"
+                    title="AnyCode"
+                    className="p-1 rounded-md hover:bg-accent"
+                >
+                    <Logo size={22} />
+                </Link>
                 <button
                     onClick={onExpand}
                     title="展开侧栏"
@@ -348,16 +356,18 @@ export function AppSidebar({
 
     return (
         <div className="h-full flex flex-col">
-            {/* 顶部工具栏：添加工作区 + 折叠 */}
-            <div className="shrink-0 flex items-center gap-1 p-2 border-b border-border">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 gap-1.5"
-                    onClick={() => setPickerOpen(true)}
+            {/* 品牌头：logo + AnyCode（点回首页）+ 折叠按钮 */}
+            <div className="shrink-0 flex items-center gap-1 px-2 h-12 border-b border-border">
+                <Link
+                    to="/"
+                    title="AnyCode"
+                    className="flex items-center gap-2 flex-1 min-w-0 rounded-md px-1.5 py-1 hover:bg-accent transition-colors"
                 >
-                    <Plus className="size-4" /> 添加工作区
-                </Button>
+                    <Logo size={22} />
+                    <span className="text-sm font-semibold tracking-tight text-foreground">
+                        AnyCode
+                    </span>
+                </Link>
                 <button
                     onClick={onCollapse}
                     title="折叠侧栏"
@@ -365,6 +375,18 @@ export function AppSidebar({
                 >
                     <PanelLeftClose className="size-4" />
                 </button>
+            </div>
+
+            {/* 添加工作区（整行） */}
+            <div className="shrink-0 p-2 border-b border-border">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-1.5"
+                    onClick={() => setPickerOpen(true)}
+                >
+                    <Plus className="size-4" /> 添加工作区
+                </Button>
             </div>
 
             {/* 搜索框：输入即 debounce 300ms → GET /api/search，结果扁平替换树 */}

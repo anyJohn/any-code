@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ChevronsUpDown, Plus, FolderOpen } from "lucide-react";
 import { DirectoryPicker } from "./DirectoryPicker";
+import { Logo } from "./Logo";
 import { apiJson } from "@/lib/api";
 
 /**
@@ -53,6 +54,7 @@ export function AppTopbar() {
 
     return (
         <div className="flex items-center gap-3 px-4 h-12">
+            <Logo size={20} className="shrink-0" />
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="sm" className="gap-2">

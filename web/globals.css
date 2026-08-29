@@ -50,6 +50,9 @@
 :root {
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
+    /* 品牌色：取自 anycode.svg 的 #6178fd（oklch 精确换算）。light/dark 一致。 */
+    --brand: oklch(0.6253 0.1981 272.043);
+    --brand-foreground: oklch(0.985 0 0);
     --card: oklch(1 0 0);
     --card-foreground: oklch(0.145 0 0);
     --popover: oklch(1 0 0);
@@ -65,7 +68,10 @@
     --destructive: oklch(0.577 0.245 27.325);
     --border: oklch(0.922 0 0);
     --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
+    /* primary / ring / sidebar-primary 走品牌靛蓝（与 logo 一致）。 */
+    --primary: var(--brand);
+    --primary-foreground: var(--brand-foreground);
+    --ring: oklch(0.6253 0.15 272.043);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
@@ -74,8 +80,8 @@
     --radius: 0.625rem;
     --sidebar: oklch(0.985 0 0);
     --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-primary: var(--brand);
+    --sidebar-primary-foreground: var(--brand-foreground);
     --sidebar-accent: oklch(0.97 0 0);
     --sidebar-accent-foreground: oklch(0.205 0 0);
     --sidebar-border: oklch(0.922 0 0);
@@ -89,8 +95,8 @@
     --card-foreground: oklch(0.985 0 0);
     --popover: oklch(0.205 0 0);
     --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
+    --primary: var(--brand);
+    --primary-foreground: var(--brand-foreground);
     --secondary: oklch(0.269 0 0);
     --secondary-foreground: oklch(0.985 0 0);
     --muted: oklch(0.269 0 0);
@@ -100,7 +106,7 @@
     --destructive: oklch(0.704 0.191 22.216);
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
+    --ring: oklch(0.6253 0.15 272.043);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
@@ -108,8 +114,8 @@
     --chart-5: oklch(0.269 0 0);
     --sidebar: oklch(0.205 0 0);
     --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-primary: var(--brand);
+    --sidebar-primary-foreground: var(--brand-foreground);
     --sidebar-accent: oklch(0.269 0 0);
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
@@ -124,6 +130,39 @@
         @apply bg-background text-foreground;
         @apply font-sans;
     }
+    /* 选中色走品牌靛蓝（半透明，不刺眼）。 */
+    ::selection {
+        background: oklch(0.6253 0.1981 272.043 / 0.25);
+    }
+    /* 细滚动条：与边框同色，hover 加深，圆角贴边。 */
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: var(--border) transparent;
+    }
+    ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 9999px;
+        border: 2px solid transparent;
+        background-clip: padding-box;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: var(--muted-foreground);
+        background-clip: padding-box;
+    }
+}
+
+/* App 底色：品牌靛蓝顶光晕 + muted 底，给圆角卡片浮起的层次感。 */
+.app-shell-bg {
+    background-color: var(--muted);
+    background-image: radial-gradient(
+        125% 75% at 50% -5%,
+        oklch(0.6253 0.14 272.043 / 0.12),
+        transparent 55%
+    );
 }
 
 /* 上下文压缩不确定进度条：内部滑块左右往复（真实 % 无法知，只表示"进行中"）。 */

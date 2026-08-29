@@ -4,6 +4,7 @@ import type { AgentEvent } from "@/lib/sseEvents";
 import { cn } from "@/lib/utils";
 import { SubagentBlock } from "./SubagentBlock";
 import { TurnBlock } from "./TurnBlock";
+import { Logo } from "./Logo";
 import type { RenderItem } from "@/lib/renderItems";
 
 const tagClass: Record<AgentEvent["type"], string> = {
@@ -238,9 +239,12 @@ export function MessageList({
                     </div>
                 )}
                 {events.length === 0 && (
-                    <p className="text-sm text-muted-foreground py-4 text-center">
-                        发送一条消息开始对话
-                    </p>
+                    <div className="flex flex-col items-center gap-3 py-10 text-center">
+                        <Logo size={36} />
+                        <p className="text-sm text-muted-foreground">
+                            发送一条消息开始对话
+                        </p>
+                    </div>
                 )}
             </div>
         </div>

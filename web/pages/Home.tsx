@@ -3,27 +3,28 @@ import { useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "@/hooks/useRedux";
 import {
     selectWorkspace,
-    setSelected,
     setActiveSession,
     refreshWorkspaces,
 } from "@/store/workspaceSlice";
 import type { SessionMeta } from "@any-code/domain";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Logo } from "@/components/Logo";
+import { FolderOpen } from "lucide-react";
 import { apiJson } from "@/lib/api";
 
 type SessionsStatus = "loading" | "ready" | "error";
 
-// 中央：展示当前选中工作区的会话列表（或空状态引导选工作区）
+// 中央：品牌 hero + 当前选中工作区的会话列表（或空状态引导选工作区）
 export default function Page() {
     const { selected, workspaces } = useAppSelector(selectWorkspace);
     const dispatch = useAppDispatch();
     const navigate = useNavigate();
     const [sessions, setSessions] = useState<SessionMeta[]>([]);
     const [status, setStatus] = useState<SessionsStatus>("loading");
-    const [busy, setBusy] = useState(false); // newChat/resume 按钮态
-    const [actionErr, setActionErr] = useState("");
+    const [busy] = useState(false); // newChat/resume 按钮态
+    const [actionErr] = useState("");
 
     useEffect(() => {
         dispatch(refreshWorkspaces());
@@ -65,34 +66,44 @@ export default function Page() {
     return (
         <div className="h-full overflow-y-auto">
             <div className="w-full max-w-3xl mx-auto px-4 py-6 flex flex-col gap-6">
-                <div className="flex items-center justify-between gap-4">
-                    <div className="flex flex-col gap-1 min-w-0">
-                        <h1 className="text-2xl font-bold text-foreground">
-                            {selected?.name || "AnyCode Web"}
+                {/* 品牌 hero：logo + AnyCode + tagline */}
+                <div className="flex items-center gap-3">
+                    <Logo size={40} />
+                    <div className="flex flex-col">
+                        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                            AnyCode
                         </h1>
-                        {selected ? (
-                            <span className="text-xs text-muted-foreground font-mono truncate">
-                                📁 {selected.rootPath}
-                            </span>
-                        ) : (
-                            <span className="text-xs text-muted-foreground">
-                                在侧栏「添加工作区」选一个本地目录开始
-                            </span>
-                        )}
+                        <span className="text-xs text-muted-foreground">
+                            A Simple AI Agent
+                        </span>
                     </div>
-                    {selected && (
-                        <Button className="shrink-0" onClick={newChat} disabled={busy}>
-                            {busy ? "创建中…" : "＋ 新建对话"}
-                        </Button>
-                    )}
                 </div>
+
                 {actionErr && (
                     <p className="text-sm text-destructive">{actionErr}</p>
                 )}
-                {selected && (
+
+                {selected ? (
                     <Card>
                         <CardHeader>
-                            <CardTitle>会话</CardTitle>
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="flex flex-col gap-0.5 min-w-0">
+                                    <span className="text-base font-semibold text-foreground truncate">
+                                        {selected.name}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground font-mono truncate">
+                                        📁 {selected.rootPath}
+                                    </span>
+                                </div>
+                                <Button
+                                    size="sm"
+                                    className="shrink-0"
+                                    onClick={newChat}
+                                    disabled={busy}
+                                >
+                                    {busy ? "创建中…" : "＋ 新建对话"}
+                                </Button>
+                            </div>
                         </CardHeader>
                         <CardContent className="flex flex-col gap-2">
                             {status === "loading" &&
@@ -114,7 +125,7 @@ export default function Page() {
                                 sessions.map((s) => (
                                     <button
                                         key={s.id}
-                                        className="flex items-center justify-between gap-3 px-3 py-3 rounded-xl border border-border hover:bg-accent text-left transition-colors disabled:opacity-50"
+                                        className="flex items-center justify-between gap-3 px-3 py-3 rounded-xl border border-border hover:bg-accent hover:border-primary/40 text-left transition-colors disabled:opacity-50"
                                         onClick={() => resume(s.id)}
                                         disabled={busy}
                                     >
@@ -133,6 +144,13 @@ export default function Page() {
                             )}
                         </CardContent>
                     </Card>
+                ) : (
+                    <div className="rounded-xl border border-dashed border-border p-8 flex flex-col items-center gap-2 text-center">
+                        <FolderOpen className="size-6 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">
+                            还没有工作区。在侧栏点「添加工作区」选一个本地目录开始。
+                        </p>
+                    </div>
                 )}
             </div>
         </div>

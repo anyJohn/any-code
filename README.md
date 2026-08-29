@@ -1,5 +1,11 @@
 # AnyCode
 
+> **A Simple AI Agent**
+>
+> 简洁是一种能力，克制是一种选择。我们以更少、更清晰的内核，让强大的能力保持简单。
+>
+> *Simplicity is capability, restraint a choice — we keep powerful capability simple with a smaller, clearer kernel.*
+
 **一个轻量级的本地 AI 编码助手** · *A lightweight local AI coding agent*
 
 AnyCode 在**你的电脑上本地**运行一个 AI agent：它读你的代码、跑命令、改文件，自主完成你交代的编码任务。所有命令都在本机执行，代码不离开你的机器。三种用法：**Web UI（浏览器，推荐）**、终端 TUI（开发中）、CLI。同一个 agent 内核，接 OpenAI 兼容模型。
