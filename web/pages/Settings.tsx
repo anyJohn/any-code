@@ -4,7 +4,12 @@ import type { ConfigShape } from "@any-code/domain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, ChevronRight } from "lucide-react";
+import {
+    Collapsible,
+    CollapsibleTrigger,
+    CollapsibleContent,
+} from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { apiJson } from "@/lib/api";
 
@@ -112,7 +117,9 @@ function fromResponse(res: ConfigResponse): {
                 defaultModel,
                 streaming: p.streaming ?? true,
                 contextWindow: p.contextWindow ? String(p.contextWindow) : "",
-                maxOutputTokens: p.maxOutputTokens ? String(p.maxOutputTokens) : "",
+                maxOutputTokens: p.maxOutputTokens
+                    ? String(p.maxOutputTokens)
+                    : "",
                 maskedKey: p.apiKey ?? "",
             };
         }
@@ -215,6 +222,53 @@ function toConfigShape(
     };
 }
 
+/** 设置卡片：整 Header 点击折叠（Chevron 旋转指示）；action（添加等）不触发折叠。 */
+function CollapsibleCard({
+    title,
+    action,
+    children,
+    defaultOpen = true,
+}: {
+    title: string;
+    action?: React.ReactNode;
+    children: React.ReactNode;
+    defaultOpen?: boolean;
+}) {
+    const [open, setOpen] = useState(defaultOpen);
+    return (
+        <Collapsible open={open} onOpenChange={setOpen}>
+            <Card>
+                <CollapsibleTrigger asChild>
+                    <CardHeader className="cursor-pointer select-none flex-row items-center justify-between gap-2">
+                        <span className="flex items-center gap-1.5 min-w-0">
+                            <ChevronRight
+                                className={cn(
+                                    "size-4 shrink-0 text-muted-foreground transition-transform",
+                                    open && "rotate-90"
+                                )}
+                            />
+                            <CardTitle className="text-base">{title}</CardTitle>
+                        </span>
+                        {action && (
+                            <span
+                                className="shrink-0"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                {action}
+                            </span>
+                        )}
+                    </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                    <CardContent className="flex flex-col gap-3">
+                        {children}
+                    </CardContent>
+                </CollapsibleContent>
+            </Card>
+        </Collapsible>
+    );
+}
+
 export default function SettingsPage() {
     const [providers, setProviders] = useState<ProviderForm[]>([]);
     const [def, setDef] = useState("");
@@ -243,8 +297,7 @@ export default function SettingsPage() {
         setProviders((p) =>
             p.map((x, idx) => (idx === i ? { ...x, ...patch } : x))
         );
-    const addProvider = () =>
-        setProviders((p) => [...p, emptyProvider()]);
+    const addProvider = () => setProviders((p) => [...p, emptyProvider()]);
     const removeProvider = (i: number) =>
         setProviders((p) => p.filter((_, idx) => idx !== i));
 
@@ -285,13 +338,22 @@ export default function SettingsPage() {
     return (
         <div className="h-full overflow-y-auto">
             <div className="w-full max-w-3xl mx-auto px-4 py-6 flex flex-col gap-6">
-                <div className="flex flex-col gap-1">
-                    <h1 className="text-2xl font-bold text-foreground">
-                        设置
-                    </h1>
-                    <span className="text-xs text-muted-foreground font-mono">
-                        全局配置 ~/.anycode/config.yaml
-                    </span>
+                <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col gap-1">
+                        <h1 className="text-2xl font-bold text-foreground">
+                            设置
+                        </h1>
+                        <span className="text-xs text-muted-foreground font-mono">
+                            全局配置 ~/.anycode/config.yaml
+                        </span>
+                    </div>
+                    <Button
+                        className="shrink-0"
+                        onClick={save}
+                        disabled={saving || status !== "ready"}
+                    >
+                        {saving ? "保存中…" : "保存"}
+                    </Button>
                 </div>
 
                 {status === "loading" && (
@@ -305,10 +367,28 @@ export default function SettingsPage() {
 
                 {status === "ready" && (
                     <>
+                        {/* Default provider（模型提供方之上） */}
+                        <CollapsibleCard title="默认提供方">
+                            <select
+                                className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                value={def}
+                                onChange={(e) => setDef(e.target.value)}
+                            >
+                                {providers
+                                    .map((p) => p.name.trim())
+                                    .filter(Boolean)
+                                    .map((name) => (
+                                        <option key={name} value={name}>
+                                            {name}
+                                        </option>
+                                    ))}
+                            </select>
+                        </CollapsibleCard>
+
                         {/* Providers */}
-                        <Card>
-                            <CardHeader className="flex-row items-center justify-between">
-                                <CardTitle>模型提供方</CardTitle>
+                        <CollapsibleCard
+                            title="模型提供方"
+                            action={
                                 <Button
                                     variant="outline"
                                     size="sm"
@@ -316,258 +396,235 @@ export default function SettingsPage() {
                                 >
                                     <Plus className="size-3.5" /> 添加
                                 </Button>
-                            </CardHeader>
-                            <CardContent className="flex flex-col gap-3">
-                                {providers.map((p, i) => (
-                                    <div
-                                        key={i}
-                                        className="flex flex-col gap-2 rounded-lg border border-border p-3"
-                                    >
-                                        <div className="flex items-center gap-2">
+                            }
+                        >
+                            {providers.map((p, i) => (
+                                <div
+                                    key={i}
+                                    className="flex flex-col gap-2 rounded-lg border border-border p-3"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            className="h-8 flex-1"
+                                            placeholder="名称（如 openai）"
+                                            value={p.name}
+                                            onChange={(e) =>
+                                                patchProvider(i, {
+                                                    name: e.target.value,
+                                                })
+                                            }
+                                        />
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="size-8"
+                                            onClick={() => removeProvider(i)}
+                                            title="删除"
+                                        >
+                                            <Trash2 className="size-3.5 text-muted-foreground" />
+                                        </Button>
+                                    </div>
+                                    <label className="flex flex-col gap-1">
+                                        <span className="text-xs text-muted-foreground">
+                                            API Key
+                                            {p.maskedKey &&
+                                                ` （当前 ${p.maskedKey}，留空不改）`}
+                                        </span>
+                                        <Input
+                                            className="h-8 font-mono"
+                                            type="password"
+                                            placeholder="留空保留原值"
+                                            value={p.apiKey}
+                                            onChange={(e) =>
+                                                patchProvider(i, {
+                                                    apiKey: e.target.value,
+                                                })
+                                            }
+                                        />
+                                    </label>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        <label className="flex flex-col gap-1">
+                                            <span className="text-xs text-muted-foreground">
+                                                Base URL（可选）支持 openai 格式
+                                                base url
+                                            </span>
                                             <Input
-                                                className="h-8 flex-1"
-                                                placeholder="名称（如 openai）"
-                                                value={p.name}
+                                                className="h-8"
+                                                placeholder="https://.../v1"
+                                                value={p.baseURL}
                                                 onChange={(e) =>
                                                     patchProvider(i, {
-                                                        name: e.target.value,
+                                                        baseURL: e.target.value,
                                                     })
                                                 }
                                             />
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="size-8"
-                                                onClick={() => removeProvider(i)}
-                                                title="删除"
-                                            >
-                                                <Trash2 className="size-3.5 text-muted-foreground" />
-                                            </Button>
-                                        </div>
+                                        </label>
                                         <label className="flex flex-col gap-1">
                                             <span className="text-xs text-muted-foreground">
-                                                API Key
-                                                {p.maskedKey &&
-                                                    ` （当前 ${p.maskedKey}，留空不改）`}
+                                                上下文窗口（留空=自动探测）
                                             </span>
                                             <Input
                                                 className="h-8 font-mono"
-                                                type="password"
-                                                placeholder="留空保留原值"
-                                                value={p.apiKey}
+                                                type="number"
+                                                placeholder="留空自动，或填上限（与探测取最小）"
+                                                value={p.contextWindow}
                                                 onChange={(e) =>
                                                     patchProvider(i, {
-                                                        apiKey: e.target.value,
-                                                    })
-                                                }
-                                            />
-                                        </label>
-                                        <div className="grid grid-cols-1 gap-2">
-                                            <label className="flex flex-col gap-1">
-                                                <span className="text-xs text-muted-foreground">
-                                                    Base URL（可选）支持 openai 格式 base url
-                                                </span>
-                                                <Input
-                                                    className="h-8"
-                                                    placeholder="https://.../v1"
-                                                    value={p.baseURL}
-                                                    onChange={(e) =>
-                                                        patchProvider(i, {
-                                                            baseURL:
-                                                                e.target.value,
-                                                        })
-                                                    }
-                                                />
-                                            </label>
-                                            <label className="flex flex-col gap-1">
-                                                <span className="text-xs text-muted-foreground">
-                                                    上下文窗口（留空=自动探测）
-                                                </span>
-                                                <Input
-                                                    className="h-8 font-mono"
-                                                    type="number"
-                                                    placeholder="留空自动，或填上限（与探测取最小）"
-                                                    value={p.contextWindow}
-                                                    onChange={(e) =>
-                                                        patchProvider(i, {
-                                                            contextWindow:
-                                                                e.target.value,
-                                                        })
-                                                    }
-                                                />
-                                            </label>
-                                            <label className="flex flex-col gap-1">
-                                                <span className="text-xs text-muted-foreground">
-                                                    最大输出 token（留空=自动）
-                                                </span>
-                                                <Input
-                                                    className="h-8 font-mono"
-                                                    type="number"
-                                                    placeholder="留空自动，或填上限（与探测取最小）"
-                                                    value={p.maxOutputTokens}
-                                                    onChange={(e) =>
-                                                        patchProvider(i, {
-                                                            maxOutputTokens:
-                                                                e.target.value,
-                                                        })
-                                                    }
-                                                />
-                                            </label>
-                                        </div>
-                                        <div className="flex flex-col gap-1.5">
-                                            <span className="text-xs text-muted-foreground">
-                                                模型列表
-                                            </span>
-                                            {p.models.map((m, mi) => (
-                                                <div
-                                                    key={mi}
-                                                    className="flex items-center gap-2"
-                                                >
-                                                    <Input
-                                                        className="h-8 font-mono"
-                                                        placeholder="model id（如 gpt-4o）"
-                                                        value={m.id}
-                                                        onChange={(e) =>
-                                                            patchProvider(i, {
-                                                                models: p.models.map(
-                                                                    (x, xidx) =>
-                                                                        xidx === mi
-                                                                            ? {
-                                                                                  ...x,
-                                                                                  id: e.target.value,
-                                                                              }
-                                                                            : x
-                                                                ),
-                                                            })
-                                                        }
-                                                    />
-                                                    <Input
-                                                        className="h-8"
-                                                        placeholder="展示名（可选）"
-                                                        value={m.name}
-                                                        onChange={(e) =>
-                                                            patchProvider(i, {
-                                                                models: p.models.map(
-                                                                    (x, xidx) =>
-                                                                        xidx === mi
-                                                                            ? {
-                                                                                  ...x,
-                                                                                  name: e.target.value,
-                                                                              }
-                                                                            : x
-                                                                ),
-                                                            })
-                                                        }
-                                                    />
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="size-8"
-                                                        onClick={() =>
-                                                            patchProvider(i, {
-                                                                models: p.models.filter(
-                                                                    (_, xidx) =>
-                                                                        xidx !== mi
-                                                                ),
-                                                            })
-                                                        }
-                                                        title="删除模型"
-                                                    >
-                                                        <Trash2 className="size-3.5 text-muted-foreground" />
-                                                    </Button>
-                                                </div>
-                                            ))}
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="w-fit"
-                                                onClick={() =>
-                                                    patchProvider(i, {
-                                                        models: [
-                                                            ...p.models,
-                                                            { id: "", name: "" },
-                                                        ],
-                                                    })
-                                                }
-                                            >
-                                                <Plus className="size-3.5" /> 添加模型
-                                            </Button>
-                                        </div>
-                                        <label className="flex flex-col gap-1">
-                                            <span className="text-xs text-muted-foreground">
-                                                默认模型
-                                            </span>
-                                            <select
-                                                className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                                value={p.defaultModel}
-                                                onChange={(e) =>
-                                                    patchProvider(i, {
-                                                        defaultModel:
+                                                        contextWindow:
                                                             e.target.value,
                                                     })
                                                 }
-                                            >
-                                                {p.models
-                                                    .map((m) => m.id.trim())
-                                                    .filter(Boolean)
-                                                    .map((id) => (
-                                                        <option
-                                                            key={id}
-                                                            value={id}
-                                                        >
-                                                            {id}
-                                                        </option>
-                                                    ))}
-                                            </select>
+                                            />
                                         </label>
-                                        <label className="flex items-center gap-2">
-                                            <input
-                                                type="checkbox"
-                                                className="size-3.5 accent-primary"
-                                                checked={p.streaming}
+                                        <label className="flex flex-col gap-1">
+                                            <span className="text-xs text-muted-foreground">
+                                                最大输出 token（留空=自动）
+                                            </span>
+                                            <Input
+                                                className="h-8 font-mono"
+                                                type="number"
+                                                placeholder="留空自动，或填上限（与探测取最小）"
+                                                value={p.maxOutputTokens}
                                                 onChange={(e) =>
                                                     patchProvider(i, {
-                                                        streaming:
-                                                            e.target.checked,
+                                                        maxOutputTokens:
+                                                            e.target.value,
                                                     })
                                                 }
                                             />
-                                            <span className="text-xs text-muted-foreground">
-                                                流式输出
-                                            </span>
                                         </label>
                                     </div>
-                                ))}
-                            </CardContent>
-                        </Card>
-
-                        {/* Default provider */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>默认提供方</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <select
-                                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                    value={def}
-                                    onChange={(e) => setDef(e.target.value)}
-                                >
-                                    {providers
-                                        .map((p) => p.name.trim())
-                                        .filter(Boolean)
-                                        .map((name) => (
-                                            <option key={name} value={name}>
-                                                {name}
-                                            </option>
+                                    <div className="flex flex-col gap-1.5">
+                                        <span className="text-xs text-muted-foreground">
+                                            模型列表
+                                        </span>
+                                        {p.models.map((m, mi) => (
+                                            <div
+                                                key={mi}
+                                                className="flex items-center gap-2"
+                                            >
+                                                <Input
+                                                    className="h-8 font-mono"
+                                                    placeholder="model id（如 gpt-4o）"
+                                                    value={m.id}
+                                                    onChange={(e) =>
+                                                        patchProvider(i, {
+                                                            models: p.models.map(
+                                                                (x, xidx) =>
+                                                                    xidx === mi
+                                                                        ? {
+                                                                              ...x,
+                                                                              id: e
+                                                                                  .target
+                                                                                  .value,
+                                                                          }
+                                                                        : x
+                                                            ),
+                                                        })
+                                                    }
+                                                />
+                                                <Input
+                                                    className="h-8"
+                                                    placeholder="展示名（可选）"
+                                                    value={m.name}
+                                                    onChange={(e) =>
+                                                        patchProvider(i, {
+                                                            models: p.models.map(
+                                                                (x, xidx) =>
+                                                                    xidx === mi
+                                                                        ? {
+                                                                              ...x,
+                                                                              name: e
+                                                                                  .target
+                                                                                  .value,
+                                                                          }
+                                                                        : x
+                                                            ),
+                                                        })
+                                                    }
+                                                />
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="size-8"
+                                                    onClick={() =>
+                                                        patchProvider(i, {
+                                                            models: p.models.filter(
+                                                                (_, xidx) =>
+                                                                    xidx !== mi
+                                                            ),
+                                                        })
+                                                    }
+                                                    title="删除模型"
+                                                >
+                                                    <Trash2 className="size-3.5 text-muted-foreground" />
+                                                </Button>
+                                            </div>
                                         ))}
-                                </select>
-                            </CardContent>
-                        </Card>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="w-fit"
+                                            onClick={() =>
+                                                patchProvider(i, {
+                                                    models: [
+                                                        ...p.models,
+                                                        { id: "", name: "" },
+                                                    ],
+                                                })
+                                            }
+                                        >
+                                            <Plus className="size-3.5" />{" "}
+                                            添加模型
+                                        </Button>
+                                    </div>
+                                    <label className="flex flex-col gap-1">
+                                        <span className="text-xs text-muted-foreground">
+                                            默认模型
+                                        </span>
+                                        <select
+                                            className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                            value={p.defaultModel}
+                                            onChange={(e) =>
+                                                patchProvider(i, {
+                                                    defaultModel:
+                                                        e.target.value,
+                                                })
+                                            }
+                                        >
+                                            {p.models
+                                                .map((m) => m.id.trim())
+                                                .filter(Boolean)
+                                                .map((id) => (
+                                                    <option key={id} value={id}>
+                                                        {id}
+                                                    </option>
+                                                ))}
+                                        </select>
+                                    </label>
+                                    <label className="flex items-center gap-2">
+                                        <input
+                                            type="checkbox"
+                                            className="size-3.5 accent-primary"
+                                            checked={p.streaming}
+                                            onChange={(e) =>
+                                                patchProvider(i, {
+                                                    streaming: e.target.checked,
+                                                })
+                                            }
+                                        />
+                                        <span className="text-xs text-muted-foreground">
+                                            流式输出
+                                        </span>
+                                    </label>
+                                </div>
+                            ))}
+                        </CollapsibleCard>
 
                         {/* MCP servers */}
-                        <Card>
-                            <CardHeader className="flex-row items-center justify-between">
-                                <CardTitle>MCP 服务</CardTitle>
+                        <CollapsibleCard
+                            title="MCP 服务"
+                            action={
                                 <Button
                                     variant="outline"
                                     size="sm"
@@ -575,158 +632,148 @@ export default function SettingsPage() {
                                 >
                                     <Plus className="size-3.5" /> 添加
                                 </Button>
-                            </CardHeader>
-                            <CardContent className="flex flex-col gap-3">
-                                {mcp.map((m, i) => (
-                                    <div
-                                        key={i}
-                                        className="flex flex-col gap-2 rounded-lg border border-border p-3"
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <Input
-                                                className="h-8 flex-1"
-                                                placeholder="服务名称"
-                                                value={m.name}
-                                                onChange={(e) =>
-                                                    patchMcp(i, {
-                                                        name: e.target.value,
-                                                    })
-                                                }
-                                            />
-                                            <select
-                                                className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
-                                                value={m.type}
-                                                onChange={(e) =>
-                                                    patchMcp(i, {
-                                                        type: e.target
-                                                            .value as
-                                                            | "stdio"
-                                                            | "sse",
-                                                    })
-                                                }
-                                            >
-                                                <option value="stdio">
-                                                    stdio
-                                                </option>
-                                                <option value="sse">sse</option>
-                                            </select>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="size-8"
-                                                onClick={() => removeMcp(i)}
-                                                title="删除"
-                                            >
-                                                <Trash2 className="size-3.5 text-muted-foreground" />
-                                            </Button>
-                                        </div>
-                                        {m.type === "stdio" ? (
-                                            <>
-                                                <label className="flex flex-col gap-1">
-                                                    <span className="text-xs text-muted-foreground">
-                                                        command
-                                                    </span>
-                                                    <Input
-                                                        className="h-8 font-mono"
-                                                        placeholder="npx"
-                                                        value={m.command}
-                                                        onChange={(e) =>
-                                                            patchMcp(i, {
-                                                                command:
-                                                                    e.target
-                                                                        .value,
-                                                            })
-                                                        }
-                                                    />
-                                                </label>
-                                                <label className="flex flex-col gap-1">
-                                                    <span className="text-xs text-muted-foreground">
-                                                        args（每行一个）
-                                                    </span>
-                                                    <textarea
-                                                        className="rounded-md border border-input bg-transparent px-3 py-1.5 text-sm font-mono focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                                        rows={3}
-                                                        placeholder={"-y\n@modelcontextprotocol/server-filesystem"}
-                                                        value={m.args}
-                                                        onChange={(e) =>
-                                                            patchMcp(i, {
-                                                                args: e.target
-                                                                    .value,
-                                                            })
-                                                        }
-                                                    />
-                                                </label>
-                                                <label className="flex flex-col gap-1">
-                                                    <span className="text-xs text-muted-foreground">
-                                                        env（每行 KEY=VALUE）
-                                                    </span>
-                                                    <textarea
-                                                        className="rounded-md border border-input bg-transparent px-3 py-1.5 text-sm font-mono focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                                        rows={3}
-                                                        placeholder={"FOO=bar"}
-                                                        value={m.env}
-                                                        onChange={(e) =>
-                                                            patchMcp(i, {
-                                                                env: e.target
-                                                                    .value,
-                                                            })
-                                                        }
-                                                    />
-                                                </label>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <label className="flex flex-col gap-1">
-                                                    <span className="text-xs text-muted-foreground">
-                                                        url
-                                                    </span>
-                                                    <Input
-                                                        className="h-8 font-mono"
-                                                        placeholder="https://..."
-                                                        value={m.url}
-                                                        onChange={(e) =>
-                                                            patchMcp(i, {
-                                                                url: e.target
-                                                                    .value,
-                                                            })
-                                                        }
-                                                    />
-                                                </label>
-                                                <label className="flex flex-col gap-1">
-                                                    <span className="text-xs text-muted-foreground">
-                                                        headers（每行 KEY:VALUE）
-                                                    </span>
-                                                    <textarea
-                                                        className="rounded-md border border-input bg-transparent px-3 py-1.5 text-sm font-mono focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                                        rows={3}
-                                                        placeholder={"Authorization:Bearer xxx"}
-                                                        value={m.headers}
-                                                        onChange={(e) =>
-                                                            patchMcp(i, {
-                                                                headers:
-                                                                    e.target
-                                                                        .value,
-                                                            })
-                                                        }
-                                                    />
-                                                </label>
-                                            </>
-                                        )}
+                            }
+                        >
+                            {mcp.map((m, i) => (
+                                <div
+                                    key={i}
+                                    className="flex flex-col gap-2 rounded-lg border border-border p-3"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            className="h-8 flex-1"
+                                            placeholder="服务名称"
+                                            value={m.name}
+                                            onChange={(e) =>
+                                                patchMcp(i, {
+                                                    name: e.target.value,
+                                                })
+                                            }
+                                        />
+                                        <select
+                                            className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
+                                            value={m.type}
+                                            onChange={(e) =>
+                                                patchMcp(i, {
+                                                    type: e.target.value as
+                                                        | "stdio"
+                                                        | "sse",
+                                                })
+                                            }
+                                        >
+                                            <option value="stdio">stdio</option>
+                                            <option value="sse">sse</option>
+                                        </select>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="size-8"
+                                            onClick={() => removeMcp(i)}
+                                            title="删除"
+                                        >
+                                            <Trash2 className="size-3.5 text-muted-foreground" />
+                                        </Button>
                                     </div>
-                                ))}
-                                {mcp.length === 0 && (
-                                    <p className="text-sm text-muted-foreground px-1">
-                                        暂无 MCP 服务
-                                    </p>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        <div className="flex justify-end">
-                            <Button onClick={save} disabled={saving}>
-                                {saving ? "保存中…" : "保存"}
-                            </Button>
-                        </div>
+                                    {m.type === "stdio" ? (
+                                        <>
+                                            <label className="flex flex-col gap-1">
+                                                <span className="text-xs text-muted-foreground">
+                                                    command
+                                                </span>
+                                                <Input
+                                                    className="h-8 font-mono"
+                                                    placeholder="npx"
+                                                    value={m.command}
+                                                    onChange={(e) =>
+                                                        patchMcp(i, {
+                                                            command:
+                                                                e.target.value,
+                                                        })
+                                                    }
+                                                />
+                                            </label>
+                                            <label className="flex flex-col gap-1">
+                                                <span className="text-xs text-muted-foreground">
+                                                    args（每行一个）
+                                                </span>
+                                                <textarea
+                                                    className="rounded-md border border-input bg-transparent px-3 py-1.5 text-sm font-mono focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                                    rows={3}
+                                                    placeholder={
+                                                        "-y\n@modelcontextprotocol/server-filesystem"
+                                                    }
+                                                    value={m.args}
+                                                    onChange={(e) =>
+                                                        patchMcp(i, {
+                                                            args: e.target
+                                                                .value,
+                                                        })
+                                                    }
+                                                />
+                                            </label>
+                                            <label className="flex flex-col gap-1">
+                                                <span className="text-xs text-muted-foreground">
+                                                    env（每行 KEY=VALUE）
+                                                </span>
+                                                <textarea
+                                                    className="rounded-md border border-input bg-transparent px-3 py-1.5 text-sm font-mono focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                                    rows={3}
+                                                    placeholder={"FOO=bar"}
+                                                    value={m.env}
+                                                    onChange={(e) =>
+                                                        patchMcp(i, {
+                                                            env: e.target.value,
+                                                        })
+                                                    }
+                                                />
+                                            </label>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <label className="flex flex-col gap-1">
+                                                <span className="text-xs text-muted-foreground">
+                                                    url
+                                                </span>
+                                                <Input
+                                                    className="h-8 font-mono"
+                                                    placeholder="https://..."
+                                                    value={m.url}
+                                                    onChange={(e) =>
+                                                        patchMcp(i, {
+                                                            url: e.target.value,
+                                                        })
+                                                    }
+                                                />
+                                            </label>
+                                            <label className="flex flex-col gap-1">
+                                                <span className="text-xs text-muted-foreground">
+                                                    headers（每行 KEY:VALUE）
+                                                </span>
+                                                <textarea
+                                                    className="rounded-md border border-input bg-transparent px-3 py-1.5 text-sm font-mono focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                                    rows={3}
+                                                    placeholder={
+                                                        "Authorization:Bearer xxx"
+                                                    }
+                                                    value={m.headers}
+                                                    onChange={(e) =>
+                                                        patchMcp(i, {
+                                                            headers:
+                                                                e.target.value,
+                                                        })
+                                                    }
+                                                />
+                                            </label>
+                                        </>
+                                    )}
+                                </div>
+                            ))}
+                            {mcp.length === 0 && (
+                                <p className="text-sm text-muted-foreground px-1">
+                                    暂无 MCP 服务
+                                </p>
+                            )}
+                        </CollapsibleCard>
                     </>
                 )}
             </div>
