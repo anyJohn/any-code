@@ -25,13 +25,26 @@ providers:
 # 当前生效 provider（改后下次调用生效；web 可热更新）
 default: openai
 
-# MCP server 配置
-# 每个 server：{ type: stdio, command, args?, env? } 或 { type: sse, url, headers? }
+# MCP server 配置（第三方 MCP——默认关 enabled:false 不自动连，用户开 + 填 key/路径后启用 = 显式同意）
+# 每个 server：{ type: stdio, command, args?, env?, enabled? } 或 { type: sse, url, headers?, enabled? }
+# enabled 缺省=启用；enabled:false 保留定义但不建连（Settings 可开关）。filesystem 更适合项目级 .anycode/mcp.yaml
 mcp:
-  filesystem:
+  filesystem: # 示例：需指定根目录
     type: stdio
     command: npx
     args: [-y, "@modelcontextprotocol/server-filesystem", /tmp]
+    enabled: false
+  # fetch: # 零配置（默认关，开即用）
+  #   type: stdio
+  #   command: npx
+  #   args: [-y, "@modelcontextprotocol/server-fetch"]
+  #   enabled: false
+  # github: # 需 GITHUB_PERSONAL_ACCESS_TOKEN
+  #   type: stdio
+  #   command: npx
+  #   args: [-y, "@modelcontextprotocol/server-github"]
+  #   env: { GITHUB_PERSONAL_ACCESS_TOKEN: "" }
+  #   enabled: false
   # remote:
   #   type: sse
   #   url: https://example.com/sse

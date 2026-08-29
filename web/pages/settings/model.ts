@@ -52,6 +52,8 @@ export interface McpForm {
     env: string;
     url: string;
     headers: string;
+    /** 启用开关（缺省 true；enabled:false 不建连——与 domain mcp.ts 一致） */
+    enabled: boolean;
 }
 
 export const emptyProvider = (): ProviderForm => ({
@@ -74,6 +76,7 @@ export const emptyMcp = (): McpForm => ({
     env: "",
     url: "",
     headers: "",
+    enabled: true,
 });
 
 // 把多行 KEY=VALUE / KEY:VALUE 文本解析成对象
@@ -128,6 +131,7 @@ export function fromResponse(res: ConfigResponse): {
         const form = emptyMcp();
         form.name = name;
         form.type = type;
+        form.enabled = s.enabled !== false; // 缺省启用
         if (type === "stdio") {
             form.command = (s.command as string) ?? "";
             form.args = Array.isArray(s.args)
@@ -207,12 +211,14 @@ export function toConfigShape(
             if (args.length) entry.args = args;
             const env = parsePairs(m.env, /=/);
             if (Object.keys(env).length) entry.env = env;
+            entry.enabled = m.enabled;
             mOut[name] = entry;
         } else {
             const entry: Record<string, unknown> = { type: "sse" };
             if (m.url.trim()) entry.url = m.url.trim();
             const headers = parsePairs(m.headers, /:/);
             if (Object.keys(headers).length) entry.headers = headers;
+            entry.enabled = m.enabled;
             mOut[name] = entry;
         }
     }

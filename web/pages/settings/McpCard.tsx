@@ -3,6 +3,7 @@
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { CollapsibleCard } from "./CollapsibleCard";
 import type { McpForm } from "./model";
 
@@ -46,15 +47,18 @@ export function McpCard({
                             value={m.type}
                             onChange={(e) =>
                                 patchMcp(i, {
-                                    type: e.target.value as
-                                        | "stdio"
-                                        | "sse",
+                                    type: e.target.value as "stdio" | "sse",
                                 })
                             }
                         >
                             <option value="stdio">stdio</option>
                             <option value="sse">sse</option>
                         </select>
+                        <Switch
+                            checked={m.enabled}
+                            onCheckedChange={(v) => patchMcp(i, { enabled: v })}
+                            aria-label="启用"
+                        />
                         <Button
                             variant="ghost"
                             size="icon"
@@ -135,9 +139,7 @@ export function McpCard({
                                 <textarea
                                     className="rounded-md border border-input bg-transparent px-3 py-1.5 text-sm font-mono focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                                     rows={3}
-                                    placeholder={
-                                        "Authorization:Bearer xxx"
-                                    }
+                                    placeholder={"Authorization:Bearer xxx"}
                                     value={m.headers}
                                     onChange={(e) =>
                                         patchMcp(i, {

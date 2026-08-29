@@ -51,14 +51,13 @@ vi.mock("@modelcontextprotocol/sdk/client/stdio.js", () => ({
     }),
 }));
 vi.mock("@modelcontextprotocol/sdk/client/sse.js", () => ({
-    SSEClientTransport: vi.fn().mockImplementation(function (
-        url: unknown,
-        opts: unknown
-    ) {
-        const t = { url, opts };
-        mocks.state.sseTransports.push(t);
-        return t;
-    }),
+    SSEClientTransport: vi
+        .fn()
+        .mockImplementation(function (url: unknown, opts: unknown) {
+            const t = { url, opts };
+            mocks.state.sseTransports.push(t);
+            return t;
+        }),
 }));
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -97,7 +96,12 @@ describe("MCP 真协议连接（mcp.ts / SPEC-006，配置从 config.yaml mcp �
             ],
         };
         const servers: Record<string, McpServerConfig> = {
-            srv: { type: "stdio", command: "node", args: ["s.js"], env: { X: "1" } },
+            srv: {
+                type: "stdio",
+                command: "node",
+                args: ["s.js"],
+                env: { X: "1" },
+            },
         };
         const manager = await loadMcpTools(servers);
 
@@ -116,7 +120,11 @@ describe("MCP 真协议连接（mcp.ts / SPEC-006，配置从 config.yaml mcp �
 
     it("AC-002 SSE server 建连（url + headers）", async () => {
         const servers: Record<string, McpServerConfig> = {
-            srv: { type: "sse", url: "http://x/sse", headers: { Authorization: "Bearer t" } },
+            srv: {
+                type: "sse",
+                url: "http://x/sse",
+                headers: { Authorization: "Bearer t" },
+            },
         };
         await loadMcpTools(servers);
 
@@ -134,7 +142,9 @@ describe("MCP 真协议连接（mcp.ts / SPEC-006，配置从 config.yaml mcp �
         mocks.state.listToolsResult = {
             tools: [{ name: "foo", description: "", inputSchema: {} }],
         };
-        const manager = await loadMcpTools({ srv: { type: "stdio", command: "node" } });
+        const manager = await loadMcpTools({
+            srv: { type: "stdio", command: "node" },
+        });
         const handler = manager.tools[0].handler;
         const client = mocks.state.clients[0];
 
@@ -154,7 +164,9 @@ describe("MCP 真协议连接（mcp.ts / SPEC-006，配置从 config.yaml mcp �
         await expect(handler({})).resolves.toBe("[Error] bad");
 
         client.callTool.mockRejectedValue(new Error("boom"));
-        await expect(handler({})).resolves.toBe("[Error] MCP tool foo failed: boom");
+        await expect(handler({})).resolves.toBe(
+            "[Error] MCP tool foo failed: boom"
+        );
     });
 
     it("AC-004 cleanup 关闭所有已连 client", async () => {
@@ -186,19 +198,32 @@ describe("MCP 真协议连接（mcp.ts / SPEC-006，配置从 config.yaml mcp �
         mocks.state.listToolsResult = {
             tools: [{ name: "foo", description: "", inputSchema: {} }],
         };
-        const manager = await loadMcpTools({ srv: { type: "stdio", command: "node" } });
+        const manager = await loadMcpTools({
+            srv: { type: "stdio", command: "node" },
+        });
 
         const ctx = mkCtx();
         const result = await toolCall(
-            [{ id: "tc1", type: "function", function: { name: "foo", arguments: "{}" } }],
+            [
+                {
+                    id: "tc1",
+                    type: "function",
+                    function: { name: "foo", arguments: "{}" },
+                },
+            ],
             ctx,
             manager.tools,
             "t1"
         );
-        expect(result[0]).toMatchObject({ role: "tool", content: "ok", tool_call_id: "tc1" });
+        expect(result[0]).toMatchObject({
+            role: "tool",
+            content: "ok",
+            tool_call_id: "tc1",
+        });
         // SPEC-018：TOOL_START + TOOL 两次 submit
         expect(ctx.eventStream.submit).toHaveBeenCalledTimes(2);
-        const calls = (ctx.eventStream.submit as ReturnType<typeof vi.fn>).mock.calls;
+        const calls = (ctx.eventStream.submit as ReturnType<typeof vi.fn>).mock
+            .calls;
         expect(calls[0][0]).toMatchObject({
             type: "ToolStart",
             message: "foo",
@@ -227,5 +252,18 @@ describe("MCP 真协议连接（mcp.ts / SPEC-006，配置从 config.yaml mcp �
         await manager.cleanup();
         expect(mocks.state.clients[0].close).not.toHaveBeenCalled();
         expect(mocks.state.clients[1].close).toHaveBeenCalledOnce();
+    });
+
+    it("enabled:false 的 server 不建连（保留定义、Settings 可开关）", async () => {
+        mocks.state.listToolsResult = {
+            tools: [{ name: "on-tool", description: "", inputSchema: {} }],
+        };
+        const manager = await loadMcpTools({
+            off: { type: "stdio", command: "node", enabled: false },
+            on: { type: "stdio", command: "node" },
+        });
+        expect(manager.tools).toHaveLength(1);
+        expect(manager.tools[0].schema.function.name).toBe("on-tool");
+        await manager.cleanup();
     });
 });
