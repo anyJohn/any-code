@@ -2,20 +2,27 @@ import { describe, it, expect } from "vitest";
 import { shellNote } from "../src/prompt";
 import { resolveShellKind } from "../src/tools/functions/bash";
 
-describe("shellNote（命令兼容性提示注入）", () => {
-    it("busybox：明示 POSIX 子集 + 禁用 bashism", () => {
+describe("shellNote（只报环境，不指导）", () => {
+    it("busybox：只报环境名 + POSIX subset", () => {
         const n = shellNote("busybox");
         expect(n).toContain("busybox");
         expect(n).toContain("POSIX");
-        expect(n).toContain("mapfile");
-        expect(n).toContain("/c/Users/");
+        // 精简后不含命令指导
+        expect(n).not.toContain("mapfile");
+        expect(n).not.toContain("/c/Users");
     });
-    it("git-bash：明示 Git Bash + 路径风格", () => {
+    it("git-bash：只报环境名", () => {
         const n = shellNote("git-bash");
         expect(n).toContain("Git Bash");
-        expect(n).toContain("/c/Users/");
+        expect(n).not.toContain("/c/Users");
     });
-    it("sh / none / unknown：静默（unix 默认无需提示）", () => {
+    it("mac-sh：报 macOS /bin/sh + bash 3.2 + BSD userland", () => {
+        const n = shellNote("mac-sh");
+        expect(n).toContain("macOS /bin/sh");
+        expect(n).toContain("bash 3.2");
+        expect(n).toContain("BSD userland");
+    });
+    it("sh / none / unknown：静默", () => {
         expect(shellNote("sh")).toBe("");
         expect(shellNote("none")).toBe("");
         expect(shellNote("unknown")).toBe("");
@@ -23,9 +30,12 @@ describe("shellNote（命令兼容性提示注入）", () => {
 });
 
 describe("resolveShellKind（平台判定）", () => {
-    it("非 Windows → sh", () => {
-        // 测试机为 linux；mac 同走 /bin/sh 分支
+    it("非 Windows：macOS → mac-sh；其它 unix → sh", () => {
         if (process.platform === "win32") return;
-        expect(resolveShellKind("/tmp", undefined)).toBe("sh");
+        if (process.platform === "darwin") {
+            expect(resolveShellKind("/tmp", undefined)).toBe("mac-sh");
+        } else {
+            expect(resolveShellKind("/tmp", undefined)).toBe("sh");
+        }
     });
 });

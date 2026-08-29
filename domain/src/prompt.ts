@@ -58,29 +58,22 @@ export function workspaceNote(rootPath: string): string {
 }
 
 /**
- * Shell 兼容性提示：按当前平台/二进制注入，让 LLM 生成可执行命令。
- * - busybox（Windows 安装器下发）：POSIX 子集，禁 bash 4+ 特性与 GNU 长选项
- * - git-bash（Windows 系统 Git）：POSIX 兼容，提示路径风格
- * - sh（unix /bin/sh）：默认无特殊提示
+ * Shell 环境提示：只告知 LLM 当前在哪种 shell——不列禁忌、不教命令（相信模型自会适配）。
+ * - busybox（Windows 安装器下发）：POSIX 子集
+ * - git-bash（Windows 系统 Git）：POSIX 兼容
+ * - mac-sh：macOS /bin/sh（bash 3.2 POSIX 模式 + BSD 工具集）
+ * - sh（linux 等）：默认无提示
  * - none（Windows 未配 bash）：静默（bash 工具运行时会报错）
  */
 export function shellNote(kind: ShellKind): string {
     if (kind === "busybox") {
-        return (
-            `\n\n# Shell\n` +
-            `The bash tool runs on **busybox** (Windows, POSIX subset — not GNU bash). ` +
-            `Avoid bash 4+ features and GNU-isms: no associative arrays, no \`mapfile\`/\`readarray\`, ` +
-            `no \`<<<\` here-strings, no \`|&\`, no \`**\` globstar, no \`read -d\`. ` +
-            `Prefer plain POSIX (\`sed\`/\`awk\`/\`tr\`/\`cut\`) over bash-specific parameter expansion. ` +
-            `Paths: use /c/Users/... form or relative; busybox translates MSYS internally.`
-        );
+        return "\n\n# Shell\nThe bash tool runs on **busybox** (Windows, POSIX subset).";
     }
     if (kind === "git-bash") {
-        return (
-            `\n\n# Shell\n` +
-            `The bash tool runs on **Git Bash** (Windows). Use POSIX-style paths ` +
-            `(/c/Users/... or relative); avoid Windows-only cmd/PowerShell commands.`
-        );
+        return "\n\n# Shell\nThe bash tool runs on **Git Bash** (Windows).";
+    }
+    if (kind === "mac-sh") {
+        return "\n\n# Shell\nThe bash tool runs on **macOS /bin/sh** (bash 3.2 POSIX mode, BSD userland).";
     }
     return "";
 }

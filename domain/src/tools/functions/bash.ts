@@ -54,15 +54,24 @@ export function resolveShell(
 }
 
 /** 当前生效 shell 的种类——用于注入 system prompt 提示 LLM 命令兼容性。 */
-export type ShellKind = "sh" | "git-bash" | "busybox" | "unknown" | "none";
+export type ShellKind =
+    | "sh"
+    | "mac-sh"
+    | "git-bash"
+    | "busybox"
+    | "unknown"
+    | "none";
 
 /**
  * 解析 shell 种类（供 prompt 注入；不抛错——Windows 无 bash 时返回 none，prompt 静默跳过）。
- * - unix：/bin/sh（sh）
- * - Windows：binary 路径含 busybox → busybox（POSIX 子集）；含 git/bash → git-bash；否则 unknown
+ * - macOS：/bin/sh（bash 3.2 POSIX 模式 + BSD 工具集）→ mac-sh
+ * - 其它 unix：/bin/sh → sh
+ * - Windows：binary 路径含 busybox → busybox；含 git/bash → git-bash；否则 unknown
  */
 export function resolveShellKind(cwd: string, gitBashPath?: string): ShellKind {
-    if (process.platform !== "win32") return "sh";
+    if (process.platform !== "win32") {
+        return process.platform === "darwin" ? "mac-sh" : "sh";
+    }
     const candidates = [
         process.env.ANYCODE_BASH_PATH,
         gitBashPath,
