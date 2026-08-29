@@ -34,9 +34,9 @@ gitBashPath: ... # 可选，Windows Git Bash 路径
 
 ## 改后何时生效
 
-- **config.yaml（providers / mcp / abilities）**：需**重启对话**——新会话创建 agent 时才 initConfig / initMcp。同会话内不热加载；改完告知用户新开对话。
+- **config.yaml（providers / mcp / abilities）**：**下条消息即生效**——AnyCode 是 per-request agent（每次 run 新建 agent → initConfig / initMcp 读盘）。当前 run 用旧 config 完成（不中途 reload，避免中断在途 LLM / MCP 连接），下条消息自动用新配置。无需重启对话。
 - **技能 / AGENTS.md / memory.md**：**下条消息即生效**——system prompt 每个任务重建时读盘。
-- **provider / model 运行时切换**：`/model`、`/provider` 指令热切（不等重启）。
+- **provider / model 运行时切换**：`/model`、`/provider` 指令热切（当前 run 立即生效）。
 
 ## 技能（Skills）
 
@@ -68,15 +68,15 @@ additive 三层注入 system prompt：全局 `~/.anycode/AGENTS.md` + `~/.agents
 
 ## 常见操作
 
-- **加 MCP**：编辑 config.yaml `mcp` 段加条目（`enabled: true`）→ 告知重启对话。
+- **加 MCP**：编辑 config.yaml `mcp` 段加条目（`enabled: true`）→ 下条消息生效。
 - **加技能**：放 `<name>/SKILL.md` 到 `~/.anycode/skills/`（全局）或项目 `.anycode/skills/`（项目）→ 下条消息生效。
-- **改 provider apiKey / model**：编辑 config.yaml → 重启对话（或 `/model` `/provider` 热切）。
-- **开连接器**：config.yaml `abilities.<name>.enabled: true`（web-search 配 provider/apiKey、browser-use 配 cdpUrl）→ 重启对话。
+- **改 provider apiKey / model**：编辑 config.yaml → 下条消息生效（或 `/model` `/provider` 当前 run 热切）。
+- **开连接器**：config.yaml `abilities.<name>.enabled: true`（web-search 配 provider/apiKey、browser-use 配 cdpUrl）→ 下条消息生效。
 - **加规则**：写 `AGENTS.md` 到上述三层之一 → 下条消息生效。
 - **记记忆**：调 `save_memory` 工具（别手写 memory.md）。
 
 ## 约束
 
-- 改 config.yaml 前先 read 确认结构，改后让用户重启对话验证。
+- 改 config.yaml 前先 read 确认结构，改完告知用户"下条消息生效"（当前 run 仍用旧配置）。
 - 不擅自删用户已有 provider/mcp/技能——只增改，删前 ask_question 确认。
 - abilities 内置连接器不可删（registry），只能 enabled 开关。
