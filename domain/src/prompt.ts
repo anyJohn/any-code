@@ -86,6 +86,15 @@ export const memoryNote =
     "Use scope=project for workspace-specific notes, scope=global for cross-project preferences. " +
     "Only call it when genuinely necessary; do not record trivial or transient task state.";
 
+/** 清洗 LLM 生成的会话标题：去首尾引号/书名号/句号/空白，截断 40。空串交调用方回退。 */
+export function cleanSessionTitle(raw: string): string {
+    return raw
+        .trim()
+        .replace(/^["'“「『（《\s]+|["'”」』）》。\s]+$/g, "")
+        .slice(0, 40)
+        .trim();
+}
+
 // ===== 上下文压缩（compact）摘要器 prompt =====
 
 /**

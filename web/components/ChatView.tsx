@@ -29,9 +29,17 @@ export function ChatView({
     initialEvents: AgentEvent[];
     projectKey?: string;
 }) {
-    const { events, pending, submit, stop, clear, appendSystem, currentSessionId,
-            pendingInteraction, submitInteraction } =
-        useAgent(sessionId, rootPath, initialEvents);
+    const {
+        events,
+        pending,
+        submit,
+        stop,
+        clear,
+        appendSystem,
+        currentSessionId,
+        pendingInteraction,
+        submitInteraction,
+    } = useAgent(sessionId, rootPath, initialEvents);
     const command = useCommand({
         clear,
         appendSystem,
@@ -57,6 +65,13 @@ export function ChatView({
         }
         prevSessionId.current = currentSessionId;
     }, [currentSessionId, dispatch]);
+
+    // run 结束（pending true→false）：bumpSessions 拉新列表——首条任务的 LLM 会话名此时已落盘
+    const prevPending = useRef(false);
+    useEffect(() => {
+        if (prevPending.current && !pending) dispatch(bumpSessions());
+        prevPending.current = pending;
+    }, [pending, dispatch]);
 
     const [openTools, setOpenTools] = useState<Record<string, boolean>>({});
     const [openSubs, setOpenSubs] = useState<Record<string, boolean>>({});
@@ -148,7 +163,9 @@ export function ChatView({
                 runRawCommand={command.runRawCommand}
             />
 
-            {projectKey && <StatusBar projectKey={projectKey} events={events} />}
+            {projectKey && (
+                <StatusBar projectKey={projectKey} events={events} />
+            )}
 
             {pendingInteraction && (
                 <InteractionModal

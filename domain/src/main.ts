@@ -23,8 +23,14 @@ import type { Tool } from "./tools";
 import { loadMcpTools, loadProjectMcp, type McpServerConfig } from "./mcp";
 import { getRegisteredAbilities, isAbilityEnabled } from "./abilities";
 import { Config, type LlmProvider } from "./config";
-import { workspaceNote, memoryNote, shellNote } from "./prompt";
+import {
+    workspaceNote,
+    memoryNote,
+    shellNote,
+    cleanSessionTitle,
+} from "./prompt";
 import { resolveShellKind } from "./tools/functions/bash";
+import { callLLM } from "./llm";
 import { detectContextWindow, resolveContextWindow } from "./config";
 import {
     BehaviorSubject,
@@ -187,8 +193,11 @@ class AnyAgent {
     /** 首条消息时按需创建 session 并以任务文本设标题 */
     private async ensureSession(firstTask: string): Promise<void> {
         if (this.session && this.sessionKey) return;
-        const title = firstTask.trim().slice(0, 40) || "New Session";
-        const session = await this.service.create(this.projectKey, title);
+        // 占位标题 "New Session"——真正命名由 generateSessionTitle 用 LLM 异步完成
+        const session = await this.service.create(
+            this.projectKey,
+            "New Session"
+        );
         this.session = session;
         this.sessionKey = {
             projectKey: this.projectKey,
@@ -198,6 +207,52 @@ class AnyAgent {
 
     get eventHistory$() {
         return this.eventStream.history$;
+    }
+
+    /**
+     * 首条任务用 LLM 起简短会话名（独立短 LLM 调用，不阻塞 agentLoop、不进事件流）。
+     * 仅默认标题（"New Session"）才起；独立 8s 超时（不绑 agentLoop abort——用户停任务/destroy
+     * 不应中止起名，落盘后下次 reload 仍可见）；失败回退任务文本截断。只落盘，不发事件。
+     */
+    private async generateSessionTitle(
+        task: string,
+        sessionKey: SessionKey,
+        session: Session
+    ): Promise<void> {
+        if (session.title && session.title !== "New Session") return;
+        if (!task.trim()) return;
+        const fallback = task.trim().slice(0, 40);
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), 8000);
+        let title = fallback;
+        try {
+            const res = await callLLM(
+                [
+                    {
+                        role: "system",
+                        content:
+                            "Generate a concise session title (≤12 characters, same language as the user task). Output ONLY the title text — no quotes, no punctuation, no explanation.",
+                    },
+                    { role: "user", content: task.slice(0, 500) },
+                ],
+                { max_tokens: 24, temperature: 0.3, tools: undefined },
+                ac.signal,
+                undefined,
+                this.config.getCurrentProvider()
+            );
+            const cleaned = cleanSessionTitle(res.content ?? "");
+            if (cleaned) title = cleaned;
+        } catch {
+            // 超时/网络/模型错误（含 401/400）：回退任务文本截断
+        } finally {
+            clearTimeout(timer);
+        }
+        session.title = title;
+        try {
+            await this.service.setTitle(sessionKey, title);
+        } catch {
+            // 落盘失败不阻断——内存 title 已设
+        }
     }
 
     get eventStream$() {
@@ -351,17 +406,13 @@ class AnyAgent {
             session.messages.unshift(sys[0]);
         }
 
-        // 兼容历史空 session：首条任务自动设标题
-        if (session.title === "New Session" && task) {
-            session.title = task.slice(0, 40);
-            await this.service.setTitle(sessionKey, session.title);
-        }
-
         const onMessage = (msg: ChatMessage) =>
             this.service.appendMessage(sessionKey, msg);
         // 每个任务一个独立的 AbortController，stop() abort 它
         const abortController = new AbortController();
         this.abortController = abortController;
+        // 首条任务异步用 LLM 起会话名（独立短调用，不阻塞 agentLoop、不进事件流；只落盘）
+        void this.generateSessionTitle(task, sessionKey, session);
         const ctx = {
             workspace: this.workspace,
             eventStream: this.eventStream,

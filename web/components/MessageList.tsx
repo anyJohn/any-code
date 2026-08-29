@@ -90,11 +90,15 @@ export function MessageList({
             | null = null;
         for (const e of events) {
             if (e.type === "ToolArgProgress") {
-                const bytes = (e.data as { bytes?: number } | undefined)?.bytes ?? 0;
+                const bytes =
+                    (e.data as { bytes?: number } | undefined)?.bytes ?? 0;
                 active = { phase: "generating", name: e.message, bytes };
             } else if (e.type === "ToolStart") {
                 active = { phase: "running", name: e.message, progress: "" };
-            } else if (e.type === "ToolProgress" && active?.phase === "running") {
+            } else if (
+                e.type === "ToolProgress" &&
+                active?.phase === "running"
+            ) {
                 active.progress += e.message;
             } else if (e.type === "Tool") {
                 active = null; // 工具完成，关闭活动卡片（最终 result 由 ToolRow 渲染）
@@ -189,7 +193,9 @@ export function MessageList({
                             )}
                             {errorData?.stack && (
                                 <details className="text-xs text-muted-foreground/70">
-                                    <summary className="cursor-pointer select-none">Stack</summary>
+                                    <summary className="cursor-pointer select-none">
+                                        Stack
+                                    </summary>
                                     <pre className="whitespace-pre-wrap break-words mt-1">
                                         {errorData.stack}
                                     </pre>
@@ -203,7 +209,8 @@ export function MessageList({
                         {activeTool.phase === "generating" ? (
                             <span className="text-[11px] font-mono uppercase text-muted-foreground flex items-center gap-1.5">
                                 <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
-                                {activeTool.name} · 正在生成… {activeTool.bytes} bytes
+                                {activeTool.name} · 正在生成… {activeTool.bytes}{" "}
+                                bytes
                             </span>
                         ) : (
                             <>

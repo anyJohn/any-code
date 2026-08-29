@@ -124,7 +124,10 @@ export function useAgent(
                             timestamp: Date.now(),
                             type: "Error",
                             message: `运行失败 (HTTP ${res.status})`,
-                            error: { message: `HTTP ${res.status}`, name: "Error" },
+                            error: {
+                                message: `HTTP ${res.status}`,
+                                name: "Error",
+                            },
                         },
                     ]);
                     setPending(false);
@@ -145,7 +148,10 @@ export function useAgent(
                             ) {
                                 return prev;
                             }
-                            return [...prev, { ...e, id: nextId("live") } as AgentEvent];
+                            return [
+                                ...prev,
+                                { ...e, id: nextId("live") } as AgentEvent,
+                            ];
                         });
                     }
                     if (TERMINAL.has(e.type)) {
@@ -177,7 +183,10 @@ export function useAgent(
                                 err instanceof Error ? err.message : String(err)
                             }`,
                             error: {
-                                message: err instanceof Error ? err.message : String(err),
+                                message:
+                                    err instanceof Error
+                                        ? err.message
+                                        : String(err),
                                 name: err instanceof Error ? err.name : "Error",
                             },
                         },
@@ -201,17 +210,14 @@ export function useAgent(
             const data = pendingInteraction;
             const sid = currentSessionId;
             if (!data || !sid) return;
-            const res = await fetch(
-                `/api/sessions/${sid}/interact`,
-                {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({
-                        interactionId: data.id,
-                        answers,
-                    }),
-                }
-            );
+            const res = await fetch(`/api/sessions/${sid}/interact`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                    interactionId: data.id,
+                    answers,
+                }),
+            });
             if (res.ok) setPendingInteraction(null);
         },
         [pendingInteraction, currentSessionId]
@@ -231,5 +237,15 @@ export function useAgent(
         ]);
     }, []);
 
-    return { events, pending, submit, stop, clear, appendSystem, currentSessionId, pendingInteraction, submitInteraction };
+    return {
+        events,
+        pending,
+        submit,
+        stop,
+        clear,
+        appendSystem,
+        currentSessionId,
+        pendingInteraction,
+        submitInteraction,
+    };
 }

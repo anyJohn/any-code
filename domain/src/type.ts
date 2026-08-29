@@ -125,7 +125,9 @@ export interface InteractionRequest {
 
 /** submit 入参：AgentEvent 去掉 timestamp（submit 盖 timestamp）。
  *  distributive Omit——对 discriminated union 逐成员去 timestamp，保留各 variant 的 data/error。 */
-type DistributiveOmit<T, K extends PropertyKey> = T extends T ? Omit<T, K> : never;
+type DistributiveOmit<T, K extends PropertyKey> = T extends T
+    ? Omit<T, K>
+    : never;
 export type AgentEventPayload = DistributiveOmit<AgentEvent, "timestamp">;
 
 /**

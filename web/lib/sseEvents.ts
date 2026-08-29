@@ -34,7 +34,9 @@ export type AgentEvent =
 export type EventType = AgentEvent["type"];
 
 /** SSE/payload：AgentEvent 去掉 id（distributive Omit，保 variant data/error）。 */
-type DistributiveOmit<T, K extends PropertyKey> = T extends T ? Omit<T, K> : never;
+type DistributiveOmit<T, K extends PropertyKey> = T extends T
+    ? Omit<T, K>
+    : never;
 export type AgentEventPayload = DistributiveOmit<AgentEvent, "id">;
 
 // ── per-variant data 形状（镜像 domain type.ts）──
