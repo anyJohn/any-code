@@ -51,4 +51,4 @@ abilities:
   browser-use: # 真浏览器（CDP），默认关——需 cdpUrl
     enabled: false
     config:
-      cdpUrl: http://127.0.0.1:9222 # chrome --remote-debugging-port=9222 后填此（自动发现 page）；或 ws://.../devtools/page/<id>
+      cdpUrl: http://127.0.0.1:9222 # chrome --remote-debugging-port=9222 后填此（连接器自动发现 page）

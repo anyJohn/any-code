@@ -19,7 +19,7 @@ const chromeBin = [
 
 const port = 9400 + Math.floor(Math.random() * 300);
 let chrome: ChildProcess | null = null;
-let pageWs = "";
+let ready = false;
 
 beforeAll(async () => {
     if (!chromeBin) return;
@@ -33,21 +33,17 @@ beforeAll(async () => {
         ],
         { stdio: "ignore" }
     );
-    for (let i = 0; i < 40 && !pageWs; i++) {
+    // 只探测 http 端点就绪——page ws 由连接器内部 /json/list 自动发现
+    for (let i = 0; i < 40 && !ready; i++) {
         try {
             const res = await fetch(`http://127.0.0.1:${port}/json/list`);
-            const list = (await res.json()) as Array<{
-                type: string;
-                webSocketDebuggerUrl?: string;
-            }>;
-            const page = list.find((t) => t.type === "page");
-            if (page?.webSocketDebuggerUrl) pageWs = page.webSocketDebuggerUrl;
+            if (res.ok) ready = true;
         } catch {
             // 端点未就绪，重试
         }
-        if (!pageWs) await new Promise((r) => setTimeout(r, 250));
+        if (!ready) await new Promise((r) => setTimeout(r, 250));
     }
-    if (!pageWs) throw new Error("chromium CDP 端点未就绪");
+    if (!ready) throw new Error("chromium CDP 端点未就绪");
 });
 
 afterAll(() => {
@@ -61,7 +57,10 @@ async function call(browserTool: string, args: object, extra: object = {}) {
         args: [join(SERVERS, "browser-use", "server.mjs")],
         env: {
             ...process.env,
-            ABILITY_CONFIG: JSON.stringify({ cdpUrl: pageWs, ...extra }),
+            ABILITY_CONFIG: JSON.stringify({
+                cdpUrl: `http://127.0.0.1:${port}`,
+                ...extra,
+            }),
         },
     });
     await client.connect(transport);
@@ -86,31 +85,12 @@ describe("browser 连接器（CDP v2，真 chromium）", () => {
     it.skipIf(!chromeBin)(
         "browser_navigate → browser_content 真导航 example.com 并读到正文",
         async () => {
+            // 默认 cdpUrl = http browser 级端点，连接器内部 /json/list 自动发现 page
             const nav = await call("browser_navigate", {
                 url: "https://example.com",
             });
             expect(nav).toMatch(/load 完成|Example Domain/);
             const content = await call("browser_content", {});
-            expect(content).toContain("Example Domain");
-        },
-        40000
-    );
-
-    it.skipIf(!chromeBin)(
-        "browser 级 http 端点（无 page id）→ 自动 /json/list 发现 page（零配置）",
-        async () => {
-            // cdpUrl 给 browser 级 http origin（非 ws page url），连接器内部自动找 page
-            const nav = await call(
-                "browser_navigate",
-                { url: "https://example.com" },
-                { cdpUrl: `http://127.0.0.1:${port}` }
-            );
-            expect(nav).toMatch(/load 完成|Example Domain/);
-            const content = await call(
-                "browser_content",
-                {},
-                { cdpUrl: `http://127.0.0.1:${port}` }
-            );
             expect(content).toContain("Example Domain");
         },
         40000

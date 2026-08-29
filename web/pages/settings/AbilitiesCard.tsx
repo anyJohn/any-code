@@ -141,9 +141,8 @@ export function AbilitiesCard({
                                 </label>
                                 <span className="text-[10px] text-muted-foreground">
                                     启动 chrome --remote-debugging-port=9222
-                                    后填
-                                    {DEFAULT_CDPURL}（自动发现 page） 或
-                                    ws://.../devtools/page/&lt;id&gt;
+                                    后填 {DEFAULT_CDPURL}（连接器自动发现
+                                    page）
                                 </span>
                             </div>
                         )}

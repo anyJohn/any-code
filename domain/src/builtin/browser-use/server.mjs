@@ -1,7 +1,7 @@
 // 内置连接器：browser-use（SPEC-031 DEC-031-6 v2 真 CDP 浏览器）。
 // 零依赖 MCP-lite stdio server + CDP（Chromium DevTools Protocol）WebSocket 客户端。
-// 连接任意外部 CDP 源：chrome/edge `--remote-debugging-port=9222` 的 page 级 ws（/devtools/page/<id>），
-// 或未来 desktop 内嵌 offscreen window。cdpUrl 经 ABILITY_CONFIG（JSON）env 注入。
+// 接 browser 级 http 端点（chrome/edge `--remote-debugging-port=9222` 后的 http://127.0.0.1:9222），
+// 内部 /json/list 自动发现 page ws——无需手取动态 page id。cdpUrl 经 ABILITY_CONFIG（JSON）env 注入。
 // 工具：browser_navigate（导航+等加载）、browser_content（URL/标题/正文）、browser_eval（任意 JS）。
 
 const SERVER = "browser-use";
@@ -50,20 +50,18 @@ const TOOLS = [
     },
 ];
 
-// ———— CDP 端点解析：page 级 ws 直用；browser 级 http 端点自动 /json/list 找 page ws ————
+// ———— CDP 端点解析：只接 browser 级 http 端点，GET /json/list 自动发现 page ws ————
+// 不接受 ws:// page URL（page id 动态、手填易错）——统一经 http origin 自动发现。
 async function resolveCdpUrl(raw) {
     if (!raw)
         throw new Error(
             "未配置 cdpUrl（abilities.browser-use.config.cdpUrl）。需先启动浏览器：chrome --remote-debugging-port=9222"
         );
-    // page 级 ws（含 /devtools/page/）或已是 ws:// → 直用
-    if (raw.startsWith("ws://") || raw.startsWith("wss://")) return raw;
-    // browser 级 http(s) 端点：GET /json/list 自动发现第一个 page 的 webSocketDebuggerUrl
     let origin;
     try {
         origin = new URL(raw).origin;
     } catch {
-        return raw; /* 非法 URL 原样交给 ws 报错 */
+        throw new Error(`cdpUrl 非法：${raw}（需 http://host:port）`);
     }
     const res = await fetch(`${origin}/json/list`);
     if (!res.ok)
