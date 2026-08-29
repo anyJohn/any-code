@@ -36,3 +36,20 @@ mcp:
   #   type: sse
   #   url: https://example.com/sse
   #   headers: { Authorization: "Bearer xxx" }
+
+# 内置能力（abilities）开关（FE-022 / SPEC-031）——未配置 = 不启用；随包默认开启前三项。
+# 每项 { enabled, config? }；config 是能力私有参数（连接器 provider/key/cdpUrl 等）。
+abilities:
+  web-fetch:
+    enabled: true
+  web-search:
+    enabled: true
+    config:
+      provider: ddg            # ddg（无 key 默认，best-effort）/ tavily / bing
+      # apiKey: ""             # tavily/bing 需要
+  browser-use:
+    enabled: true
+  browser:                     # 真浏览器（CDP），默认关——需 cdpUrl
+    enabled: false
+    config:
+      cdpUrl: ""               # chrome --remote-debugging-port=9222 后，取 ws://127.0.0.1:9222/devtools/page/<id>

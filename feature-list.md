@@ -11,8 +11,8 @@
 - Skill
   - Project 级别 Skill（`<root>/.anycode/skills/`）
   - Global 级别 Skill（`~/.anycode/skills/`）
-  - 兼容 Global `.agents/` 目录下 Skill（todo）
-  - 内置技能（todo）
+  - 兼容 `~/.agents/skills/` 目录下 Skill（已实现，四层最低用户层）
+  - 内置能力（abilities 注册器，可开关不可删；web-fetch/web-search/browser 连接器 + browser-use 编排技能，FE-022）
 - Memory
   - 原文层：Session History（durable 事件日志，含 thinking / tool call / 报错 / usage 等，reload 重放）
   - 摘要层：Global + Workspace/project 的跨 Session 摘要，经 `save_memory` agent tool 主动写入（LLM 决定记什么）
@@ -66,9 +66,9 @@
   - Skill 注入 Command（todo）
   - `/rename` (todo)
 - Rule
-  - 支持 .anycode 目录下的 AGENTS.md 规则文件(todo)
-  - 支持 .agents 目录下的 AGENTS.md 规则文件(todo)
-  - 支持 Workspace 目录下的 AGENTS.md 规则文件(todo)
+  - 支持 `.anycode` 目录下的 AGENTS.md 规则文件（已实现，additive + 同目录 override，FE-022）
+  - 支持 `~/.agents` 目录下的 AGENTS.md 规则文件（已实现）
+  - 支持 Workspace 目录下的 AGENTS.md 规则文件（已实现）；`.anycode/rules/` 多文件已退役（破坏性）
 - Plugin（todo，暂不实现）
   - 拓展 Command
   - 拓展 subagents

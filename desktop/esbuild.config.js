@@ -1,3 +1,17 @@
+// 内置连接器（零依赖 .mjs）随桌面 main bundle 同目录分发（builtin.ts import.meta.url → dist/main → builtin-servers/）
+import { cpSync, mkdirSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+await (async () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    mkdirSync(join(here, "dist", "main", "builtin-servers"), { recursive: true });
+    for (const f of ["web-fetch-server.mjs", "web-search-server.mjs", "browser-server.mjs"]) {
+        try {
+            cpSync(join(here, "..", "domain", "src", "builtin-servers", f), join(here, "dist", "main", "builtin-servers", f));
+        } catch {}
+    }
+})();
+
 import esbuild from "esbuild";
 
 // 打包 Electron main + preload（src/*.ts → dist/main/*.cjs）
