@@ -9,6 +9,8 @@ import {
     DURABLE_TYPES,
     createWorkspace,
     maskApiKey,
+    getRegisteredAbilities,
+    isAbilityEnabled,
     projectKeyOf,
     resolveContextWindow,
     resolveInteraction,
@@ -439,7 +441,19 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
             for (const [name, p] of Object.entries(cfg.providers)) {
                 providers[name] = { ...p, apiKey: maskApiKey(p.apiKey) };
             }
-            return c.json({ providers, default: cfg.default, mcp: cfg.mcpServers });
+            // 内置能力可枚举列表（注册器）+ 当前开关态（SPEC-031 B-012）
+            const registered = getRegisteredAbilities().map((a) => ({
+                name: a.name,
+                kind: a.kind,
+                description: a.description,
+                enabled: isAbilityEnabled(cfg, a.name),
+            }));
+            return c.json({
+                providers,
+                default: cfg.default,
+                mcp: cfg.mcpServers,
+                abilities: { registered, config: cfg.abilities },
+            });
         } catch {
             return c.json({ providers: {}, default: undefined, mcp: {} });
         }
@@ -469,6 +483,7 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
             ),
             default: body.default,
             mcp: body.mcp,
+            abilities: body.abilities,
         };
         try {
             Config.save(merged);

@@ -14,6 +14,13 @@ import { cn } from "@/lib/utils";
 import { apiJson } from "@/lib/api";
 
 /** GET 响应形状（apiKey 已脱敏）。 */
+interface RegisteredAbility {
+    name: string;
+    kind: "skill" | "mcp";
+    description: string;
+    enabled: boolean;
+}
+
 interface ConfigResponse {
     providers: Record<
         string,
@@ -29,6 +36,11 @@ interface ConfigResponse {
     >;
     default?: string;
     mcp: Record<string, Record<string, unknown>>;
+    /** 内置能力（注册器可枚举 + 当前开关态）。SPEC-031 B-012 */
+    abilities?: {
+        registered: RegisteredAbility[];
+        config: Record<string, Record<string, unknown>>;
+    };
 }
 
 interface ProviderForm {
@@ -159,7 +171,9 @@ function fromResponse(res: ConfigResponse): {
 function toConfigShape(
     providers: ProviderForm[],
     def: string,
-    mcp: McpForm[]
+    mcp: McpForm[],
+    abilityCfg?: Record<string, Record<string, unknown>>,
+    abilityOn?: Record<string, boolean>
 ): ConfigShape {
     const pOut: Record<string, Record<string, unknown>> = {};
     for (const p of providers) {
@@ -219,6 +233,13 @@ function toConfigShape(
         providers: pOut,
         default: def,
         mcp: mOut,
+        // 内置能力：只写开关过的条目（保留原始 config 字段：provider/apiKey 等）
+        abilities: Object.fromEntries(
+            Object.entries(abilityOn ?? {}).map(([name, on]) => [
+                name,
+                { ...(abilityCfg?.[name] ?? {}), enabled: on },
+            ])
+        ),
     };
 }
 
@@ -288,6 +309,12 @@ export default function SettingsPage() {
     );
     // name 必填校验：空（或全空白）→ 红框 + 提示，且不提交
     const [nameError, setNameError] = useState<Record<number, boolean>>({});
+    // 内置能力（SPEC-031 B-012）：注册器列表 + 开关态 + 原始 config（保存时保留 provider/apiKey 等）
+    const [abilities, setAbilities] = useState<RegisteredAbility[]>([]);
+    const [abilityOn, setAbilityOn] = useState<Record<string, boolean>>({});
+    const [abilityCfg, setAbilityCfg] = useState<
+        Record<string, Record<string, unknown>>
+    >({});
 
     useEffect(() => {
         setStatus("loading");
@@ -298,6 +325,16 @@ export default function SettingsPage() {
             }
             const { providers: ps, default: d, mcp: ms } = fromResponse(res);
             setProviders(ps);
+            // 内置能力：注册器列表 + 开关初始化（config 显式 enabled 为准，缺省关）
+            const reg = res.abilities?.registered ?? [];
+            const cfgMap = res.abilities?.config ?? {};
+            setAbilities(reg);
+            setAbilityCfg(cfgMap);
+            setAbilityOn(
+                Object.fromEntries(
+                    reg.map((a) => [a.name, cfgMap[a.name]?.enabled === true])
+                )
+            );
             setNameCommitted(
                 Object.fromEntries(ps.map((p, i) => [i, p.name.trim()]))
             );
@@ -339,7 +376,7 @@ export default function SettingsPage() {
 
     const save = async () => {
         setSaving(true);
-        const body = toConfigShape(providers, def, mcp);
+        const body = toConfigShape(providers, def, mcp, abilityCfg, abilityOn);
         try {
             const res = await fetch(`/api/config`, {
                 method: "POST",
@@ -415,6 +452,48 @@ export default function SettingsPage() {
                                         </option>
                                     ))}
                             </select>
+                        </CollapsibleCard>
+
+                        {/* 内置能力（SPEC-031 B-012 / AC-012）：注册器驱动，可开关不可删 */}
+                        <CollapsibleCard title="内置能力">
+                            {abilities.length === 0 && (
+                                <p className="text-sm text-muted-foreground px-1">
+                                    （无内置能力）
+                                </p>
+                            )}
+                            {abilities.map((a) => (
+                                <label
+                                    key={a.name}
+                                    className="flex items-start justify-between gap-3 rounded-lg border border-border p-3 cursor-pointer"
+                                >
+                                    <span className="flex flex-col gap-1 min-w-0">
+                                        <span className="flex items-center gap-1.5">
+                                            <span className="text-sm font-medium text-foreground">
+                                                {a.name}
+                                            </span>
+                                            <span className="text-[10px] font-mono uppercase rounded bg-muted px-1 py-0.5 text-muted-foreground">
+                                                {a.kind === "skill"
+                                                    ? "skill"
+                                                    : "连接器"}
+                                            </span>
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">
+                                            {a.description}
+                                        </span>
+                                    </span>
+                                    <input
+                                        type="checkbox"
+                                        className="mt-1 size-3.5 accent-primary shrink-0"
+                                        checked={abilityOn[a.name] ?? false}
+                                        onChange={(e) =>
+                                            setAbilityOn((p) => ({
+                                                ...p,
+                                                [a.name]: e.target.checked,
+                                            }))
+                                        }
+                                    />
+                                </label>
+                            ))}
                         </CollapsibleCard>
 
                         {/* Providers */}

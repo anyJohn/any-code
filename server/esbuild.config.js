@@ -1,3 +1,12 @@
+import { cpSync, mkdirSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+const __dirname = dirname(fileURLToPath(import.meta.url));
+// 内置连接器（零依赖 .mjs）随 server bundle 同目录分发：dist/builtin-servers/*.mjs
+mkdirSync(join(__dirname, "dist", "builtin-servers"), { recursive: true });
+for (const f of ["web-fetch-server.mjs", "web-search-server.mjs"]) {
+    cpSync(join(__dirname, "..", "domain", "src", "builtin-servers", f), join(__dirname, "dist", "builtin-servers", f));
+}
 import esbuild from "esbuild";
 import { createRequire } from "module";
 
