@@ -6,15 +6,15 @@
 providers:
   openai:
     apiKey: sk-your-key
-    baseURL: https://api.openai.com/v1   # 可选
-    streaming: true                       # 可选，缺省 true
-    contextWindow: 128000                 # 可选，缺省 128000
-    models:                               # 该 provider 支持的模型列表
-      - id: gpt-4o                        # 调 API 的真实模型名
-        name: GPT-4o                      # 展示名（可选）
+    baseURL: https://api.openai.com/v1 # 可选
+    streaming: true # 可选，缺省 true
+    contextWindow: 128000 # 可选，缺省 128000
+    models: # 该 provider 支持的模型列表
+      - id: gpt-4o # 调 API 的真实模型名
+        name: GPT-4o # 展示名（可选）
       - id: gpt-4o-mini
         name: GPT-4o Mini
-    defaultModel: gpt-4o                  # 当前生效模型 id
+    defaultModel: gpt-4o # 当前生效模型 id
   deepseek:
     apiKey: sk-your-deepseek-key
     baseURL: https://api.deepseek.com/v1
@@ -46,9 +46,9 @@ abilities:
   web-search:
     enabled: true
     config:
-      provider: ddg            # ddg（无 key 默认）/ tavily / bing
+      provider: ddg # ddg（无 key 默认）/ tavily / bing
       # apiKey: ""             # tavily/bing 需要
-  browser-use:                 # 真浏览器（CDP），默认关——需 cdpUrl
+  browser-use: # 真浏览器（CDP），默认关——需 cdpUrl
     enabled: false
     config:
-      cdpUrl: ""               # chrome --remote-debugging-port=9222 后，取 ws://127.0.0.1:9222/devtools/page/<id>
+      cdpUrl: http://127.0.0.1:9222 # chrome --remote-debugging-port=9222 后填此（自动发现 page）；或 ws://.../devtools/page/<id>

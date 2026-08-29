@@ -58,13 +58,17 @@ export function resolveContextWindow(
     return cands.length ? Math.min(...cands) : 128000;
 }
 
-const detectCache = new Map<string, { value: number | undefined; ts: number }>();
+const detectCache = new Map<
+    string,
+    { value: number | undefined; ts: number }
+>();
 const DETECT_CACHE_TTL = 3600_000; // 1h——模型 context 基本不变
 
 function extractContext(m: unknown): number | undefined {
     if (!m || typeof m !== "object") return undefined;
     const rec = m as Record<string, unknown>;
-    const v = rec.context_window ?? rec.context_length ?? rec.max_context_length;
+    const v =
+        rec.context_window ?? rec.context_length ?? rec.max_context_length;
     return typeof v === "number" ? v : undefined;
 }
 
@@ -197,10 +201,16 @@ export class Config {
                         enabled: true,
                         config: { provider: "ddg", apiKey: "" },
                     },
+                    "browser-use": {
+                        enabled: false,
+                        config: { cdpUrl: "http://127.0.0.1:9222" },
+                    },
                 },
             });
         }
-        const parsed = yaml.load(readFileSync(file, "utf-8")) as ConfigShape | null;
+        const parsed = yaml.load(
+            readFileSync(file, "utf-8")
+        ) as ConfigShape | null;
         const providers = normalize(parsed?.providers ?? {});
         if (!Object.keys(providers).length) {
             throw new Error(`配置文件 ${file} 未定义任何 provider。`);
@@ -210,7 +220,10 @@ export class Config {
         // 不抛错——让 /settings 能加载（修正后的）坏配置供编辑覆写，agent 也能 best-effort 启动。
         const resolvedDef = providers[def] ? def : Object.keys(providers)[0];
         for (const p of Object.values(providers)) {
-            if (p.models.length && !p.models.some((m) => m.id === p.defaultModel)) {
+            if (
+                p.models.length &&
+                !p.models.some((m) => m.id === p.defaultModel)
+            ) {
                 p.defaultModel = p.models[0].id;
             }
         }
@@ -244,7 +257,11 @@ export class Config {
         // 备份原配置（若存在）→ config.yaml.bak，覆盖前的安全网
         if (existsSync(file)) {
             try {
-                writeFileSync(file + ".bak", readFileSync(file, "utf-8"), "utf-8");
+                writeFileSync(
+                    file + ".bak",
+                    readFileSync(file, "utf-8"),
+                    "utf-8"
+                );
             } catch {
                 // 备份失败不阻断保存
             }
@@ -269,7 +286,12 @@ export class Config {
             }
         }
         for (const [name, s] of Object.entries(data.mcp ?? {})) {
-            if (s && s.type !== "stdio" && s.type !== "sse" && s.type !== undefined) {
+            if (
+                s &&
+                s.type !== "stdio" &&
+                s.type !== "sse" &&
+                s.type !== undefined
+            ) {
                 errors.push(`mcp server "${name}" type 非法（需 stdio/sse）`);
             }
         }

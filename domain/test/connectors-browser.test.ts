@@ -59,13 +59,24 @@ async function call(browserTool: string, args: object, extra: object = {}) {
     const transport = new StdioClientTransport({
         command: process.execPath,
         args: [join(SERVERS, "browser-use", "server.mjs")],
-        env: { ...process.env, ABILITY_CONFIG: JSON.stringify({ cdpUrl: pageWs, ...extra }) },
+        env: {
+            ...process.env,
+            ABILITY_CONFIG: JSON.stringify({ cdpUrl: pageWs, ...extra }),
+        },
     });
     await client.connect(transport);
     try {
-        const res = await client.callTool({ name: browserTool, arguments: args });
-        const content = (res as { content?: Array<{ type?: string; text?: string }> })?.content;
-        return (content ?? []).filter((c) => c.type === "text").map((c) => c.text ?? "").join("\n");
+        const res = await client.callTool({
+            name: browserTool,
+            arguments: args,
+        });
+        const content = (
+            res as { content?: Array<{ type?: string; text?: string }> }
+        )?.content;
+        return (content ?? [])
+            .filter((c) => c.type === "text")
+            .map((c) => c.text ?? "")
+            .join("\n");
     } finally {
         await client.close().catch(() => {});
     }
@@ -75,7 +86,9 @@ describe("browser 连接器（CDP v2，真 chromium）", () => {
     it.skipIf(!chromeBin)(
         "browser_navigate → browser_content 真导航 example.com 并读到正文",
         async () => {
-            const nav = await call("browser_navigate", { url: "https://example.com" });
+            const nav = await call("browser_navigate", {
+                url: "https://example.com",
+            });
             expect(nav).toMatch(/load 完成|Example Domain/);
             const content = await call("browser_content", {});
             expect(content).toContain("Example Domain");
@@ -83,10 +96,34 @@ describe("browser 连接器（CDP v2，真 chromium）", () => {
         40000
     );
 
-    it.skipIf(!chromeBin)("browser_eval 执行 JS 取 document.title", async () => {
-        const r = await call("browser_eval", { js: "document.title" });
-        expect(r).toContain("Example");
-    }, 20000);
+    it.skipIf(!chromeBin)(
+        "browser 级 http 端点（无 page id）→ 自动 /json/list 发现 page（零配置）",
+        async () => {
+            // cdpUrl 给 browser 级 http origin（非 ws page url），连接器内部自动找 page
+            const nav = await call(
+                "browser_navigate",
+                { url: "https://example.com" },
+                { cdpUrl: `http://127.0.0.1:${port}` }
+            );
+            expect(nav).toMatch(/load 完成|Example Domain/);
+            const content = await call(
+                "browser_content",
+                {},
+                { cdpUrl: `http://127.0.0.1:${port}` }
+            );
+            expect(content).toContain("Example Domain");
+        },
+        40000
+    );
+
+    it.skipIf(!chromeBin)(
+        "browser_eval 执行 JS 取 document.title",
+        async () => {
+            const r = await call("browser_eval", { js: "document.title" });
+            expect(r).toContain("Example");
+        },
+        20000
+    );
 
     it("无 cdpUrl → 明确错误提示（不崩）", async () => {
         const out = await call("browser_content", {}, { cdpUrl: "" });

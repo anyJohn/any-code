@@ -8,6 +8,9 @@ import type { RegisteredAbility } from "./model";
 /** web-search 的 provider 选项（与内置连接器 web-search-server.mjs 支持集一致）。 */
 const SEARCH_PROVIDERS = ["ddg", "tavily", "bing"] as const;
 
+/** browser-use 的 cdpUrl 默认值：browser 级 http 端点，连接器内部 /json/list 自动发现 page。 */
+const DEFAULT_CDPURL = "http://127.0.0.1:9222";
+
 function webConfig(cfg: Record<string, Record<string, unknown>>, name: string) {
     return (cfg[name] ?? {}) as Record<string, unknown>;
 }
@@ -112,6 +115,36 @@ export function AbilitiesCard({
                                         }
                                     />
                                 </label>
+                            </div>
+                        )}
+                        {a.name === "browser-use" && (
+                            <div className="mt-3 pt-3 border-t border-border flex flex-col gap-1">
+                                <label className="flex flex-col gap-1">
+                                    <span className="text-xs text-muted-foreground">
+                                        浏览器调试地址（cdpUrl）
+                                    </span>
+                                    <Input
+                                        className="h-8 font-mono"
+                                        placeholder={DEFAULT_CDPURL}
+                                        value={
+                                            typeof cfg.cdpUrl === "string" &&
+                                            cfg.cdpUrl
+                                                ? cfg.cdpUrl
+                                                : DEFAULT_CDPURL
+                                        }
+                                        onChange={(e) =>
+                                            patchCfg(a.name, {
+                                                cdpUrl: e.target.value,
+                                            })
+                                        }
+                                    />
+                                </label>
+                                <span className="text-[10px] text-muted-foreground">
+                                    启动 chrome --remote-debugging-port=9222
+                                    后填
+                                    {DEFAULT_CDPURL}（自动发现 page） 或
+                                    ws://.../devtools/page/&lt;id&gt;
+                                </span>
                             </div>
                         )}
                     </div>
