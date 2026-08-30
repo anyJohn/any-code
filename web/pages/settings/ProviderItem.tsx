@@ -50,7 +50,12 @@ export function ProviderItem({
             const res = await fetch(`/api/config/models/fetch`, {
                 method: "POST",
                 headers: { "content-type": "application/json" },
-                body: JSON.stringify({ baseURL: p.baseURL, apiKey: p.apiKey }),
+                body: JSON.stringify({
+                    baseURL: p.baseURL,
+                    apiKey: p.apiKey,
+                    // apiKey 表单留空=保留原值：传已提交名，server 用 config 已存 key
+                    providerName: nameCommitted || p.name.trim(),
+                }),
             });
             const j = (await res.json()) as {
                 models?: string[];
@@ -99,6 +104,7 @@ export function ProviderItem({
                 body: JSON.stringify({
                     baseURL: p.baseURL,
                     apiKey: p.apiKey,
+                    providerName: nameCommitted || p.name.trim(),
                     models: ids,
                 }),
             });

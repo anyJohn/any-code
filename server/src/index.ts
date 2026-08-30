@@ -27,6 +27,29 @@ import {
 } from "@any-code/domain";
 import { runningSessions } from "./singleFlight.js";
 
+/** 解析拉取/测试模型的凭据：表单 apiKey 留空=保留原值 → 用 config.yaml 已存 key（providerName 匹配）。 */
+function resolveModelCreds(
+    baseURL: string | undefined,
+    apiKey: string | undefined,
+    providerName: string | undefined
+): { key: string; base?: string } {
+    let key = apiKey?.trim() ?? "";
+    let base: string | undefined = baseURL?.trim() || undefined;
+    const name = providerName?.trim();
+    if (name && (!key || !base)) {
+        try {
+            const existing = Config.load().providers[name];
+            if (existing) {
+                if (!key) key = existing.apiKey ?? "";
+                if (!base) base = existing.baseURL;
+            }
+        } catch {
+            // 坏 config：当作无已存凭据
+        }
+    }
+    return { key, base };
+}
+
 /**
  * AnyCode HTTP server (hono) —— 静态 SPA 的薄 driving adapter。
  * 只依赖 @any-code/domain，无业务逻辑；14 个 API 端点从 Next route.ts 迁来
@@ -495,29 +518,58 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         }
     });
 
-    // 拉取 provider 模型列表（Settings「拉取模型」）：{ baseURL, apiKey } → { models }
+    // 拉取 provider 模型列表（Settings「拉取模型」）：{ baseURL, apiKey?, providerName? } → { models }
+    // apiKey 表单留空 = 保留原值 → 用 config 已存 key（providerName 匹配）。
     app.post("/api/config/models/fetch", async (c) => {
-        let body: { baseURL?: string; apiKey?: string };
+        let body: {
+            baseURL?: string;
+            apiKey?: string;
+            providerName?: string;
+        };
         try {
-            body = (await c.req.json()) as { baseURL?: string; apiKey?: string };
+            body = (await c.req.json()) as {
+                baseURL?: string;
+                apiKey?: string;
+                providerName?: string;
+            };
         } catch {
             return c.json({ statusMessage: "invalid json body" }, 400);
         }
+        const { key, base } = resolveModelCreds(
+            body.baseURL,
+            body.apiKey,
+            body.providerName
+        );
+        if (!key) {
+            return c.json(
+                {
+                    statusMessage:
+                        "需要 apiKey（表单留空=保留原值——若本地已存 key 会自动用；新 provider 请先填 key 或保存后重试）",
+                },
+                400
+            );
+        }
         try {
-            const models = await listModels(body.baseURL, body.apiKey);
+            const models = await listModels(base, key);
             return c.json({ models });
         } catch (e) {
             return c.json({ statusMessage: (e as Error).message }, 400);
         }
     });
 
-    // 测试模型可用性（Settings「测试模型」）：{ baseURL, apiKey, models } → { results }
+    // 测试模型可用性（Settings「测试模型」）：{ baseURL, apiKey?, providerName?, models } → { results }
     app.post("/api/config/models/test", async (c) => {
-        let body: { baseURL?: string; apiKey?: string; models?: string[] };
+        let body: {
+            baseURL?: string;
+            apiKey?: string;
+            providerName?: string;
+            models?: string[];
+        };
         try {
             body = (await c.req.json()) as {
                 baseURL?: string;
                 apiKey?: string;
+                providerName?: string;
                 models?: string[];
             };
         } catch {
@@ -526,12 +578,22 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         if (!body.models?.length) {
             return c.json({ statusMessage: "models 不能为空" }, 400);
         }
-        try {
-            const results = await testModels(
-                body.baseURL,
-                body.apiKey,
-                body.models
+        const { key, base } = resolveModelCreds(
+            body.baseURL,
+            body.apiKey,
+            body.providerName
+        );
+        if (!key) {
+            return c.json(
+                {
+                    statusMessage:
+                        "需要 apiKey（表单留空=保留原值——若本地已存 key 会自动用；新 provider 请先填 key 或保存后重试）",
+                },
+                400
             );
+        }
+        try {
+            const results = await testModels(base, key, body.models);
             return c.json({ results });
         } catch (e) {
             return c.json({ statusMessage: (e as Error).message }, 400);
