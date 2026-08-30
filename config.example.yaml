@@ -34,21 +34,9 @@ mcp:
     command: npx
     args: [-y, "@modelcontextprotocol/server-filesystem", /tmp]
     enabled: false
-  # fetch: # 零配置（默认关，开即用）
-  #   type: stdio
-  #   command: npx
-  #   args: [-y, "@modelcontextprotocol/server-fetch"]
-  #   enabled: false
-  # github: # 需 GITHUB_PERSONAL_ACCESS_TOKEN
-  #   type: stdio
-  #   command: npx
-  #   args: [-y, "@modelcontextprotocol/server-github"]
-  #   env: { GITHUB_PERSONAL_ACCESS_TOKEN: "" }
-  #   enabled: false
-  # remote:
-  #   type: sse
-  #   url: https://example.com/sse
-  #   headers: { Authorization: "Bearer xxx" }
+  # 常用 server 示例（需 npx 下载 / key）：
+  #   { type: stdio, command: npx, args: [-y, "包名"], enabled: false }
+  #   { type: sse, url: https://example.com/sse, headers: { Authorization: "Bearer xxx" } }
 
 # 内置能力（abilities）开关（FE-022 / SPEC-031）——未配置 = 不启用；随包默认开启 web-fetch/web-search。
 # 内置能力 = 内置连接器（mcp）。技能是纯文件：直接放 ~/.anycode/skills/ 或项目 .anycode/skills/ 即可。

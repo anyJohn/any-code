@@ -116,7 +116,8 @@ export async function listModels(
     if (!apiKey?.trim()) throw new Error("需要 apiKey 才能拉取模型");
     const client = new OpenAI({ apiKey, baseURL });
     const list = await client.models.list();
-    const arr = (list as unknown as { data?: Array<{ id?: string }> }).data ?? [];
+    const arr =
+        (list as unknown as { data?: Array<{ id?: string }> }).data ?? [];
     return arr.map((m) => m.id ?? "").filter(Boolean);
 }
 
@@ -181,9 +182,7 @@ export async function testModels(
     apiKey: string | undefined,
     models: string[]
 ): Promise<ModelTestResult[]> {
-    return Promise.all(
-        models.map((m) => testModel(baseURL, apiKey, m))
-    );
+    return Promise.all(models.map((m) => testModel(baseURL, apiKey, m)));
 }
 
 export interface ConfigShape {
@@ -287,24 +286,6 @@ export class Config {
                     "browser-use": {
                         enabled: false,
                         config: { cdpUrl: "http://127.0.0.1:9222" },
-                    },
-                },
-                // 常用第三方 MCP 预置（enabled:false 默认关——不自动连第三方/外发数据，
-                // 用户在 Settings 开关 + 填 key/路径后启用 = 显式同意）。filesystem 更适合
-                // 项目级 .anycode/mcp.yaml（per-workspace 根目录），此处只预置零配置/通用的。
-                mcp: {
-                    fetch: {
-                        type: "stdio",
-                        command: "npx",
-                        args: ["-y", "@modelcontextprotocol/server-fetch"],
-                        enabled: false,
-                    },
-                    github: {
-                        type: "stdio",
-                        command: "npx",
-                        args: ["-y", "@modelcontextprotocol/server-github"],
-                        env: { GITHUB_PERSONAL_ACCESS_TOKEN: "" },
-                        enabled: false,
                     },
                 },
             });
