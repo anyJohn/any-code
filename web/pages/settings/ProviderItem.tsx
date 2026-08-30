@@ -52,6 +52,12 @@ export function ProviderItem({
     // 拉取结果弹窗：fetchedModels 非 null 即弹；selectedIds 为勾选集
     const [fetchedModels, setFetchedModels] = useState<string[] | null>(null);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    // 弹窗内：搜索过滤 + 测试结果（勾选后测选中未添加的，行内显 ✓/✗）
+    const [search, setSearch] = useState("");
+    const [dialogTestResults, setDialogTestResults] = useState<
+        Record<string, ModelTestResult>
+    >({});
+    const [dialogTesting, setDialogTesting] = useState(false);
 
     /** 拉取 provider 模型列表，弹窗让用户勾选要加的（不直接并入）。 */
     const fetchModels = async () => {
@@ -104,6 +110,60 @@ export function ProviderItem({
         }
         toast.success(`已添加 ${fresh.length} 个模型`);
         setFetchedModels(null);
+    };
+
+    /** 搜索过滤 + 工具函数（全选/全不选只作用于当前过滤结果里的未添加项）。 */
+    const filteredIds = (fetchedModels ?? []).filter((id) =>
+        id.toLowerCase().includes(search.trim().toLowerCase())
+    );
+    const notAddedOf = (ids: string[]) =>
+        ids.filter(
+            (id) => !p.models.some((m) => m.id.trim() === id)
+        );
+    const selectAll = () =>
+        setSelectedIds((prev) => new Set([...prev, ...notAddedOf(filteredIds)]));
+    const selectNone = () =>
+        setSelectedIds(
+            (prev) => new Set([...prev].filter((id) => !filteredIds.includes(id)))
+        );
+    /** 弹窗内测试：对勾选（未添加）的模型发 ping，结果行内显 ✓/✗。 */
+    const testDialogSelected = async () => {
+        const ids = notAddedOf([...selectedIds]);
+        if (!ids.length) {
+            toast.error("请先勾选要测试的模型");
+            return;
+        }
+        setDialogTesting(true);
+        setDialogTestResults({});
+        try {
+            const res = await fetch(`/api/config/models/test`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                    baseURL: p.baseURL,
+                    apiKey: p.apiKey,
+                    providerName: nameCommitted || p.name.trim(),
+                    models: ids,
+                }),
+            });
+            const j = (await res.json()) as {
+                results?: ModelTestResult[];
+                statusMessage?: string;
+            };
+            if (!res.ok) {
+                toast.error(j.statusMessage ?? "测试模型失败");
+                return;
+            }
+            setDialogTestResults(
+                Object.fromEntries(
+                    (j.results ?? []).map((r) => [r.requested_model, r])
+                )
+            );
+        } catch {
+            toast.error("网络错误，测试模型失败");
+        } finally {
+            setDialogTesting(false);
+        }
     };
 
     /** 测试当前 models 列表可用性 + 首字延迟。 */
@@ -461,48 +521,168 @@ export function ProviderItem({
                     if (!v) setFetchedModels(null);
                 }}
             >
-                <DialogContent className="max-w-md">
+                <DialogContent className="max-w-lg">
                     <DialogHeader>
                         <DialogTitle>选择要添加的模型</DialogTitle>
                     </DialogHeader>
-                    <div className="flex flex-col gap-0.5 max-h-60 overflow-y-auto pr-1">
-                        {(fetchedModels ?? []).map((id) => {
-                            const added = p.models.some(
-                                (m) => m.id.trim() === id
-                            );
-                            return (
-                                <label
-                                    key={id}
-                                    className="flex items-center gap-2 text-sm cursor-pointer rounded px-1 py-1 hover:bg-muted/50"
-                                >
-                                    <input
-                                        type="checkbox"
-                                        className="size-3.5 accent-primary shrink-0"
-                                        checked={added || selectedIds.has(id)}
-                                        disabled={added}
-                                        onChange={(e) =>
-                                            setSelectedIds((prev) => {
-                                                const next = new Set(prev);
-                                                if (e.target.checked)
-                                                    next.add(id);
-                                                else next.delete(id);
-                                                return next;
-                                            })
-                                        }
-                                    />
-                                    <span
-                                        className={
-                                            added
-                                                ? "text-muted-foreground line-through truncate"
-                                                : "truncate"
-                                        }
-                                    >
-                                        {id}
-                                        {added && "（已添加）"}
-                                    </span>
-                                </label>
-                            );
-                        })}
+                    {/* 工具栏：搜索过滤 + 全选/全不选（作用于当前过滤、未添加项） */}
+                    <div className="flex items-center gap-2">
+                        <Input
+                            className="h-8 flex-1"
+                            placeholder="搜索模型…"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                        />
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={selectAll}
+                            disabled={filteredIds.length === 0}
+                        >
+                            全选
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={selectNone}
+                            disabled={filteredIds.length === 0}
+                        >
+                            全不选
+                        </Button>
+                    </div>
+                    {/* 可选表格：勾选 + 模型 + 测试状态 */}
+                    <div className="max-h-72 overflow-y-auto border border-border rounded-md">
+                        <table className="w-full text-sm">
+                            <thead className="sticky top-0 bg-background">
+                                <tr className="border-b border-border">
+                                    <th className="w-9 px-2 py-1.5 text-left font-medium text-muted-foreground">
+                                        <input
+                                            type="checkbox"
+                                            className="size-3.5 accent-primary"
+                                            checked={
+                                                filteredIds.length > 0 &&
+                                                filteredIds.every(
+                                                    (id) =>
+                                                        p.models.some(
+                                                            (m) =>
+                                                                m.id.trim() ===
+                                                                id
+                                                        ) ||
+                                                        selectedIds.has(id)
+                                                )
+                                            }
+                                            onChange={(e) =>
+                                                e.target.checked
+                                                    ? selectAll()
+                                                    : selectNone()
+                                            }
+                                        />
+                                    </th>
+                                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">
+                                        模型
+                                    </th>
+                                    <th className="w-20 px-2 py-1.5 text-right font-medium text-muted-foreground">
+                                        测试
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredIds.map((id) => {
+                                    const added = p.models.some(
+                                        (m) => m.id.trim() === id
+                                    );
+                                    const r = dialogTestResults[id];
+                                    return (
+                                        <tr
+                                            key={id}
+                                            className="border-b border-border/50 last:border-0 hover:bg-muted/40"
+                                        >
+                                            <td className="px-2 py-1">
+                                                <input
+                                                    type="checkbox"
+                                                    className="size-3.5 accent-primary"
+                                                    checked={
+                                                        added ||
+                                                        selectedIds.has(id)
+                                                    }
+                                                    disabled={added}
+                                                    onChange={(e) =>
+                                                        setSelectedIds(
+                                                            (prev) => {
+                                                                const next =
+                                                                    new Set(
+                                                                        prev
+                                                                    );
+                                                                if (
+                                                                    e.target
+                                                                        .checked
+                                                                )
+                                                                    next.add(id);
+                                                                else
+                                                                    next.delete(
+                                                                        id
+                                                                    );
+                                                                return next;
+                                                            }
+                                                        )
+                                                    }
+                                                />
+                                            </td>
+                                            <td
+                                                className={
+                                                    "px-2 py-1 truncate max-w-64" +
+                                                    (added
+                                                        ? " text-muted-foreground line-through"
+                                                        : "")
+                                                }
+                                            >
+                                                {id}
+                                                {added && "（已添加）"}
+                                            </td>
+                                            <td className="px-2 py-1 text-right">
+                                                {r ? (
+                                                    r.available ? (
+                                                        <span
+                                                            title={`首字 ${
+                                                                r.first_token_latency_ms ??
+                                                                "?"
+                                                            }ms`}
+                                                            className="text-[11px] text-emerald-600 dark:text-emerald-500"
+                                                        >
+                                                            ✓
+                                                            {r.first_token_latency_ms !=
+                                                            null
+                                                                ? ` ${r.first_token_latency_ms}ms`
+                                                                : ""}
+                                                        </span>
+                                                    ) : (
+                                                        <span
+                                                            title={
+                                                                r.error ??
+                                                                "不可用"
+                                                            }
+                                                            className="text-[11px] text-destructive"
+                                                        >
+                                                            ✗
+                                                        </span>
+                                                    )
+                                                ) : null}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                                {filteredIds.length === 0 && (
+                                    <tr>
+                                        <td
+                                            colSpan={3}
+                                            className="px-2 py-4 text-center text-xs text-muted-foreground"
+                                        >
+                                            无匹配模型
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
                     </div>
                     <DialogFooter>
                         <Button
@@ -510,6 +690,16 @@ export function ProviderItem({
                             onClick={() => setFetchedModels(null)}
                         >
                             取消
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={testDialogSelected}
+                            disabled={
+                                notAddedOf([...selectedIds]).length === 0 ||
+                                dialogTesting
+                            }
+                        >
+                            {dialogTesting ? "测试中…" : "测试"}
                         </Button>
                         <Button
                             onClick={confirmAddModels}

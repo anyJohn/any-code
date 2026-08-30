@@ -12,14 +12,10 @@ import { registerAbility } from "./abilities";
  * 文件缺失时连接失败 → mcp.ts 单 server 失败不阻断（现有行为），能力随 config 开关。
  */
 
-/** Electron 特有属性（打包后资源目录定位用）；非 Electron 环境不存在。 */
-declare global {
-    namespace NodeJS {
-        interface Process {
-            resourcesPath?: string;
-        }
-    }
-}
+/** Electron 特有属性（打包后资源目录定位用）；非 Electron 环境不存在。
+ *  不用 declare global：desktop 构建含 electron 类型（resourcesPath: string），
+ *  全局扩展会与之冲突——改用局部断言。 */
+type ElectronProcess = NodeJS.Process & { resourcesPath?: string };
 
 /** CJS bundle（desktop main.cjs）由 Node 提供的模块目录。ESM 环境不存在；TS 声明兼容。 */
 declare const __dirname: string | undefined;
@@ -42,7 +38,8 @@ function currentDir(): string {
  *  读不到——映射到 app.asar.unpacked 真实路径（electron-builder asarUnpack 解包）。 */
 export function builtinRoot(): string {
     let dir = join(currentDir(), "builtin");
-    if (dir.includes("app.asar") && typeof process.resourcesPath === "string") {
+    const resourcesPath = (process as ElectronProcess).resourcesPath;
+    if (dir.includes("app.asar") && typeof resourcesPath === "string") {
         dir = dir.replace("app.asar", "app.asar.unpacked");
     }
     return dir;
