@@ -21,15 +21,28 @@ declare global {
     }
 }
 
+/** CJS bundle（desktop main.cjs）由 Node 提供的模块目录。ESM 环境不存在；TS 声明兼容。 */
+declare const __dirname: string | undefined;
+
+/**
+ * 当前模块所在目录，兼容两种 bundle 形态：
+ * - ESM（server dist/server.mjs / tsx / vitest）：import.meta.url 可用
+ * - CJS（desktop dist/main/main.cjs）：import.meta 是 undefined，用 Node 的 __dirname
+ */
+function currentDir(): string {
+    if (typeof import.meta !== "undefined" && import.meta.url) {
+        return dirname(fileURLToPath(import.meta.url));
+    }
+    if (typeof __dirname === "string" && __dirname) return __dirname;
+    return process.cwd();
+}
+
 /** 内置能力根目录（相对当前 bundle/源码位置；bundler 把整个 builtin/ 目录 emit 到同目录）。
  *  Electron asar 环境：fs 可透明读 app.asar 虚拟路径，但外部 shell/bash 与子进程 spawn
  *  读不到——映射到 app.asar.unpacked 真实路径（electron-builder asarUnpack 解包）。 */
 export function builtinRoot(): string {
-    let dir = join(dirname(fileURLToPath(import.meta.url)), "builtin");
-    if (
-        dir.includes("app.asar") &&
-        typeof process.resourcesPath === "string"
-    ) {
+    let dir = join(currentDir(), "builtin");
+    if (dir.includes("app.asar") && typeof process.resourcesPath === "string") {
         dir = dir.replace("app.asar", "app.asar.unpacked");
     }
     return dir;
@@ -38,8 +51,10 @@ export function builtinRoot(): string {
 /** 内置连接器的用户可见说明（Settings 面板展示——写给最终用户，不解释实现原理）。 */
 const DESCRIPTION: Record<string, string> = {
     "web-fetch": "抓取网页并转为 Markdown 文本（仅 https）",
-    "web-search": "网页搜索。默认 ddg（免 key），可换 tavily / bing（需填写对应 API Key）",
-    "browser-use": "真实浏览器（CDP）：打开网页、点击、填表、取内容。需配置 cdpUrl（浏览器调试地址）",
+    "web-search":
+        "网页搜索。默认 ddg（免 key），可换 tavily / bing（需填写对应 API Key）",
+    "browser-use":
+        "真实浏览器（CDP）：打开网页、点击、填表、取内容。需配置 cdpUrl（浏览器调试地址）",
 };
 
 // 扫描 builtin/ 下每个子目录：含 server.mjs → 注册为 mcp 连接器（能力名 = 目录名）。
