@@ -166,6 +166,22 @@ export function ProviderItem({
         }
     };
 
+    /** 剔除无效模型：把测试结果 available:false 的从勾选集移除（保留有效的）。 */
+    const purgeInvalidModels = () => {
+        const invalid = Object.entries(dialogTestResults)
+            .filter(([, r]) => !r.available)
+            .map(([id]) => id);
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            for (const id of invalid) next.delete(id);
+            return next;
+        });
+        toast.success(`已剔除 ${invalid.length} 个无效模型`);
+    };
+    const invalidCount = Object.values(dialogTestResults).filter(
+        (r) => !r.available
+    ).length;
+
     /** 测试当前 models 列表可用性 + 首字延迟。 */
     const testModels = async () => {
         const ids = p.models.map((m) => m.id.trim()).filter(Boolean);
@@ -700,6 +716,13 @@ export function ProviderItem({
                             }
                         >
                             {dialogTesting ? "测试中…" : "测试"}
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={purgeInvalidModels}
+                            disabled={invalidCount === 0 || dialogTesting}
+                        >
+                            剔除无效模型 ({invalidCount})
                         </Button>
                         <Button
                             onClick={confirmAddModels}
