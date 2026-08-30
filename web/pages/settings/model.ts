@@ -79,6 +79,15 @@ export const emptyMcp = (): McpForm => ({
     enabled: true,
 });
 
+/** 模型测试结果（镜像 domain config.ts ModelTestResult）——Settings「测试模型」展示。 */
+export interface ModelTestResult {
+    requested_model: string;
+    available: boolean;
+    first_token_latency_ms?: number;
+    total_ms?: number;
+    error?: string;
+}
+
 // 把多行 KEY=VALUE / KEY:VALUE 文本解析成对象
 export function parsePairs(text: string, sep: RegExp): Record<string, string> {
     const out: Record<string, string> = {};

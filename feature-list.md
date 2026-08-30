@@ -93,7 +93,7 @@
 - 交互 InteractionModal：`ask_question` 工具向 human 提问 / 选择
 - 输入 InputBox：slash 命令补全、`@` 文件引用、上下文压缩 indeterminate 进度条、停止 / 发送
 - 状态栏 StatusBar：模型 / Provider、上下文用量进度、Skill 数、MCP 数
-- 设置 Settings：`config.yaml` 图形化编辑，卡片可折叠（默认提供方 → 模型提供方 → 内置能力 → MCP 服务，FE-022）；内置能力开关用 Switch、web-search 行内 provider（ddg/tavily/bing）+ API Key 配置，热生效
+- 设置 Settings：`config.yaml` 图形化编辑，卡片可折叠（默认提供方 → 模型提供方 → 内置能力 → MCP 服务，FE-022）；内置能力开关用 Switch、web-search 行内 provider（ddg/tavily/bing）+ API Key 配置；Provider 支持**拉取模型**（GET /models 填充列表）/ **测试模型**（ping 测可用性 + 首字延迟，✓/✗ 徽标）/ **选择模型**（可用者设默认），参考 LLM_Proxy；热生效
 - 品牌识别：Logo（badge / glyph 双变体）+ 品牌靛蓝主题（`--primary`）+ favicon；选中色 / 细滚动条
 - Markdown 渲染（prose）+ 代码块
 - 历史持久化重放：durable 事件日志作 reload 真值，退役反推重建（SPEC-030）

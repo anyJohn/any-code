@@ -16,6 +16,8 @@ import {
     resolveInteraction,
     runRipgrep,
     SessionService,
+    listModels,
+    testModels,
     type AgentEvent,
     type ConfigShape,
     type SessionKey,
@@ -488,6 +490,49 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         try {
             Config.save(merged);
             return c.json({ statusMessage: "saved" });
+        } catch (e) {
+            return c.json({ statusMessage: (e as Error).message }, 400);
+        }
+    });
+
+    // 拉取 provider 模型列表（Settings「拉取模型」）：{ baseURL, apiKey } → { models }
+    app.post("/api/config/models/fetch", async (c) => {
+        let body: { baseURL?: string; apiKey?: string };
+        try {
+            body = (await c.req.json()) as { baseURL?: string; apiKey?: string };
+        } catch {
+            return c.json({ statusMessage: "invalid json body" }, 400);
+        }
+        try {
+            const models = await listModels(body.baseURL, body.apiKey);
+            return c.json({ models });
+        } catch (e) {
+            return c.json({ statusMessage: (e as Error).message }, 400);
+        }
+    });
+
+    // 测试模型可用性（Settings「测试模型」）：{ baseURL, apiKey, models } → { results }
+    app.post("/api/config/models/test", async (c) => {
+        let body: { baseURL?: string; apiKey?: string; models?: string[] };
+        try {
+            body = (await c.req.json()) as {
+                baseURL?: string;
+                apiKey?: string;
+                models?: string[];
+            };
+        } catch {
+            return c.json({ statusMessage: "invalid json body" }, 400);
+        }
+        if (!body.models?.length) {
+            return c.json({ statusMessage: "models 不能为空" }, 400);
+        }
+        try {
+            const results = await testModels(
+                body.baseURL,
+                body.apiKey,
+                body.models
+            );
+            return c.json({ results });
         } catch (e) {
             return c.json({ statusMessage: (e as Error).message }, 400);
         }

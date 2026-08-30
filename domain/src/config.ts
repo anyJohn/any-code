@@ -4,6 +4,7 @@ import * as yaml from "js-yaml";
 import OpenAI from "openai";
 import { globalConfigDir } from "./workspace";
 import type { McpServerConfig } from "./mcp";
+import { callLLM } from "./llm";
 
 /**
  * 一个模型：id（调 API 的真实模型名）+ name（展示名，可选）。
@@ -101,6 +102,88 @@ export async function detectContextWindow(
     }
     detectCache.set(key, { value, ts: Date.now() });
     return value;
+}
+
+/**
+ * 从 provider 拉取模型 id 列表（OpenAI SDK GET {baseURL}/models）。
+ * Settings「拉取模型」用——验证 baseURL/apiKey 后填充 models 列表。
+ * 失败抛错（apiKey 缺失/网络/401），由调用方回传 UI。
+ */
+export async function listModels(
+    baseURL: string | undefined,
+    apiKey: string | undefined
+): Promise<string[]> {
+    if (!apiKey?.trim()) throw new Error("需要 apiKey 才能拉取模型");
+    const client = new OpenAI({ apiKey, baseURL });
+    const list = await client.models.list();
+    const arr = (list as unknown as { data?: Array<{ id?: string }> }).data ?? [];
+    return arr.map((m) => m.id ?? "").filter(Boolean);
+}
+
+/** 单个模型测试结果（参考 LLM_Proxy provider_model_test_service）。 */
+export interface ModelTestResult {
+    requested_model: string;
+    available: boolean;
+    /** 首字延迟（ms，流式 ping 首个 delta） */
+    first_token_latency_ms?: number;
+    total_ms?: number;
+    error?: string;
+}
+
+/**
+ * 测试单个模型可用性 + 首字延迟（流式 ping，max_tokens 极小）。
+ * Settings「测试模型」用。容错：失败返回 available:false + error，不抛。
+ */
+export async function testModel(
+    baseURL: string | undefined,
+    apiKey: string | undefined,
+    model: string
+): Promise<ModelTestResult> {
+    const provider: LlmProvider = {
+        apiKey: apiKey ?? "",
+        baseURL,
+        models: [{ id: model }],
+        defaultModel: model,
+        streaming: true,
+    };
+    const t0 = performance.now();
+    let firstTokenMs: number | undefined;
+    try {
+        await callLLM(
+            [{ role: "user", content: "Reply with exactly: ok" }],
+            { max_tokens: 16, temperature: 0, tools: undefined },
+            undefined,
+            () => {
+                if (firstTokenMs === undefined)
+                    firstTokenMs = Math.round(performance.now() - t0);
+            },
+            provider
+        );
+        return {
+            requested_model: model,
+            available: true,
+            first_token_latency_ms: firstTokenMs,
+            total_ms: Math.round(performance.now() - t0),
+        };
+    } catch (e) {
+        return {
+            requested_model: model,
+            available: false,
+            total_ms: Math.round(performance.now() - t0),
+            error: e instanceof Error ? e.message : String(e),
+        };
+    }
+}
+
+/** 批量测试模型（并发），保持传入顺序。 */
+export async function testModels(
+    baseURL: string | undefined,
+    apiKey: string | undefined,
+    models: string[]
+): Promise<ModelTestResult[]> {
+    return Promise.all(
+        models.map((m) => testModel(baseURL, apiKey, m))
+    );
 }
 
 export interface ConfigShape {
