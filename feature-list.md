@@ -44,6 +44,9 @@
   - 手动指令 `/compact [聚焦]` 压缩
   - 保留最近若干消息，确保压缩不影响当前工作
   - 压缩失败发非终态 Warning（不误终止 run）
+- bash 输出治理（AR-2）：双限截断（2000 行/40KB）+ 全量 spill 文件（结果附路径）；timeout_ms 可配（1-600s）
+- LLM 调用重试（AR-1）：429/5xx/网络/空响应指数退避 + 抖动（默认 3 次，provider.retry 可配），Retry-After 优先，重试发 Warning 可见
+- 任务终态枚举（FR-14）：completed / stopped / max_iterations；上限触发 UI 明示 + 建议动作
 - permissions（工具权限，SPEC-032）
   - 执行前判定：用户规则（项目级覆盖全局，后匹配生效）→ 危险命令基线 → 模式默认
   - 规则粒度：工具名 + 参数模式（bash 命令 `*` 通配、文件路径 glob）

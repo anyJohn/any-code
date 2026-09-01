@@ -15,6 +15,9 @@ providers:
       - id: gpt-4o-mini
         name: GPT-4o Mini
     defaultModel: gpt-4o # 当前生效模型 id
+    # retry: # LLM 调用重试（AR-1，缺省 3 次 / 1000ms 起指数退避）
+    #   maxRetries: 3
+    #   baseDelayMs: 1000
   deepseek:
     apiKey: sk-your-deepseek-key
     baseURL: https://api.deepseek.com/v1
