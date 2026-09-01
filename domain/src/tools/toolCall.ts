@@ -1,6 +1,5 @@
 import { ChatCompletionMessageToolCall } from "openai/resources/index";
 import { ChatMessage } from "../type";
-import { EventType } from "../type";
 import type { ToolContext } from "../context";
 import type { Tool } from "./index";
 
@@ -31,8 +30,8 @@ export async function toolCall(
 ): Promise<ChatMessage[]> {
     const result: ChatMessage[] = [];
     for (const toolCall of tooCalls) {
-        // 防御：部分 provider（dashscope/GLM 兼容层）偶发 tool_calls 空条目，跳过不崩。
-        // 实测：`Cannot read properties of undefined (reading 'type')`（toolCall.ts:34）。
+        // 防御：部分 provider（dashscope/GLM 兼容层）偶发 tool_calls 空条目，跳过不崩
+        // （报错形如 `Cannot read properties of undefined (reading 'type')`）。
         if (!toolCall) continue;
         if (toolCall.type !== "function") {
             // 用 continue 而非 return：一个异常 tool call 不应丢弃批次内其它结果

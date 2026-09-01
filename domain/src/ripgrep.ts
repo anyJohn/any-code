@@ -8,7 +8,6 @@ export interface RipgrepResult {
     stdout: string;
     stderr: string;
     code: number | null;
-    signal: NodeJS.Signals | null;
 }
 
 let cachedRg: string | undefined;
@@ -69,10 +68,10 @@ export function runRipgrep(
                         stderr += d.toString();
                     });
                     child.on("error", () =>
-                        resolve({ stdout, stderr, code: null, signal: null })
+                        resolve({ stdout, stderr, code: null })
                     );
-                    child.on("close", (code, signal) =>
-                        resolve({ stdout, stderr, code, signal })
+                    child.on("close", (code) =>
+                        resolve({ stdout, stderr, code })
                     );
                 })
         )
@@ -80,6 +79,5 @@ export function runRipgrep(
             stdout: "",
             stderr: `ripgrep: ${(e as Error).message}`,
             code: null,
-            signal: null,
         }));
 }

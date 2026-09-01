@@ -29,7 +29,7 @@ export interface WorkspaceMeta {
 const REGISTRY_DIR = path.join(os.homedir(), ".anycode");
 const REGISTRY_FILE = path.join(REGISTRY_DIR, "workspaces.json");
 
-export const DEFAULT_IGNORED_PATTERNS = [
+const DEFAULT_IGNORED_PATTERNS = [
     "node_modules",
     ".git",
     "dist",
@@ -97,17 +97,6 @@ export const WorkspaceRegistry = {
         const root = normalizeRoot(rootPath);
         saveRegistry(loadRegistry().filter((w) => w.rootPath !== root));
     },
-
-    /** 切换到该工作区时刷新 lastUsedAt（驱动"最近"排序） */
-    touch(rootPath: string): void {
-        const root = normalizeRoot(rootPath);
-        const list = loadRegistry();
-        const w = list.find((x) => x.rootPath === root);
-        if (w) {
-            w.lastUsedAt = Date.now();
-            saveRegistry(list);
-        }
-    },
 };
 
 /** 构造 Workspace 对象（纯内存，不建目录、不复制文件） */
@@ -134,7 +123,7 @@ export function resolvePath(workspace: Workspace, userPath: string): string {
     return resolved;
 }
 
-/** 工作区本地配置目录：<rootPath>/.anycode（mcp.json / memory.md / rules / skills） */
+/** 工作区本地配置目录：<rootPath>/.anycode（mcp.yaml / memory.md / skills；项目规则用 AGENTS.md） */
 export function workspaceConfigDir(workspace: Workspace): string {
     return path.join(workspace.rootPath, ".anycode");
 }

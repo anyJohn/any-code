@@ -16,18 +16,6 @@ interface DirectoryNode {
     children?: DirectoryNode[];
 }
 
-const DEFAULT_IGNORE_PATTERNS = [
-    "node_modules",
-    ".git",
-    "dist",
-    "build",
-    "coverage",
-    ".DS_Store",
-    "*.log",
-    ".env",
-    ".env.*",
-];
-
 async function exploreDirectory(
     dirPath: string,
     currentDepth: number,

@@ -214,7 +214,9 @@ default: p
         expect(() => Config.save({ providers: {} })).toThrow(/providers 不能为空/);
     });
 
-    it("AC-004/007 reload() 重读文件，default/provider 切换生效", () => {
+    it("AC-004/007 配置热更：重读文件（重新 load）default/provider 切换生效", () => {
+        // per-request agent 无驻留 reload：每次 AnyAgent.create 重新 Config.load()，
+        // "热更新"语义 = 磁盘新文件在下次 load 反映。
         writeConfig(`
 providers:
   openai:
@@ -223,8 +225,7 @@ providers:
     defaultModel: gpt-4o
 default: openai
 `);
-        const cfg = Config.load();
-        expect(cfg.getCurrentProvider().defaultModel).toBe("gpt-4o");
+        expect(Config.load().getCurrentProvider().defaultModel).toBe("gpt-4o");
         writeConfig(`
 providers:
   openai:
@@ -237,8 +238,8 @@ providers:
     defaultModel: deepseek-chat
 default: deepseek
 `);
-        cfg.reload();
-        expect(cfg.default).toBe("deepseek");
-        expect(cfg.getCurrentProvider().defaultModel).toBe("deepseek-chat");
+        const fresh = Config.load();
+        expect(fresh.default).toBe("deepseek");
+        expect(fresh.getCurrentProvider().defaultModel).toBe("deepseek-chat");
     });
 });

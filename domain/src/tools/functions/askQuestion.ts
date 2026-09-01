@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import type { ToolContext } from "../../context";
-import { EventType } from "../../type";
 import {
     registerInteraction,
     unregisterInteraction,

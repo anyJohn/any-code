@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 vi.mock("node:fs", () => ({ existsSync: vi.fn() }));
 import { existsSync } from "node:fs";
 
-import { executeBashFunc, toMsysCwd, resolveShell } from "../src/tools/functions/bash";
+import { executeBashFunc, resolveShell } from "../src/tools/functions/bash";
 import { globalConfigDir } from "../src/workspace";
 import { join } from "node:path";
 import type { ToolContext } from "../src/context";
@@ -65,25 +65,7 @@ describe("executeBashFunc 流式（SPEC-018 AC-001）", () => {
     });
 });
 
-// SPEC-024 AC-004：显式 spawn(binary,["-c",cmd]) + 平台 shell 解析 + MSYS cwd 翻译
-describe("toMsysCwd（SPEC-024 AC-004）", () => {
-    it("win32 盘符路径 → MSYS（C:\\Users\\foo → /c/Users/foo）", () => {
-        setPlatform("win32");
-        expect(toMsysCwd("C:\\Users\\foo")).toBe("/c/Users/foo");
-        expect(toMsysCwd("D:\\proj\\a b")).toBe("/d/proj/a b");
-    });
-    it("win32 下已是 posix 风格不动", () => {
-        setPlatform("win32");
-        expect(toMsysCwd("/c/Users/foo")).toBe("/c/Users/foo");
-        expect(toMsysCwd("/tmp/x")).toBe("/tmp/x");
-    });
-    it("非 win32 原样返回", () => {
-        setPlatform("linux");
-        expect(toMsysCwd("/home/john/项目")).toBe("/home/john/项目");
-        expect(toMsysCwd("C:\\Users\\foo")).toBe("C:\\Users\\foo");
-    });
-});
-
+// SPEC-024 AC-004：显式 spawn(binary,["-c",cmd]) + 平台 shell 解析
 describe("resolveShell（SPEC-024 AC-004）", () => {
     const PG_PATH = join(globalConfigDir(), "runtime", "busybox", "sh.exe");
 
@@ -106,13 +88,13 @@ describe("resolveShell（SPEC-024 AC-004）", () => {
         });
     });
 
-    it("win32：无 config 但 PortableGit 在安装器下发位置 → 用它", () => {
+    it("win32：无 config 但 busybox 在安装器下发位置 → 用它", () => {
         setPlatform("win32");
         vi.mocked(existsSync).mockImplementation((p) => p === PG_PATH);
         expect(resolveShell("D:\\work").binary).toBe(PG_PATH);
     });
 
-    it("win32：无 config 无 PortableGit → 回退系统 Git", () => {
+    it("win32：无 config 无 busybox → 回退系统 Git", () => {
         setPlatform("win32");
         vi.mocked(existsSync).mockImplementation(
             (p) => p === "C:\\Program Files\\Git\\bin\\bash.exe"

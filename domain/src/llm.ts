@@ -5,7 +5,6 @@ import {
 import { ChatMessage, type LlmUsage, type MessageMeta } from "./type";
 import type { LlmProvider } from "./config";
 import OpenAI from "openai";
-import { ToolKit } from "./tools";
 
 type LlmResult = ChatCompletionMessage & { usage?: LlmUsage; _meta?: MessageMeta };
 
@@ -47,10 +46,10 @@ export async function callLLM(
         baseURL: provider.baseURL,
     });
     // 剥离 _meta sidecar：发给 provider 的 messages 不得含非标准字段（SPEC-017 C-002）
+    // tools 完全由调用方经 params 决定（agentLoop 传全量 schema；起名/测试等辅助调用传 undefined）。
     const payload: ChatCompletionCreateParamsNonStreaming = {
         model: provider.defaultModel,
         messages: stripMeta(messages),
-        tools: ToolKit.readOnlyTools.map((t) => t.schema), // 默认只读权限（schema）
         ...params,
     };
     // max_tokens：用 resolved maxOutputTokens（探测/表/用户取 min）。undefined 不传（provider 默认）。
@@ -139,8 +138,6 @@ async function streamCall(
             if (delta.tool_calls) {
                 // streaming tool_calls 是分片 delta，按 index 拼装：首片含 id+name，后续片含 arguments 片段。
                 // 联合类型里 custom 变体无 function 字段，cast 成带可选 function 的形态访问。
-                // 同时按 4KB 发 TOOL_ARG_PROGRESS 心跳（只带 bytes+name，不带 content）——
-                // 避免 LLM 流式输出大 tool_call.arguments（如大文件 write content）时事件流静默冻屏。SPEC-022 B-002。
                 for (const tcRaw of delta.tool_calls) {
                     const tc = tcRaw as {
                         index?: number;

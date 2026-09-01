@@ -189,7 +189,7 @@ export interface ConfigShape {
     providers?: Record<string, Partial<LlmProvider>>;
     default?: string;
     mcp?: Record<string, McpServerConfig>;
-    /** Windows 上 agent bash 工具用的 Git Bash 路径（config.yaml 配，非 env）。安装器下发 PortableGit 后写入。 */
+    /** Windows 上 agent bash 工具用的 shell 路径（config.yaml 配，非 env）。install.ps1 写入 busybox sh.exe 路径。 */
     gitBashPath?: string;
     /** 内置能力开关（SPEC-031）：未配置 = 不启用；随包默认 config 预置三能力开。条目可带 config（provider/连接器参数）。 */
     abilities?: Record<string, AbilityConfig>;
@@ -322,15 +322,6 @@ export class Config {
     /** 当前生效 provider（按 default 字段） */
     getCurrentProvider(): LlmProvider {
         return this.providers[this.default];
-    }
-
-    /** 热更新：重读配置文件，新 default/provider/mcp/abilities 生效（下次 callLLM/initMcp/getSystemMessage 用新值） */
-    reload(): void {
-        const fresh = Config.load();
-        this.providers = fresh.providers;
-        this.default = fresh.default;
-        this.mcpServers = fresh.mcpServers;
-        this.abilities = fresh.abilities;
     }
 
     /** 校验 + 写回 ~/.anycode/config.yaml（js-yaml dump）。覆盖前先备份原配置到 config.yaml.bak，供误配置回滚。 */

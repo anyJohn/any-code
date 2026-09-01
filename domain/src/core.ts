@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { callLLM } from "./llm";
 import { toolCall } from "./tools/toolCall";
 import { AgentLoopResult, ChatMessage } from "./type";
-import { EventType, serializeError } from "./type";
+import { serializeError } from "./type";
 import type { ToolContext } from "./context";
 import type { Tool } from "./tools";
 import { compactMessages, AUTO_COMPACT_THRESHOLD } from "./compact";
@@ -109,8 +109,8 @@ export async function agentLoop(
                         message: delta,
                         turnId,
                     }),
-                // tool_call arguments 流式心跳：每 4KB 发 TOOL_ARG_PROGRESS（只 bytes+name），
-                // 避免 LLM 流式输出大 write content 时事件流静默冻屏。SPEC-022 B-003 / DEC-076
+                // tool_call arguments 流式心跳：每 2KB 发 TOOL_ARG_PROGRESS（只 bytes+name），
+                // 避免 LLM 流式输出大 write content 时事件流静默冻屏。SPEC-022 B-002 / DEC-076
                 (info) =>
                     ctx.eventStream.submit({
                         type: "ToolArgProgress",

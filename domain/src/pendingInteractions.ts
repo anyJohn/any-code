@@ -3,8 +3,7 @@
  *
  * 机制：handler 注册一个 resolve 到此 Map（id-keyed）→ 发 INTERACTION 事件 → 阻塞
  * `Promise.race`([answers, abort, timeout])。web 的 POST /interact 用 id 找到 resolve
- * 唤醒。module 单例——Next 单进程下 /run（handler 所在）与 /interact（答案 POST）共享。
- * dev HMR 重载会丢 pending（可接受；prod standalone 无 HMR）。
+ * 唤醒。module 单例——server 单进程下 /run（handler 所在）与 /interact（答案 POST）共享。
  */
 
 export interface PendingInteraction {

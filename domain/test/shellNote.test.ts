@@ -33,9 +33,9 @@ describe("resolveShellKind（平台判定）", () => {
     it("非 Windows：macOS → mac-sh；其它 unix → sh", () => {
         if (process.platform === "win32") return;
         if (process.platform === "darwin") {
-            expect(resolveShellKind("/tmp", undefined)).toBe("mac-sh");
+            expect(resolveShellKind(undefined)).toBe("mac-sh");
         } else {
-            expect(resolveShellKind("/tmp", undefined)).toBe("sh");
+            expect(resolveShellKind(undefined)).toBe("sh");
         }
     });
 });

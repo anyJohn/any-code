@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
-import { AnyAgent, EventType } from "./index";
+// 纯 CLI demo 入口（pnpm dev:domain / start）。演示 AnyAgent 事件流订阅；
+// 完整 CLI/TUI 见 tui 包。
+
+import { AnyAgent } from "./index";
 
 console.log("Starting AnyCode CLI...");
 
@@ -42,14 +45,7 @@ agent.eventStream$.subscribe((event) => {
     }
 });
 
-agent.pendingTasks$.subscribe((tasks) => {
-    if (tasks.length > 0) {
-        console.log(`Processing ${tasks.length} tasks...`);
-    }
-});
-
-agent.submit(task);
-
+let doneTimer: NodeJS.Timeout | null = null;
 const timeout = setTimeout(() => {
     console.log("Operation timed out");
     agent.stop();
@@ -57,12 +53,16 @@ const timeout = setTimeout(() => {
 }, 60000);
 
 agent.pendingTasks$.subscribe((tasks) => {
-    if (tasks.length === 0 && timeout) {
+    if (tasks.length > 0) {
+        console.log(`Processing ${tasks.length} tasks...`);
+    } else if (doneTimer === null) {
         clearTimeout(timeout);
-        setTimeout(() => {
+        doneTimer = setTimeout(() => {
             console.log("Task completed");
             agent.stop();
             process.exit(0);
         }, 1000);
     }
 });
+
+agent.submit(task);

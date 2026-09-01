@@ -1,10 +1,7 @@
 import { loadMemory } from "./memory";
 import {
-    AgentStatus,
     AgentEvent,
     ChatMessage,
-    EventType,
-    InteractionRequest,
     serializeError,
 } from "./type";
 import { agentLoop } from "./core";
@@ -15,14 +12,20 @@ import { resolveSkills, renderSkillCatalog } from "./skill";
 import "./builtin";
 import { seedBuiltinSkills } from "./seed";
 import { EventStream } from "./eventStream";
-import { SessionService, Session, SessionKey, projectKeyOf } from "./session";
+import {
+    SessionService,
+    Session,
+    SessionKey,
+    projectKeyOf,
+    DEFAULT_TITLE,
+} from "./session";
 import { createWorkspace, Workspace } from "./workspace";
 import { mainAgent } from "./agent";
 import type { AgentDefinition } from "./agent";
 import type { Tool } from "./tools";
 import { loadMcpTools, loadProjectMcp, type McpServerConfig } from "./mcp";
 import { getRegisteredAbilities, isAbilityEnabled } from "./abilities";
-import { Config, type LlmProvider } from "./config";
+import { Config } from "./config";
 import {
     workspaceNote,
     memoryNote,
@@ -38,7 +41,6 @@ import {
     concatMap,
     finalize,
     from,
-    Observable,
     of,
     Subject,
     takeUntil,
@@ -57,12 +59,7 @@ interface AnyAgentOptions {
 }
 
 class AnyAgent {
-    status$: BehaviorSubject<AgentStatus> = new BehaviorSubject<AgentStatus>(
-        AgentStatus.IDLE
-    );
-    event$: Observable<AgentEvent> = new Observable();
     pendingTasks$ = new BehaviorSubject<string[]>([]);
-    interaction$ = new Subject<InteractionRequest>();
 
     private eventStream = new EventStream();
     private stop$ = new Subject<void>();
@@ -81,7 +78,8 @@ class AnyAgent {
     private sessionKey: SessionKey | null = null;
     // MCP 连接清理（per-agent）：create 时建连，destroy 时清理
     private mcpCleanup: (() => Promise<void>) | null = null;
-    // 当前生效的 LLM provider 配置（多 provider + 流式开关）；create 时 initConfig 从 config.yaml 加载，web 改配置后 reload
+    // 当前生效的 LLM provider 配置（多 provider + 流式开关）；create 时 initConfig 从 config.yaml 加载。
+    // per-request 语义下热更 = 下一次 AnyAgent.create 重读磁盘，无需 reload 机制。
     private config!: Config;
 
     private constructor(opts: AnyAgentOptions) {
@@ -116,20 +114,6 @@ class AnyAgent {
         const provider = this.config.getCurrentProvider();
         const ctx = await detectContextWindow(provider);
         provider.contextWindow = resolveContextWindow(provider, ctx);
-    }
-
-    /** 热更新配置：重读 config.yaml + 重新探测 context window（命中缓存则无网络）。
-     *  新 default/provider 生效（下次 callLLM 用新值）。maxOutputTokens 纯用户配置不探测。 */
-    async reloadConfig(): Promise<void> {
-        this.config.reload();
-        const provider = this.config.getCurrentProvider();
-        const ctx = await detectContextWindow(provider);
-        provider.contextWindow = resolveContextWindow(provider, ctx);
-    }
-
-    /** 当前生效 provider（供 web 状态面板读 model/provider） */
-    getCurrentProvider(): LlmProvider {
-        return this.config.getCurrentProvider();
     }
 
     /** 加载 MCP 工具（真协议连接），追加到工具集，per-agent 生命周期绑定。 */
@@ -190,14 +174,10 @@ class AnyAgent {
         }
     }
 
-    /** 首条消息时按需创建 session 并以任务文本设标题 */
-    private async ensureSession(firstTask: string): Promise<void> {
+    /** 首条消息时按需创建 session（占位标题，命名由 generateSessionTitle 异步完成） */
+    private async ensureSession(): Promise<void> {
         if (this.session && this.sessionKey) return;
-        // 占位标题 "New Session"——真正命名由 generateSessionTitle 用 LLM 异步完成
-        const session = await this.service.create(
-            this.projectKey,
-            "New Session"
-        );
+        const session = await this.service.create(this.projectKey, DEFAULT_TITLE);
         this.session = session;
         this.sessionKey = {
             projectKey: this.projectKey,
@@ -219,7 +199,7 @@ class AnyAgent {
         sessionKey: SessionKey,
         session: Session
     ): Promise<void> {
-        if (session.title && session.title !== "New Session") return;
+        if (session.title && session.title !== DEFAULT_TITLE) return;
         if (!task.trim()) return;
         const fallback = task.trim().slice(0, 40);
         const ac = new AbortController();
@@ -271,14 +251,6 @@ class AnyAgent {
         return this.projectKey;
     }
 
-    getWorkspace(): Workspace {
-        return this.workspace;
-    }
-
-    getTools(): Tool[] {
-        return this.tools;
-    }
-
     stop() {
         // 1) abort 当前 LLM 调用（真正中断推理，不只是断 rxjs 订阅）
         this.abortController?.abort();
@@ -326,12 +298,7 @@ class AnyAgent {
             throw new Error("compact 需要已存在的 session");
         }
         // compactMessages 保护 messages[0]=system；先确保 [0] 是 system（executeTask 每任务重建，此处补以防未跑过任务）
-        const sys = this.getSystemMessage(this.workspace);
-        if (session.messages[0]?.role === "system") {
-            session.messages[0] = sys[0];
-        } else {
-            session.messages.unshift(sys[0]);
-        }
+        this.ensureSystemHead(session.messages);
         const res = await compactMessages(
             session.messages,
             this.config.getCurrentProvider(),
@@ -394,17 +361,12 @@ class AnyAgent {
 
     private async executeTask(task: string) {
         // 首条消息时创建 session（延迟创建，避免空 session 落盘）
-        await this.ensureSession(task);
+        await this.ensureSession();
         const session = this.session!;
         const sessionKey = this.sessionKey!;
 
         // 重建 system prompt 放 messages[0]（不入盘，每次保持最新）
-        const sys = this.getSystemMessage(this.workspace);
-        if (session.messages[0]?.role === "system") {
-            session.messages[0] = sys[0];
-        } else {
-            session.messages.unshift(sys[0]);
-        }
+        this.ensureSystemHead(session.messages);
 
         const onMessage = (msg: ChatMessage) =>
             this.service.appendMessage(sessionKey, msg);
@@ -434,7 +396,6 @@ class AnyAgent {
             // 自动压缩落盘：agentLoop 原地替换 messages 后回调重写 session.jsonl
             async (msgs) => this.service.replaceMessages(sessionKey, msgs)
         );
-        // 记忆由 save_memory 工具触发（LLM 在循环内主动调用）
         this.abortController = null;
         // 终态信号：被 stop 中断 → STOPPED（前端显示"已停止任务"）；否则 DONE。
         // Error 由 catchError 发 ERROR，前端同样解除 pending。
@@ -448,6 +409,16 @@ class AnyAgent {
                 type: "Done",
                 message: `任务完成`,
             });
+        }
+    }
+
+    /** 确保 messages[0] 是最新 system prompt（compact 与 executeTask 共用的前置保障） */
+    private ensureSystemHead(messages: ChatMessage[]): void {
+        const sys = this.getSystemMessage(this.workspace);
+        if (messages[0]?.role === "system") {
+            messages[0] = sys[0];
+        } else {
+            messages.unshift(sys[0]);
         }
     }
 
@@ -465,9 +436,7 @@ class AnyAgent {
         }
         sysPrompt += memoryNote;
         // shell 兼容性提示（Windows busybox/git-bash 告知 LLM 命令边界；unix 静默）
-        sysPrompt += shellNote(
-            resolveShellKind(workspace.rootPath, this.config.gitBashPath)
-        );
+        sysPrompt += shellNote(resolveShellKind(this.config.gitBashPath));
         if (skills) {
             sysPrompt += skills;
         }

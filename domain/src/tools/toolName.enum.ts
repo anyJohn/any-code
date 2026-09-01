@@ -4,7 +4,6 @@ enum ToolName {
     Edit = "edit",
     Write = "write",
     Explore = "explore",
-    Plan = "plan",
     Glob = "glob",
     Grep = "grep",
     SaveMemory = "save_memory",

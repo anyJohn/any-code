@@ -35,6 +35,7 @@ export type AgentEvent =
     | (EventBase & { type: "Usage"; data: UsageEventData })
     | (EventBase & { type: "Compact"; data: CompactEventData })
     | (EventBase & { type: "Interaction"; data: InteractionEventData })
+    // Planning：预留事件——web/tui 已支持渲染，domain 暂无 emit 方（plan mode 未来接入点）
     | (EventBase & { type: "Planning" })
     | (EventBase & { type: "Error"; error: ErrorPayload })
     | (EventBase & { type: "Warning"; error?: ErrorPayload })
@@ -110,17 +111,6 @@ export interface MessageMeta {
 export interface LlmUsage {
     prompt_tokens: number;
     completion_tokens: number;
-}
-
-export enum AgentStatus {
-    IDLE = "idle",
-    RUNNING = "running",
-    COMPLETED = "completed",
-    ERROR = "error",
-}
-export interface InteractionRequest {
-    type: string;
-    payload?: any;
 }
 
 /** submit 入参：AgentEvent 去掉 timestamp（submit 盖 timestamp）。

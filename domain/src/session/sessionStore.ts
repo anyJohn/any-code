@@ -21,7 +21,6 @@ export interface SessionStore {
     replaceMessages(key: SessionKey, messages: ChatMessage[]): Promise<void>;
     load(key: SessionKey): Promise<SessionEntry[] | null>;
     listMeta(projectKey: string): Promise<SessionMeta[]>;
-    listAllMeta(): Promise<SessionMeta[]>;
     remove(key: SessionKey): Promise<void>;
     /** 跨项目按 sessionId 反查所属 projectKey（sessionId-URL 直链解析用） */
     findKey(sessionId: string): Promise<SessionKey | null>;
@@ -137,24 +136,6 @@ export class LocalSessionStore implements SessionStore {
         }
         metas.sort((a, b) => b.updatedAt - a.updatedAt);
         return metas;
-    }
-
-    async listAllMeta(): Promise<SessionMeta[]> {
-        try {
-            const base = baseDir();
-            const projectDirs = await fs.readdir(base);
-            const all: SessionMeta[] = [];
-            for (const pk of projectDirs) {
-                const stat = await fs.stat(path.join(base, pk));
-                if (stat.isDirectory()) {
-                    all.push(...(await this.listMeta(pk)));
-                }
-            }
-            all.sort((a, b) => b.updatedAt - a.updatedAt);
-            return all;
-        } catch {
-            return [];
-        }
     }
 
     async remove(key: SessionKey): Promise<void> {

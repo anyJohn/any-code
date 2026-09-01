@@ -51,32 +51,23 @@ const askQuestionTool: Tool = {
 const skillTool: Tool = { schema: skillSchema, handler: skillFunc };
 
 // plan 由 AgentTool(planAgent) 提供（见 agent.ts）。
+const builtinTools: Tool[] = [
+    bashTool,
+    readTool,
+    editTool,
+    writeTool,
+    exploreTool,
+    globTool,
+    grepTool,
+    saveMemoryTool,
+    askQuestionTool,
+    skillTool,
+];
+
 const ToolKit = {
-    allTools: [
-        bashTool,
-        readTool,
-        editTool,
-        writeTool,
-        exploreTool,
-        globTool,
-        grepTool,
-        saveMemoryTool,
-        askQuestionTool,
-        skillTool,
-    ],
+    allTools: builtinTools,
     readOnlyTools: [readTool, exploreTool, globTool, grepTool, skillTool],
-    executeTools: [
-        bashTool,
-        readTool,
-        editTool,
-        writeTool,
-        exploreTool,
-        globTool,
-        grepTool,
-        saveMemoryTool,
-        askQuestionTool,
-        skillTool,
-    ],
+    executeTools: builtinTools,
 };
 
 export { ToolKit };

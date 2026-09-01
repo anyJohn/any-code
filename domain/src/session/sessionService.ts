@@ -51,11 +51,6 @@ export class SessionService {
         return this.store.listMeta(projectKey);
     }
 
-    /** 跨项目列表（web 侧栏用） */
-    async listAll(): Promise<SessionMeta[]> {
-        return this.store.listAllMeta();
-    }
-
     async remove(projectKey: string, sessionId: string): Promise<void> {
         return this.store.remove({ projectKey, sessionId });
     }

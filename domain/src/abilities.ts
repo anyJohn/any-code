@@ -19,7 +19,7 @@ export interface Ability {
 const registry = new Map<string, Ability>();
 
 /**
- * 注册能力。层内同名 → fail-fast throw（SPE-031 B-001 / I-001，抄 deepseek NamedEntries）。
+ * 注册能力。层内同名 → fail-fast throw（SPEC-031 B-001 / I-001）。
  * 只读注册、无 unregister——内置能力不可删除（SPEC-031 C-001）。
  */
 export function registerAbility(a: Ability): void {

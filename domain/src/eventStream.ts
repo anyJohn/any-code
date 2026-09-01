@@ -21,8 +21,4 @@ export class EventStream {
     clear() {
         this.history$.next([]);
     }
-
-    getHistory(): AgentEvent[] {
-        return this.history$.getValue();
-    }
 }

@@ -19,13 +19,10 @@ const TOOL_OUTPUT_MAX_CHARS = 2000;
 const SUMMARY_MAX_TOKENS = 4096;
 
 /** 尾部保留的最近消息条数（配对感知：tool 起始会回拉父 assistant）。 */
-export const KEEP_RECENT_MESSAGES = 6;
+const KEEP_RECENT_MESSAGES = 6;
 
 /** 自动压缩阈值：真实 usage.prompt_tokens >= 该比例 * contextWindow 时触发。 */
 export const AUTO_COMPACT_THRESHOLD = 0.75;
-
-// HANDOFF_PREFIX / SUMMARIZER_SYSTEM / 模板 / 拼装函数均在 ./prompt.ts，此处仅 re-export 供测试引用。
-export { COMPACT_HANDOFF_PREFIX };
 
 export interface CompactOptions {
     focus?: string;

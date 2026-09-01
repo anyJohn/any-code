@@ -4,11 +4,6 @@
  * 写入由 save_memory 工具触发（LLM 主动调用）。
  * 读取在 getSystemMessage 合并全局 + 项目两层注入系统提示词。
  * 格式保持 markdown（## 时间戳 + content），兼容旧 Task/Result 条目（降级读取）。
- *
- * Todo List（未实现）:
- * - 基于RAG的向量记忆检索,扩充记忆容量
- * - 记忆压缩/记忆蒸馏,自动压缩旧记忆
- * - 分层记忆（工作/短期/长期），不同密度与保存时间
  */
 
 import fs from "fs";

@@ -12,8 +12,8 @@ import {
     compactMessages,
     splitForCompact,
     estimateTokens,
-    COMPACT_HANDOFF_PREFIX,
 } from "../src/compact";
+import { COMPACT_HANDOFF_PREFIX } from "../src/prompt";
 import type { ChatMessage } from "../src/type";
 import type { LlmProvider } from "../src/config";
 

@@ -1,22 +1,14 @@
 import fs from "fs/promises";
-import { statSync } from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import type { ToolContext } from "../../context";
 import { resolvePath } from "../../workspace";
+import { stalenessWarning, recordMtime } from "./fileState";
 
 interface WriteArgs {
     filePath: string;
     content: string;
 }
-
-const mtimeOf = (p: string): number | undefined => {
-    try {
-        return statSync(p).mtimeMs;
-    } catch {
-        return undefined;
-    }
-};
 
 /**
  * 整文件写入。原子写（同目录 temp + rename，崩溃不留半写）。
@@ -32,19 +24,11 @@ export const writeFunc = async (
         const filePath = resolvePath(workspace, args.filePath);
         await fs.mkdir(path.dirname(filePath), { recursive: true });
 
-        // staleness：read 记过 mtime 且当前漂移 → 警告（不阻断写入）
-        const fileState = ctx.fileState;
-        let stalenessWarn = "";
-        if (fileState) {
-            const recorded = fileState.get(filePath);
-            if (recorded !== undefined) {
-                const cur = mtimeOf(filePath);
-                if (cur !== undefined && Math.abs(cur - recorded) > 1) {
-                    stalenessWarn =
-                        " [警告: 文件自上次 read 后被外部改动，已覆写]";
-                }
-            }
-        }
+        const stalenessWarn = stalenessWarning(
+            ctx.fileState,
+            filePath,
+            "覆写"
+        );
 
         // 原子写：同目录 temp + rename，同文件系统原子发布，崩溃不留半写
         tmp = `${filePath}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
@@ -52,11 +36,7 @@ export const writeFunc = async (
         await fs.rename(tmp, filePath);
         tmp = null; // rename 成功，无需清理
 
-        // 记录新 mtime（供后续 write/edit staleness）
-        if (fileState) {
-            const nm = mtimeOf(filePath);
-            if (nm !== undefined) fileState.set(filePath, nm);
-        }
+        recordMtime(ctx.fileState, filePath);
         return `Successfully wrote ${args.content.length} characters to ${args.filePath}${stalenessWarn}`;
     } catch (error) {
         if (tmp) {
