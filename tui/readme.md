@@ -1,6 +1,6 @@
 # @any-code/tui
 
-> Terminal UI for AnyCode, built with Ink.
+> Terminal UI for AnyCode, built with Ink（早期，开发中）。
 
 ## Install
 
@@ -15,9 +15,6 @@ pnpm build
 # Development
 pnpm dev
 
-# With options
-pnpm dev -- --api-key=sk-xxx --model=gpt-4 --base-url=https://api.openai.com/v1
-
 # Build and run
 pnpm build
 pnpm start
@@ -25,8 +22,14 @@ pnpm start
 
 ## Options
 
-| Option       | Env Var          | Description    |
-| ------------ | ---------------- | -------------- |
-| `--api-key`  | `OPENAI_API_KEY` | LLM API key    |
-| `--base-url` | `OPENAI_BASE_URL`| API base URL   |
-| `--model`    | `OPENAI_MODEL`   | Model name     |
+| Option      | Description                                  |
+| ----------- | -------------------------------------------- |
+| （无参数）   | 新会话；配置读 `<workspace>/.anycode/config.yaml` |
+| `--resume`  | 按 id 恢复指定会话                             |
+| `--continue`| 恢复最近一条会话                               |
+| `--sessions`| 列出当前项目的会话后退出                        |
+
+## Commands
+
+- `/resume` — 选择并恢复历史会话
+- `/help` — 显示可用命令

@@ -11,18 +11,20 @@
         "dev": "tsx source/cli.tsx",
         "dev:watch": "node esbuild.config.cjs --watch",
         "start": "node dist/cli.js",
-        "test": "prettier --check --ignore-path=.prettierignore source"
+        "test": "prettier --check source"
     },
     "files": [
         "dist"
     ],
     "dependencies": {
-        "@types/figlet": "^1.7.0",
         "figlet": "^1.11.0",
         "ink": "^7.0.1",
         "ink-text-input": "^6.0.0",
         "meow": "^11.0.0",
         "react": "^19.2.5",
         "@any-code/domain": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/figlet": "^1.7.0"
     }
 }

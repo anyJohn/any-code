@@ -14,9 +14,3 @@ export interface Message {
     content: string;
     timestamp: number;
 }
-
-export interface AgentConfig {
-    apiKey?: string;
-    baseUrl?: string;
-    model?: string;
-}

@@ -68,7 +68,7 @@ export function MessageItem({
     );
 }
 
-export default function MessageList({
+export function MessageList({
     messages,
     showTimestamp = true,
 }: MessageListProps) {

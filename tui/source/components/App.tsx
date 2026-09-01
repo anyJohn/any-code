@@ -7,9 +7,9 @@ import SessionSelect from "./SessionSelect";
 import { Message, MessageType } from "../types";
 import {
     AnyAgent,
-    EventType,
     SessionService,
     SessionMeta,
+    type EventType,
 } from "@any-code/domain";
 
 interface AppProps {
@@ -64,21 +64,21 @@ export default function App(props: AppProps) {
         return "";
     }, []);
 
-    // Map domain EventType to TUI MessageType
+    // Map domain EventType（string-literal union）to TUI MessageType
     const mapEventType = useCallback((eventType: EventType): MessageType => {
-        const eventTypeMap: Record<EventType, MessageType> = {
-            [EventType.SYSTEM]: MessageType.SYSTEM,
-            [EventType.USER]: MessageType.USER,
-            [EventType.TOOL]: MessageType.TOOL,
-            [EventType.ITERATION]: MessageType.ITERATION,
-            [EventType.ASSISTANT_DELTA]: MessageType.ASSISTANT,
-            [EventType.ASSISTANT]: MessageType.ASSISTANT,
-            [EventType.PLANNING]: MessageType.PLANNING,
-            [EventType.ERROR]: MessageType.ERROR,
-            [EventType.DONE]: MessageType.SYSTEM,
-            [EventType.STOPPED]: MessageType.SYSTEM,
+        const eventTypeMap: Partial<Record<EventType, MessageType>> = {
+            System: MessageType.SYSTEM,
+            User: MessageType.USER,
+            Tool: MessageType.TOOL,
+            Iteration: MessageType.ITERATION,
+            AssistantDelta: MessageType.ASSISTANT,
+            Assistant: MessageType.ASSISTANT,
+            Planning: MessageType.PLANNING,
+            Error: MessageType.ERROR,
+            Done: MessageType.SYSTEM,
+            Stopped: MessageType.SYSTEM,
         };
-        return eventTypeMap[eventType] || MessageType.SYSTEM;
+        return eventTypeMap[eventType] ?? MessageType.SYSTEM;
     }, []);
 
     const addMessage = useCallback(
@@ -149,7 +149,7 @@ export default function App(props: AppProps) {
             // Subscribe to agent's event stream
             const eventSubscription = agent.eventStream$.subscribe({
                 next: (event) => {
-                    if (event.type === EventType.ASSISTANT_DELTA) {
+                    if (event.type === "AssistantDelta") {
                         // 流式增量：累积到实时区，不入 <Static>（Static 按 index
                         // 缓存、永不重渲，逐 token 追加会刷屏）
                         setStreamingText(
@@ -159,18 +159,14 @@ export default function App(props: AppProps) {
                             event.turnId ?? streamingTurnIdRef.current;
                         return;
                     }
-                    if (event.type === EventType.ASSISTANT) {
+                    if (event.type === "Assistant") {
                         // 定稿：整条入 <Static>，清空实时区
-                        addMessage(
-                            MessageType.ASSISTANT,
-                            event.message,
-                            event.data
-                        );
+                        addMessage(MessageType.ASSISTANT, event.message);
                         setStreamingText("");
                         streamingTurnIdRef.current = null;
                         return;
                     }
-                    if (event.type === EventType.STOPPED) {
+                    if (event.type === "Stopped") {
                         // 中断时丢弃未定稿的流式片段
                         setStreamingText("");
                         streamingTurnIdRef.current = null;
@@ -178,7 +174,7 @@ export default function App(props: AppProps) {
                     addMessage(
                         mapEventType(event.type),
                         event.message,
-                        event.data
+                        "data" in event ? event.data : undefined
                     );
                 },
                 error: (errEvent) => {
