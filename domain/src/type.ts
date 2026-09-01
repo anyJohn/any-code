@@ -5,6 +5,8 @@ export type ChatMessage = ChatCompletionMessageParam;
 export interface AgentLoopResult {
     result: string;
     messages: ChatMessage[];
+    /** 终态语义（FR-14）：completed=正常完成；stopped=用户中断；max_iterations=迭代上限耗尽（UI 明示+建议动作） */
+    stopReason: "completed" | "stopped" | "max_iterations";
 }
 
 // ── 事件类型（SPEC-030 B-001：discriminated union，per-variant typed payload，删 data?:any）──

@@ -77,6 +77,7 @@ describe("agentLoop（core.ts）", () => {
         expect(messages[2].content).toBe("tool-output");
         expect(messages[3].role).toBe("assistant");
         expect(messages[3].content).toBe("done");
+        expect(res.stopReason).toBe("completed");
     });
 
     it("AC-002 无 tool_calls → 单次 callLLM 后直接返回", async () => {
@@ -97,6 +98,7 @@ describe("agentLoop（core.ts）", () => {
         expect(res.result).toBe("hello");
         expect(messages).toHaveLength(2); // user + assistant
         expect(messages[1].content).toBe("hello");
+        expect(res.stopReason).toBe("completed");
     });
 
     it("AC-003 signal aborted → 不再调 callLLM，返回 [stopped]", async () => {
@@ -116,6 +118,7 @@ describe("agentLoop（core.ts）", () => {
 
         expect(vi.mocked(callLLM)).not.toHaveBeenCalled();
         expect(res.result).toBe("[stopped]");
+        expect(res.stopReason).toBe("stopped");
     });
 
     it("SPEC-030 AC-004/005：压缩失败 → 发 Warning（非终态）+ 循环继续", async () => {
@@ -184,6 +187,9 @@ describe("agentLoop（core.ts）", () => {
 
         expect(res.result).toBe("Max iterations reached");
         expect(vi.mocked(callLLM)).toHaveBeenCalledTimes(2);
+        expect(res.stopReason).toBe("max_iterations");
+        const warnings = (ctx.eventStream.submit as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]).filter((e) => e.type === "Warning");
+        expect(warnings.some((e) => e.message.includes("达到上限"))).toBe(true);
     });
 
     it("AC-002 callLLM 第 6 参 onThinkingDelta → 发 THINKING 事件（SPEC-015）", async () => {

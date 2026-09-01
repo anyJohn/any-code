@@ -1,15 +1,73 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { randomBytes } from "node:crypto";
 import type { ToolContext } from "../../context";
 import { globalConfigDir } from "../../workspace";
 
 interface ExecuteBashArgs {
     command: string;
+    /** 超时毫秒（模型可指定）。clamp 到 [1000, 600000]，默认 120000。AR-2 */
+    timeout_ms?: number;
 }
 
-/** 长/挂起命令的超时。spawn 无 maxBuffer——输出边流式上抛边累积，无 1MB 限制。 */
-const BASH_TIMEOUT_MS = 120_000;
+/** 默认超时；模型可用 timeout_ms 覆盖（硬上限 600s）。AR-2 */
+const BASH_DEFAULT_TIMEOUT_MS = 120_000;
+const BASH_MAX_TIMEOUT_MS = 600_000;
+
+/** 输出双限（AR-2）：行数 / 字节，超限保留头部 + 截断标记 + spill 文件路径。 */
+const OUTPUT_MAX_LINES = 2000;
+const OUTPUT_MAX_BYTES = 40_000;
+
+/**
+ * 超限输出落盘（pi/Claude Code 同构）：全量写临时文件，截断标记给出路径，
+ * 模型可用 read 工具分段读取。写失败忽略（截断标记仍有效）。
+ */
+function spillOutput(out: string): string | null {
+    try {
+        const file = join(tmpdir(), `anycode-bash-${randomBytes(6).toString("hex")}.log`);
+        writeFileSync(file, out, "utf-8");
+        return file;
+    } catch {
+        return null;
+    }
+}
+
+/** 双限截断：保留头部，附截断标记（总行数/字节 + spill 路径）。未超限原样返回。 */
+function capBashOutput(out: string): string {
+    const lines = out.split("\n");
+    const truncated =
+        lines.length > OUTPUT_MAX_LINES || Buffer.byteLength(out, "utf-8") > OUTPUT_MAX_BYTES;
+    if (!truncated) return out;
+
+    let kept = out;
+    if (Buffer.byteLength(kept, "utf-8") > OUTPUT_MAX_BYTES) {
+        // 按字节截（避免把多字节字符劈半：从上限往回找）
+        let end = OUTPUT_MAX_BYTES;
+        while (end > 0 && (out.charCodeAt(end) & 0xc0) === 0x80) end--;
+        kept = out.slice(0, end);
+        kept = kept.split("\n").slice(0, OUTPUT_MAX_LINES).join("\n");
+    } else {
+        kept = lines.slice(0, OUTPUT_MAX_LINES).join("\n");
+    }
+    const spill = spillOutput(out);
+    const spillNote = spill
+        ? `\n[完整输出已写入文件：${spill}（可用 read 工具分段查看）]`
+        : "";
+    return (
+        `${kept}\n[输出截断：共 ${lines.length} 行 / ${Buffer.byteLength(out, "utf-8")} 字节，` +
+        `仅保留前 ${kept.split("\n").length} 行]${spillNote}`
+    );
+}
+
+/** 解析超时：clamp 到 [1s, 600s]，非法/缺省用默认值。 */
+function resolveTimeoutMs(timeoutMs?: number): number {
+    if (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs)) {
+        return BASH_DEFAULT_TIMEOUT_MS;
+    }
+    return Math.min(Math.max(Math.round(timeoutMs), 1000), BASH_MAX_TIMEOUT_MS);
+}
 
 /** Windows 上系统 Git for Windows 的 bash.exe 回退路径。 */
 const SYSTEM_GIT_BASH = "C:\\Program Files\\Git\\bin\\bash.exe";
@@ -115,7 +173,7 @@ export const executeBashFunc = async (
 
         const timer = setTimeout(() => {
             child.kill("SIGTERM");
-        }, BASH_TIMEOUT_MS);
+        }, resolveTimeoutMs(args.timeout_ms));
 
         const onChunk = (chunk: Buffer, stream: "stdout" | "stderr") => {
             const text = chunk.toString();
@@ -131,14 +189,17 @@ export const executeBashFunc = async (
             finish(`Error: ${err.message}`);
         });
         child.on("close", (code, signal) => {
-            const out = `${stdout}${stderr}`.trim();
+            const raw = `${stdout}${stderr}`.trim();
             if (signal === "SIGTERM") {
-                finish(`[Timed out after ${BASH_TIMEOUT_MS}ms]\n${out}`);
+                finish(
+                    `[Timed out after ${resolveTimeoutMs(args.timeout_ms)}ms]\n` +
+                        capBashOutput(raw)
+                );
             } else if (code !== 0) {
                 // 非零退出码（grep 无匹配、ls 目标不存在等）也走这里，输出对 agent 有用，不丢弃
-                finish(out || `Error: exit code ${code}`);
+                finish(capBashOutput(raw) || `Error: exit code ${code}`);
             } else {
-                finish(out);
+                finish(capBashOutput(raw));
             }
         });
     });

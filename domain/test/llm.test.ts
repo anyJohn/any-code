@@ -141,7 +141,7 @@ describe("callLLM 流式（llm.ts）", () => {
 
     it("空响应（无 content 无 tool_calls）抛错", async () => {
         mockCreate.mockResolvedValue(makeStream([{ choices: [{ delta: {} }] }]));
-        await expect(callLLM([], undefined, undefined, undefined, PROVIDER)).rejects.toThrow(
+        await expect(callLLM([], undefined, undefined, undefined, { ...PROVIDER, retry: { maxRetries: 0 } })).rejects.toThrow(
             /no content/
         );
     });

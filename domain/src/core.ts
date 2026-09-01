@@ -37,7 +37,7 @@ export async function agentLoop(
     for (let i = 0; i < maxIter; i++) {
         // 迭代边界先查中断：stop() 已 abort 的话直接返回，不发起 LLM 调用
         if (ctx.signal.aborted) {
-            return { result: "[stopped]", messages };
+            return { result: "[stopped]", messages, stopReason: "stopped" };
         }
         // 自动压缩：上一轮真实 usage.prompt_tokens >= 75% * contextWindow → 压缩后继续。
         // 真实 usage 最准（无需 tokenizer）；首迭代无 usage 不会触 75%。
@@ -66,7 +66,7 @@ export async function agentLoop(
                 }
             } catch (err) {
                 if (ctx.signal.aborted) {
-                    return { result: "[stopped]", messages };
+                    return { result: "[stopped]", messages, stopReason: "stopped" };
                 }
                 // 压缩失败不阻断主循环：发 Warning（非终态），循环继续原 messages（下轮可能再试）。
                 // web TERMINAL 不含 Warning → 不会误终止 run（SPEC-030 B-003/I-003，修 latent bug）。
@@ -117,12 +117,18 @@ export async function agentLoop(
                         message: info.name ?? "tool",
                         data: { bytes: info.bytes, name: info.name },
                         turnId,
+                    }),
+                // 重试可见性（AR-1）：Warning durable 事件，前端 amber 行展示
+                (info) =>
+                    ctx.eventStream.submit({
+                        type: "Warning",
+                        message: `LLM 调用失败，第 ${info.attempt}/${info.maxRetries} 次重试（${info.delayMs}ms 后）：${info.error}`,
                     })
             );
         } catch (err) {
             // callLLM 流式 abort 时返回截断（不抛），此处只兜底其他异常
             if (ctx.signal.aborted) {
-                return { result: "[stopped]", messages };
+                return { result: "[stopped]", messages, stopReason: "stopped" };
             }
             throw err;
         }
@@ -137,7 +143,7 @@ export async function agentLoop(
                     turnId,
                 });
             }
-            return { result: "[stopped]", messages };
+            return { result: "[stopped]", messages, stopReason: "stopped" };
         }
         messages.push(msg);
         await onMessage?.(msg);
@@ -167,6 +173,7 @@ export async function agentLoop(
             return {
                 result: msg.content || "",
                 messages,
+                stopReason: "completed",
             };
         } else {
             const toolResults = await toolCall(msg.tool_calls, ctx, tools, turnId);
@@ -176,8 +183,14 @@ export async function agentLoop(
             }
         }
     }
+    // 迭代上限耗尽：明确终态语义 + 用户可见建议动作（FR-14，不再静默返回字符串）
+    ctx.eventStream.submit({
+        type: "Warning",
+        message: `任务在 ${maxIter} 轮迭代后达到上限，可能尚未完成。可继续对话让 agent 接着做，或 /compact 释放上下文后重试。`,
+    });
     return {
         result: "Max iterations reached",
         messages,
+        stopReason: "max_iterations",
     };
 }

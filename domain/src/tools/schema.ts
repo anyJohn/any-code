@@ -5,13 +5,19 @@ const executeBashSchema: ChatCompletionTool = {
     type: "function",
     function: {
         name: ToolName.Bash,
-        description: "Execute a bash command on the system.",
+        description:
+            "Execute a bash command on the system. Long-running or high-output commands may hit the timeout or output cap — the result will say so and point to a full-output file you can read.",
         parameters: {
             type: "object",
             properties: {
                 command: {
                     type: "string",
                     description: "The bash command to execute",
+                },
+                timeout_ms: {
+                    type: "number",
+                    description:
+                        "Optional timeout in milliseconds (1000-600000). Default 120000.",
                 },
             },
             required: ["command"],

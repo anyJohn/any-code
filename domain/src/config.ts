@@ -36,6 +36,8 @@ export interface LlmProvider {
     contextWindow?: number;
     /** 最大输出 token；用户配则传 max_tokens，undefined 不传（provider 默认）。SPEC-023 */
     maxOutputTokens?: number;
+    /** LLM 调用重试（AR-1）：maxRetries 默认 3、baseDelayMs 默认 1000（指数退避+抖动，Retry-After 优先）。 */
+    retry?: { maxRetries?: number; baseDelayMs?: number };
 }
 
 /**
@@ -231,6 +233,7 @@ function normalize(
             streaming: p.streaming ?? true,
             contextWindow: p.contextWindow,
             maxOutputTokens: p.maxOutputTokens,
+            retry: p.retry,
         };
     }
     return out;

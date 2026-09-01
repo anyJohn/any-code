@@ -8,6 +8,98 @@ import OpenAI from "openai";
 
 type LlmResult = ChatCompletionMessage & { usage?: LlmUsage; _meta?: MessageMeta };
 
+/** 重试默认值（AR-1）：3 次、初始 1s 指数退避 + 抖动；provider.retry 可覆盖。 */
+const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_BASE_DELAY_MS = 1000;
+
+/**
+ * 错误可重试判定（AR-1）：429 / 5xx / 网络连接类 / 空响应 可重试；
+ * 4xx 参数与鉴权类、abort 不可重试。
+ */
+export function isRetryableError(err: unknown): boolean {
+    const name = (err as { name?: unknown })?.name;
+    if (name === "AbortError" || name === "APIUserAbortError") return false;
+    const status = (err as { status?: unknown })?.status;
+    if (typeof status === "number") return status === 429 || status >= 500;
+    // 无 HTTP status：网络连接类（openai APIConnectionError / fetch failed 等）
+    if (name === "APIConnectionError") return true;
+    const msg = String((err as Error)?.message ?? err);
+    return /fetch failed|network|connection error|econn|etimedout|socket|terminated|llm returned no content/i.test(
+        msg
+    );
+}
+
+/** 尊重服务端 Retry-After 头（秒或 HTTP 日期；日期解析失败忽略）。 */
+export function retryAfterDelayMs(err: unknown): number | undefined {
+    const headers = (err as { headers?: unknown })?.headers;
+    if (!headers || typeof headers !== "object") return undefined;
+    const raw = (headers as Record<string, unknown>)["retry-after"];
+    if (typeof raw === "number" && Number.isFinite(raw)) return raw * 1000;
+    if (typeof raw === "string") {
+        const sec = Number(raw);
+        if (Number.isFinite(sec)) return sec * 1000;
+        const date = Date.parse(raw);
+        if (!Number.isNaN(date)) return Math.max(0, date - Date.now());
+    }
+    return undefined;
+}
+
+/** abort 可中断的 sleep：等待期间 abort 立即抛出（重试等待不拖住 stop）。 */
+async function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+    if (!signal) {
+        await new Promise((r) => setTimeout(r, ms));
+        return;
+    }
+    if (signal.aborted) throw signal.reason ?? new Error("aborted");
+    await new Promise<void>((resolve, reject) => {
+        const onAbort = () => {
+            clearTimeout(timer);
+            reject(signal.reason ?? new Error("aborted"));
+        };
+        const timer = setTimeout(() => {
+            signal.removeEventListener("abort", onAbort);
+            resolve();
+        }, ms);
+        signal.addEventListener("abort", onAbort, { once: true });
+    });
+}
+
+/**
+ * 重试执行器（AR-1，纯 seam 便于直测）：fn 失败按指数退避重试（默认 3 次 + 25% 抖动），
+ * 服务端 Retry-After 优先；4xx/abort 不重试；abort 可中断等待。
+ * callLLM 用它包裹 streamCall/nonStreamCall；onRetry 供调用方发可见性事件。
+ */
+export async function withRetry<T>(
+    fn: () => Promise<T>,
+    opts: {
+        maxRetries: number;
+        baseDelayMs: number;
+        signal?: AbortSignal;
+        onRetry?: (info: { attempt: number; maxRetries: number; delayMs: number; error: string }) => void;
+    }
+): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+        try {
+            return await fn();
+        } catch (err) {
+            // abort：直接向上（agentLoop 按 signal.aborted 走 STOPPED 语义）
+            if (opts.signal?.aborted) throw err;
+            if (attempt >= opts.maxRetries || !isRetryableError(err)) throw err;
+            // Retry-After 优先（服务端明确指示），否则指数退避 + 25% 抖动
+            const retryAfter = retryAfterDelayMs(err);
+            const backoff = opts.baseDelayMs * 2 ** attempt * (1 + Math.random() * 0.25);
+            const delayMs = Math.round(Math.max(retryAfter ?? 0, backoff));
+            opts.onRetry?.({
+                attempt: attempt + 1,
+                maxRetries: opts.maxRetries,
+                delayMs,
+                error: err instanceof Error ? err.message : String(err),
+            });
+            await abortableSleep(delayMs, opts.signal);
+        }
+    }
+}
+
 /** 剥离 assistant message 上的非标准 _meta sidecar，避免发给 provider（部分 provider 会 400）。SPEC-017 C-002 */
 function stripMeta(messages: ChatMessage[]): ChatMessage[] {
     return messages.map((m) => {
@@ -27,6 +119,9 @@ function stripMeta(messages: ChatMessage[]): ChatMessage[] {
  * 非流式：整段返回 choices[0].message。
  * usage：捕获响应 token 用量（非流式 resp.usage；流式 stream_options.include_usage 末片）附在返回 message 上。
  * llm 由调用方（AnyAgent 从 config.yaml 解析）传入，必填。
+ * 重试（AR-1）：429/5xx/网络/空响应按指数退避自动重试（默认 3 次，provider.retry 可配），
+ *   服务端 Retry-After 优先；每次重试经 onRetry 通知调用方（core.ts 发 Warning 可见）；
+ *   abort 随时中断（含等待期）。
  */
 export async function callLLM(
     messages: ChatMessage[],
@@ -35,7 +130,8 @@ export async function callLLM(
     onDelta?: (delta: string) => void,
     llm?: LlmProvider,
     onThinkingDelta?: (delta: string) => void,
-    onToolArgProgress?: (info: { name?: string; bytes: number }) => void
+    onToolArgProgress?: (info: { name?: string; bytes: number }) => void,
+    onRetry?: (info: { attempt: number; maxRetries: number; delayMs: number; error: string }) => void
 ): Promise<LlmResult> {
     if (!llm) {
         throw new Error("callLLM 需要 provider 配置（由 AnyAgent 从 config.yaml 解析传入）");
@@ -57,11 +153,16 @@ export async function callLLM(
     if (typeof provider.maxOutputTokens === "number") {
         payload.max_tokens = provider.maxOutputTokens;
     }
-    // signal 透传：stop() abort 时流式生成抛 AbortError（下方 catch 兜底）/ 非流式 fetch 取消。
-    if (provider.streaming) {
-        return streamCall(client, payload, signal, onDelta, onThinkingDelta, onToolArgProgress, provider.defaultModel);
-    }
-    return nonStreamCall(client, payload, signal, provider.defaultModel);
+    const maxRetries = provider.retry?.maxRetries ?? DEFAULT_MAX_RETRIES;
+    const baseDelayMs = provider.retry?.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
+    // signal 透传：stop() abort 时流式生成抛 AbortError（withRetry 内兜底）/ 非流式 fetch 取消。
+    return withRetry(
+        () =>
+            provider.streaming
+                ? streamCall(client, payload, signal, onDelta, onThinkingDelta, onToolArgProgress, provider.defaultModel)
+                : nonStreamCall(client, payload, signal, provider.defaultModel),
+        { maxRetries, baseDelayMs, signal, onRetry }
+    );
 }
 
 /** 从 CompletionUsage 取 prompt/completion tokens */
