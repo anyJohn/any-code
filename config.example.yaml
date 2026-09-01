@@ -53,3 +53,16 @@ abilities:
     enabled: false
     config:
       cdpUrl: http://127.0.0.1:9222 # chrome --remote-debugging-port=9222 后填此（连接器自动发现 page）
+
+# 工具权限（SPEC-032）：危险操作执行前判定。规则按顺序匹配，后面的覆盖前面的。
+# pattern：bash=命令匹配（* 通配，如 "npm *"）、write/edit=路径 glob（如 "src/**"）；其余工具仅按工具名。
+# mode：standard（出厂默认：命令/写入/MCP 询问，只读直通）/ accept_edits（写文件放行）/ trusted（全直通，基线仍拦）
+# dangerPatterns：危险命令基线（bash 子串匹配，命中即询问，任何模式不可越过；缺省内置集，可增删）
+permissions:
+  mode: standard
+  rules: []
+  # rules:
+  #   - tool: bash
+  #     pattern: "npm *"
+  #     action: allow
+  dangerPatterns: [] # 留空 = 使用内置默认集（rm -rf / sudo / mkfs 等）

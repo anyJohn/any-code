@@ -44,6 +44,13 @@
   - 手动指令 `/compact [聚焦]` 压缩
   - 保留最近若干消息，确保压缩不影响当前工作
   - 压缩失败发非终态 Warning（不误终止 run）
+- permissions（工具权限，SPEC-032）
+  - 执行前判定：用户规则（项目级覆盖全局，后匹配生效）→ 危险命令基线 → 模式默认
+  - 规则粒度：工具名 + 参数模式（bash 命令 `*` 通配、文件路径 glob）
+  - 预设三档：标准（出厂默认，命令/写入/MCP 询问）/ 编辑放行（写自动过）/ 信任（全直通，基线仍拦）
+  - ask 裁决：PermissionModal 允许一次（会话内按匹配模式缓存）/ 永久允许（默认项目级，可勾全局）/ 拒绝；120s 超时按拒绝
+  - 危险命令基线可配置增删（内置 rm -rf / sudo / mkfs 等最小集）
+  - 审计：asked/decided durable 事件入会话日志，resume 回放可见
 - subagents
   - Plan agent，复杂任务委托 plan sub-agent 拆解（预置，声明式 `AgentTool(AgentDefinition)`）
   - task agent，并行执行任务（todo）
@@ -91,6 +98,7 @@
 - 工具调用 ToolRow：默认折叠显摘要，展开看参数与 result；活动工具卡片显实时执行 / 参数生成进度
 - sub-agent SubagentBlock：sub-agent 事件分组渲染（author / runId 打标）
 - 交互 InteractionModal：`ask_question` 工具向 human 提问 / 选择
+- 权限裁决 PermissionModal：危险操作执行前弹窗（允许一次 / 永久允许含范围勾选 / 拒绝）；Settings 工具权限卡（模式三档 + 全局/项目规则增删 + 危险基线增删）
 - 输入 InputBox：slash 命令补全、`@` 文件引用、上下文压缩 indeterminate 进度条、停止 / 发送
 - 状态栏 StatusBar：模型 / Provider、上下文用量进度、Skill 数、MCP 数
 - 设置 Settings：`config.yaml` 图形化编辑，卡片可折叠（默认提供方 → 模型提供方 → 内置能力 → MCP 服务，FE-022）；内置能力开关用 Switch、web-search 行内 provider（ddg/tavily/bing）+ API Key 配置；Provider 支持**拉取模型**（GET /models 填充列表）/ **测试模型**（ping 测可用性 + 首字延迟，✓/✗ 徽标）/ **选择模型**（可用者设默认），参考 LLM_Proxy；热生效
