@@ -7,12 +7,12 @@
 //   Linux   anycode:      exec "<node>" "<this>" "$@"
 // Output is ASCII-only on purpose (node stdout on Windows is codepage-dependent, unlike Python).
 //
-// Runs the Next.js standalone server (output:"standalone") via the private node — no `next` CLI,
-// no full node_modules needed at runtime. Sets HOSTNAME=127.0.0.1 (standalone server.js defaults
-// to 0.0.0.0 = public! must override) + ANYCODE_RG_PATH to the vendored rg binary.
+// Runs the hono server bundle (server/dist/server.mjs) via the private node — no full
+// node_modules needed at runtime. Sets HOSTNAME=127.0.0.1 (node http listen defaults to
+// ::/0.0.0.0 = public! must override) + ANYCODE_RG_PATH to the vendored rg binary.
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir, platform, tmpdir } from "node:os";
 

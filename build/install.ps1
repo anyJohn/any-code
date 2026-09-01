@@ -128,7 +128,7 @@ $env:PATH = "$NodeDir;$env:PATH"
 Info "node: $(node -v)"
 
 # ---- 2. busybox-w32 (agent bash tool; single ~700KB exe = sh + coreutils, no extraction) ----
-# leaner than PortableGit (~400MB with full git+mingw64) which we don't need -- only sh+coreutils.
+# only sh+coreutils (~1MB) -- enough for the agent's bash tool, no full git distribution.
 $BusyboxDir = Join-Path $AnycodeHome 'runtime\busybox'
 $ShExe = Join-Path $BusyboxDir 'sh.exe'
 if (-not (Test-Path $ShExe)) {
@@ -212,7 +212,7 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $null = New-Item -ItemType Directory -Force -Path (Join-Path $AnycodeHome 'bin')
 [System.IO.File]::WriteAllText($anycodeCmd, $cmdContents, $utf8NoBom)
 # gitBashPath into config.yaml (top-level; bash.ts reads config, not env). Skip if config.yaml absent
-# (first install: AnyAgent creates config on first run; bash.ts then auto-finds PortableGit location).
+# (first install: AnyAgent creates config on first run; bash.ts then auto-finds the busybox runtime location).
 # .NET ReadAllText/WriteAllText + UTF8Encoding($false): BOM-aware read + BOM-less write.
 # PS 5.1's Set-Content -Encoding UTF8 writes a BOM, which makes js-yaml (domain Config.load) throw.
 $cfg = Join-Path $AnycodeHome 'config.yaml'

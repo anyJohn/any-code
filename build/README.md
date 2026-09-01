@@ -62,20 +62,20 @@ curl -fsSL https://raw.githubusercontent.com/anyJohn/any-code/main/build/install
 
 1. **私有 provision node**：下载 nodejs.org LTS 到 `~/.anycode/runtime/node`。下载 pnpm standalone（`pnpm/pnpm` releases）到 `~/.anycode/runtime/pnpm`（绕开 corepack 0.29 验签 bug）。不写系统 PATH、不要 sudo / admin。
 2. **拉取仓库**：从 GitHub 下载 tarball / zip（codeload，不依赖系统 git）解压到 `~/.anycode/app`。
-3. **构建**：`pnpm install --frozen-lockfile` + `pnpm --filter @any-code/web build`（next build）。
+3. **构建**：`pnpm install --frozen-lockfile` + `pnpm --filter @any-code/web build`（vite build）+ `pnpm --filter @any-code/server build`（esbuild → server.mjs）；随后删除 build-only node_modules 省空间。
 4. **注册命令**：复制启动器到 `~/.anycode/bin/anycode` 并把该目录加到用户 PATH（Linux patch shell rc；Windows User PATH）。
-5. **Windows 额外**：下载 PortableGit（含 bash.exe + coreutils）到 `~/.anycode/runtime/portablegit`，并把 bash 路径写入 `~/.anycode/config.yaml` 的 `gitBashPath`（config 是单一可信源，非 env var）——保证 agent 的 bash 工具在 Windows 与 Linux 行为一致。首装无 config 时 bash 工具自动发现 PortableGit 下发位置。
+5. **Windows 额外**：下载 busybox-w32（sh + coreutils 单 exe）到 `~/.anycode/runtime/busybox/sh.exe`——保证 agent 的 bash 工具在 Windows 与 Linux 行为一致。首装无 config 时 bash 工具自动发现 busybox 下发位置。
 6. 下载校验：node 包 sha256 校验，不符即终止。
 
 ## 目录布局
 
 ```
 ~/.anycode/
-├── config.yaml / memory.md / workspaces.json / rules/ / skills/   # 用户配置（安装不动）
+├── config.yaml / memory.md / workspaces.json / skills/   # 用户配置（安装不动）
 ├── runtime/node/            # 私有 node 运行时
-├── runtime/portablegit/     # 仅 Windows：PortableGit（agent bash 工具用）
-├── app/                     # 仓库代码 + node_modules + web/.next 构建产物
-└── bin/anycode(.bat)        # 启动器（注册到 PATH）
+├── runtime/busybox/         # 仅 Windows：busybox-w32 sh.exe（agent bash 工具用）
+├── app/                     # 仓库代码 + 构建产物（web/dist 静态 SPA + server/dist/server.mjs）
+└── bin/anycode / anycode.cmd  # 2 行 shim → launcher.mjs（注册到 PATH）
 ```
 
 ## 卸载
@@ -89,7 +89,7 @@ Remove-Item -Recurse -Force ~\.anycode   # Windows
 
 ## 更新
 
-v1 无自更新：重跑安装命令即可（已装的 node/PortableGit 会复用，仅拉新代码 + 重建）。后续会加 `anycode update`。
+`anycode update` 重跑平台安装器（幂等：已装的 node/pnpm/busybox 复用，仅拉新代码 + 重建）；`anycode uninstall` 卸载。
 
 ## 文件
 
@@ -106,4 +106,4 @@ v1 无自更新：重跑安装命令即可（已装的 node/PortableGit 会复�
 v1：Windows + Linux。
 - **Linux**：跑 `install.sh`。
 - **Windows**：跑 `install.ps1`（PowerShell 一行）。兜底：若在 Git Bash 里跑了 `install.sh`，它会检测到 MINGW/MSYS 环境自动改走 `install.ps1`（不在 bash 里重写 Windows 逻辑）。
-- macOS、Electron 桌面客户端、代码签名（SmartScreen/Gatekeeper）作为后续特性。
+- macOS（安装脚本）、代码签名（SmartScreen/Gatekeeper）与桌面自动更新作为后续特性；Electron 桌面客户端已提供（desktop/ 打包 AppImage/NSIS/mac zip）。
