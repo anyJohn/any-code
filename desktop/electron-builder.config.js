@@ -1,6 +1,6 @@
 /**
  * electron-builder config（SPEC-029）。
- * Win = NSIS exe，Linux = AppImage。macOS 不做（本 RR 排除）。
+ * Win = NSIS exe，Linux = AppImage；mac = zip/dir（交叉构建产物，dmg 需 macOS hdiutil 暂不做）。
  *
  * 自包含策略：
  * - files: dist/main/main.cjs（esbuild bundle，内联 server+domain）+ package.json
