@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createApp } from "../src/index.js";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -68,8 +68,9 @@ describe("POST/PATCH /api/config 保留非表单段", () => {
     beforeAll(() => {
         home = mkdtempSync(join(tmpdir(), "anycode-cfg-"));
         process.env.HOME = home;
+        mkdirSync(join(home, ".anycode"), { recursive: true });
         writeFileSync(
-            join(home, "config.yaml"),
+            join(home, ".anycode", "config.yaml"),
             [
                 "providers:",
                 "  openai:",
@@ -92,7 +93,7 @@ describe("POST/PATCH /api/config 保留非表单段", () => {
     });
 
     const readCfg = (): string =>
-        readFileSync(join(home, "config.yaml"), "utf-8");
+        readFileSync(join(home, ".anycode", "config.yaml"), "utf-8");
 
     it("POST 保存表单后 gitBashPath / abilities 保留", async () => {
         const res = await app.request("/api/config", {
@@ -128,5 +129,90 @@ describe("POST/PATCH /api/config 保留非表单段", () => {
         const cfg = readCfg();
         expect(cfg).toContain("gitBashPath: C:\\Git\\bin\\bash.exe");
         expect(cfg).toContain("web-fetch:");
+    });
+});
+
+
+// 权限规则路由（SPEC-032）：全局走 config.yaml，项目级走 .anycode/permissions.yaml。
+// 临时 HOME 隔离（同上）。
+describe("POST /api/config/permissions/rule + 项目级 permissions 路由", () => {
+    const app = createApp();
+    const origHome = process.env.HOME;
+    let home: string;
+
+    beforeAll(() => {
+        home = mkdtempSync(join(tmpdir(), "anycode-perm-"));
+        process.env.HOME = home;
+        mkdirSync(join(home, ".anycode"), { recursive: true });
+        writeFileSync(
+            join(home, ".anycode", "config.yaml"),
+            [
+                "providers:",
+                "  openai:",
+                "    apiKey: sk-test",
+                "    models: [{ id: m1 }]",
+                "    defaultModel: m1",
+                "default: openai",
+                "permissions:",
+                "  mode: standard",
+                "  rules: []",
+            ].join("\n"),
+            "utf-8"
+        );
+    });
+
+    afterAll(() => {
+        process.env.HOME = origHome;
+        rmSync(home, { recursive: true, force: true });
+    });
+
+    it("全局规则 → 写入 config.yaml permissions.rules", async () => {
+        const res = await app.request("/api/config/permissions/rule", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ tool: "bash", pattern: "git *", action: "allow", scope: "global" }),
+        });
+        const bodyText = await res.text();
+        expect(res.status).toBe(200, bodyText);
+        const cfg = readFileSync(join(home, ".anycode", "config.yaml"), "utf-8");
+        expect(cfg).toContain("tool: bash");
+        expect(cfg).toContain("pattern: git *");
+    });
+
+    it("项目级规则 → 写入 <ws>/.anycode/permissions.yaml，GET 可读回", async () => {
+        const ws = join(home, "proj");
+        mkdirSync(ws, { recursive: true });
+        await app.request("/api/workspaces", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ path: ws }),
+        });
+        const res = await app.request("/api/config/permissions/rule", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ tool: "write", pattern: "src/**", action: "allow", scope: "project", workspacePath: ws }),
+        });
+        expect(res.status).toBe(200);
+        const PK = (
+            (await (await app.request("/api/workspaces")).json()) as Array<{ rootPath: string; projectKey: string }>
+        ).find((w) => w.rootPath === ws)!.projectKey;
+
+        const got = (await (await app.request(`/api/workspaces/${PK}/permissions`)).json()) as {
+            rules: Array<{ tool: string }>;
+        };
+        expect(got.rules).toHaveLength(1);
+        expect(got.rules[0].tool).toBe("write");
+
+        // PUT 整表替换
+        const put = await app.request(`/api/workspaces/${PK}/permissions`, {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ rules: [{ tool: "bash", action: "deny" }] }),
+        });
+        expect(put.status).toBe(200);
+        const got2 = (await (await app.request(`/api/workspaces/${PK}/permissions`)).json()) as {
+            rules: Array<{ tool: string; action: string }>;
+        };
+        expect(got2.rules).toEqual([{ tool: "bash", action: "deny" }]);
     });
 });

@@ -7,6 +7,8 @@ import {
     AnyAgent,
     Config,
     DEFAULT_TITLE,
+    loadProjectPermissions,
+    saveProjectPermissions,
     DURABLE_TYPES,
     createWorkspace,
     maskApiKey,
@@ -21,6 +23,7 @@ import {
     testModels,
     type AgentEvent,
     type ConfigShape,
+    type PermissionRule,
     type SessionKey,
     type Workspace,
     WorkspaceRegistry,
@@ -485,6 +488,7 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
                 default: cfg.default,
                 mcp: cfg.mcpServers,
                 abilities: { registered, config: cfg.abilities },
+                permissions: cfg.permissions,
             });
         } catch {
             return c.json({ providers: {}, default: undefined, mcp: {} });
@@ -515,9 +519,12 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
             ),
             default: body.default,
             mcp: body.mcp,
-            abilities: body.abilities,
+            // 表单未含的段（abilities）保留已存值，防部分提交误清
+            abilities: body.abilities ?? existing?.abilities,
             // 表单不含 gitBashPath（Windows 专用，install.ps1/launcher 维护）——保留已存值
             gitBashPath: body.gitBashPath ?? existing?.gitBashPath,
+            // 表单不含 permissions 段时保留已存值（Settings 权限卡与整表单保存共用此路由）
+            permissions: body.permissions ?? existing?.permissions,
         };
         try {
             Config.save(merged);
@@ -645,13 +652,106 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
                 providers: cfg.providers,
                 default: cfg.default,
                 mcp: cfg.mcpServers,
-                // PATCH 只改 default/modelId——其余段（gitBashPath/abilities）原样保留，防误清
+                // PATCH 只改 default/modelId——其余段（gitBashPath/abilities/permissions）原样保留，防误清
                 gitBashPath: cfg.gitBashPath,
                 abilities: cfg.abilities,
+                permissions: cfg.permissions,
             });
             return c.json({ statusMessage: "switched" });
         } catch (e) {
             return c.json({ statusMessage: (e as Error).message }, 400);
+        }
+    });
+
+    // 裁决"永久允许/拒绝"落盘（SPEC-032 B-006）：单独小路由——避免 web 走整表单
+    // POST /api/config（GET 的 apiKey 已脱敏，整表单回存会污染真实 key）。
+    app.post("/api/config/permissions/rule", async (c) => {
+        let body: {
+            tool?: string;
+            pattern?: string;
+            action?: string;
+            scope?: string;
+            workspacePath?: string;
+        } = {};
+        try {
+            body = await c.req.json();
+        } catch {
+            return c.json({ statusMessage: "invalid json body" }, 400);
+        }
+        const tool = body.tool?.trim();
+        const action = body.action;
+        const scope = body.scope === "global" ? "global" : "project";
+        if (!tool || (action !== "allow" && action !== "ask" && action !== "deny"))
+            return c.json({ statusMessage: "tool and action required" }, 400);
+        const rule: PermissionRule = {
+            tool,
+            pattern: body.pattern?.trim() || undefined,
+            action,
+        };
+        try {
+            if (scope === "global") {
+                const cfg = Config.load();
+                cfg.permissions.rules.push(rule);
+                Config.save({
+                    providers: cfg.providers,
+                    default: cfg.default,
+                    mcp: cfg.mcpServers,
+                    gitBashPath: cfg.gitBashPath,
+                    abilities: cfg.abilities,
+                    permissions: cfg.permissions,
+                });
+            } else {
+                const workspacePath = body.workspacePath?.trim();
+                if (!workspacePath)
+                    return c.json({ statusMessage: "workspacePath required for project scope" }, 400);
+                const ws = createWorkspace(workspacePath);
+                let rules: PermissionRule[] = [];
+                try {
+                    rules = loadProjectPermissions(ws);
+                } catch {
+                    // 损坏文件：覆盖为仅含新规则（fail-safe）
+                }
+                saveProjectPermissions(ws, [...rules, rule]);
+            }
+            return c.json({ statusMessage: "saved" });
+        } catch (e) {
+            return c.json({ statusMessage: (e as Error).message }, 500);
+        }
+    });
+
+    // ==================== permissions（SPEC-032 项目级规则） ====================
+    // 项目级权限规则：<workspacePath>/.anycode/permissions.yaml（全局段走 /api/config）。
+    app.get("/api/workspaces/:projectKey/permissions", (c) => {
+        const workspace = resolveWorkspace(c.req.param("projectKey"));
+        if (!workspace) return c.json({ statusMessage: "workspace not found" }, 404);
+        try {
+            return c.json({ rules: loadProjectPermissions(workspace) });
+        } catch (e) {
+            // 损坏 fail-safe：返回空规则 + 错误信息（C-003）
+            return c.json({ rules: [], statusMessage: (e as Error).message });
+        }
+    });
+
+    app.put("/api/workspaces/:projectKey/permissions", async (c) => {
+        const workspace = resolveWorkspace(c.req.param("projectKey"));
+        if (!workspace) return c.json({ statusMessage: "workspace not found" }, 404);
+        let body: { rules?: PermissionRule[] } = {};
+        try {
+            body = await c.req.json();
+        } catch {
+            return c.json({ statusMessage: "invalid json body" }, 400);
+        }
+        const rules = (body.rules ?? []).filter(
+            (r) =>
+                r &&
+                typeof r.tool === "string" &&
+                (r.action === "allow" || r.action === "ask" || r.action === "deny"),
+        );
+        try {
+            saveProjectPermissions(workspace, rules);
+            return c.json({ statusMessage: "saved" });
+        } catch (e) {
+            return c.json({ statusMessage: (e as Error).message }, 500);
         }
     });
 
