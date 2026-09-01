@@ -37,6 +37,8 @@ export type AgentEvent =
     | (EventBase & { type: "Interaction"; data: InteractionEventData })
     // Planning：预留事件——web/tui 已支持渲染，domain 暂无 emit 方（plan mode 未来接入点）
     | (EventBase & { type: "Planning" })
+    | (EventBase & { type: "Permission"; data: PermissionEventData })
+    | (EventBase & { type: "PermissionAsk"; data: PermissionAskData })
     | (EventBase & { type: "Error"; error: ErrorPayload })
     | (EventBase & { type: "Warning"; error?: ErrorPayload })
     | (EventBase & { type: "Done" })
@@ -81,6 +83,33 @@ export interface InteractionEventData {
     }>;
 }
 
+/** 权限审计事件（SPEC-032 B-008，durable）：phase=asked 发出询问、decided 记录裁决/拦截结果。 */
+export interface PermissionEventData {
+    tool: string;
+    /** 命中的匹配模式 / 缓存键（如 "npm *"）；source=mode 且非 bash 时为工具名 */
+    pattern?: string;
+    source: "rule" | "baseline" | "mode";
+    action: "allow" | "ask" | "deny";
+    phase: "asked" | "decided";
+    decision?: "allow_once" | "allow_always" | "deny" | "timeout";
+    /** 永久允许/拒绝写入的规则层级 */
+    scope?: "project" | "global";
+    /** 参数摘要（截断），审计回放可读 */
+    summary?: string;
+}
+
+/** 权限裁决请求（ephemeral，live-only）：web 据此弹裁决窗，经 /interact 回答。
+ *  不入盘——resume 重放不得重弹（pending 已随 agent 销毁）。 */
+export interface PermissionAskData {
+    id: string;
+    tool: string;
+    pattern?: string;
+    /** 参数摘要（截断 JSON） */
+    summary?: string;
+    /** 命中危险基线时 UI 提示风险 */
+    danger?: boolean;
+}
+
 /** durable 事件集：持久化到 session JSONL，作 reload UI 真值（SPEC-030 B-004/I-005）。
  *  ephemeral（AssistantDelta/ToolStart/ToolProgress/ToolArgProgress/System/Planning/Interaction）
  *  live-only 不持久——deltas/progress 是实时 UX，reload 不重建。 */
@@ -92,6 +121,7 @@ export const DURABLE_TYPES: ReadonlySet<EventType> = new Set<EventType>([
     "Tool",
     "Usage",
     "Compact",
+    "Permission",
     "Error",
     "Warning",
     "Done",

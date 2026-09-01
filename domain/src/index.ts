@@ -10,3 +10,4 @@ export * from "./ripgrep";
 export * from "./pendingInteractions";
 export * from "./abilities";
 export * from "./builtin";
+export * from "./permissions";

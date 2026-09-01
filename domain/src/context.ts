@@ -2,6 +2,7 @@ import type { Workspace } from "./workspace";
 import type { AgentEventPayload } from "./type";
 import type { LlmProvider } from "./config";
 import type { SkillEntry } from "./skill";
+import type { PermissionContext } from "./permissions";
 
 /** 最小事件发射接口。EventStream 实现它;AgentTool 的 tagged proxy 也实现它。 */
 export interface EventEmitter {
@@ -33,4 +34,6 @@ export interface ToolContext {
     gitBashPath?: string;
     /** 技能目录合并表（resolveSkills 结果）：skill 工具按 name 取全文。SPEC-031 B-005 */
     skills?: Map<string, SkillEntry>;
+    /** 工具权限上下文（SPEC-032）：undefined = 权限系统未启用（直通，测试/兼容路径）。 */
+    permissions?: PermissionContext;
 }

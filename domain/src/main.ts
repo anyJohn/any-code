@@ -36,6 +36,11 @@ import { resolveShellKind } from "./tools/functions/bash";
 import { callLLM } from "./llm";
 import { detectContextWindow, resolveContextWindow } from "./config";
 import {
+    loadProjectPermissions,
+    type PermissionContext,
+    type PermissionRule,
+} from "./permissions";
+import {
     BehaviorSubject,
     catchError,
     concatMap,
@@ -78,6 +83,8 @@ class AnyAgent {
     private sessionKey: SessionKey | null = null;
     // MCP 连接清理（per-agent）：create 时建连，destroy 时清理
     private mcpCleanup: (() => Promise<void>) | null = null;
+    // 会话内"允许一次"权限缓存（SPEC-032 C-004：per-agent，不跨 session）
+    private permissionAllowOnce = new Set<string>();
     // 当前生效的 LLM provider 配置（多 provider + 流式开关）；create 时 initConfig 从 config.yaml 加载。
     // per-request 语义下热更 = 下一次 AnyAgent.create 重读磁盘，无需 reload 机制。
     private config!: Config;
@@ -384,6 +391,7 @@ class AnyAgent {
             gitBashPath: this.config.gitBashPath,
             // 技能目录合并表：use_skill 工具按 name 取全文（SPEC-031 B-005）
             skills: resolveSkills(this.workspace),
+            permissions: this.buildPermissionContext(),
         };
         await agentLoop(
             task,
@@ -410,6 +418,29 @@ class AnyAgent {
                 message: `任务完成`,
             });
         }
+    }
+
+    /** 构建 per-task 权限上下文（SPEC-032）：全局 config + 项目级 rules 合并（项目在后，
+     *  后匹配覆盖）；会话缓存跨任务共享。项目规则损坏 → Warning + 仅全局规则（C-003，AC-009）。 */
+    private buildPermissionContext(): PermissionContext {
+        const cfg = this.config.permissions;
+        let projectRules: PermissionRule[] = [];
+        try {
+            projectRules = loadProjectPermissions(this.workspace);
+        } catch (err) {
+            this.eventStream.submit({
+                type: "Warning",
+                message: `项目级权限规则加载失败，已忽略（仅用全局规则）：${
+                    err instanceof Error ? err.message : String(err)
+                }`,
+            });
+        }
+        return {
+            mode: cfg.mode,
+            rules: [...cfg.rules, ...projectRules],
+            dangerPatterns: cfg.dangerPatterns,
+            allowOnce: this.permissionAllowOnce,
+        };
     }
 
     /** 确保 messages[0] 是最新 system prompt（compact 与 executeTask 共用的前置保障） */

@@ -5,6 +5,12 @@ import OpenAI from "openai";
 import { globalConfigDir } from "./workspace";
 import type { McpServerConfig } from "./mcp";
 import { callLLM } from "./llm";
+import {
+    DEFAULT_DANGER_PATTERNS,
+    type PermissionsConfig,
+    type PermissionMode,
+    type PermissionRule,
+} from "./permissions";
 
 /**
  * 一个模型：id（调 API 的真实模型名）+ name（展示名，可选）。
@@ -193,6 +199,8 @@ export interface ConfigShape {
     gitBashPath?: string;
     /** 内置能力开关（SPEC-031）：未配置 = 不启用；随包默认 config 预置三能力开。条目可带 config（provider/连接器参数）。 */
     abilities?: Record<string, AbilityConfig>;
+    /** 工具权限配置（SPEC-032）：模式 + 用户规则 + 危险命令基线增删。 */
+    permissions?: PermissionsConfig;
 }
 
 /** 单个能力配置：enabled 开关 + 能力私有 config（如 web-search 的 provider/apiKey）。 */
@@ -245,19 +253,23 @@ export class Config {
     gitBashPath?: string;
     /** 内置能力开关（SPEC-031 B-002）：未配置 = 不启用。 */
     abilities: Record<string, AbilityConfig>;
+    /** 工具权限配置（SPEC-032）：模式 + 全局规则 + 危险基线增删。 */
+    permissions: Required<PermissionsConfig>;
 
     private constructor(
         providers: Record<string, LlmProvider>,
         def: string,
         mcpServers: Record<string, McpServerConfig>,
         gitBashPath: string | undefined,
-        abilities: Record<string, AbilityConfig>
+        abilities: Record<string, AbilityConfig>,
+        permissions: Required<PermissionsConfig>
     ) {
         this.providers = providers;
         this.default = def;
         this.mcpServers = mcpServers;
         this.gitBashPath = gitBashPath;
         this.abilities = abilities;
+        this.permissions = permissions;
     }
 
     static load(): Config {
@@ -315,7 +327,8 @@ export class Config {
             resolvedDef,
             mcpServers,
             parsed?.gitBashPath,
-            parsed?.abilities ?? {}
+            parsed?.abilities ?? {},
+            normalizePermissions(parsed?.permissions)
         );
     }
 
@@ -380,8 +393,26 @@ export class Config {
                 mcp: data.mcp ?? {},
                 gitBashPath: data.gitBashPath,
                 abilities: data.abilities ?? {},
+                permissions: normalizePermissions(data.permissions),
             }),
             "utf-8"
         );
     }
+}
+
+/** permissions 段归一化：mode 缺省 standard；dangerPatterns 缺省内置集（D-005）。 */
+function normalizePermissions(p?: PermissionsConfig): Required<PermissionsConfig> {
+    const mode: PermissionMode =
+        p?.mode === "accept_edits" || p?.mode === "trusted" ? p.mode : "standard";
+    const rules: PermissionRule[] = (p?.rules ?? []).filter(
+        (r) =>
+            r &&
+            typeof r.tool === "string" &&
+            (r.action === "allow" || r.action === "ask" || r.action === "deny")
+    );
+    const dangerPatterns =
+        p?.dangerPatterns && Array.isArray(p.dangerPatterns)
+            ? p.dangerPatterns.filter((x) => typeof x === "string")
+            : [...DEFAULT_DANGER_PATTERNS];
+    return { mode, rules, dangerPatterns };
 }
