@@ -1,5 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createApp } from "../src/index.js";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 // AC-008（server 可作为库 import + app.request 跑路由）+ SPEC-028 AC-002 子集。
 // 这些 GET/400 都只读 domain 的 ~/.anycode（config/workspaces/session 查找），无副作用。
@@ -52,5 +55,78 @@ describe("@any-code/server routes", () => {
         expect(res.status).toBe(200);
         const json = (await res.json()) as { sessions: unknown[]; workspaces: unknown[] };
         expect(json.sessions).toEqual([]);
+    });
+});
+
+// 配置抹除回归：POST/PATCH /api/config 不得丢掉表单之外的段（gitBashPath/abilities）。
+// 用临时 HOME 隔离（globalConfigDir 每次 call 读 os.homedir() → HOME env），不动真实 ~/.anycode。
+describe("POST/PATCH /api/config 保留非表单段", () => {
+    const app = createApp();
+    const origHome = process.env.HOME;
+    let home: string;
+
+    beforeAll(() => {
+        home = mkdtempSync(join(tmpdir(), "anycode-cfg-"));
+        process.env.HOME = home;
+        writeFileSync(
+            join(home, "config.yaml"),
+            [
+                "providers:",
+                "  openai:",
+                "    apiKey: sk-test",
+                "    models: [{ id: m1 }, { id: m2 }]",
+                "    defaultModel: m1",
+                "default: openai",
+                "gitBashPath: C:\\Git\\bin\\bash.exe",
+                "abilities:",
+                "  web-fetch:",
+                "    enabled: true",
+            ].join("\n"),
+            "utf-8"
+        );
+    });
+
+    afterAll(() => {
+        process.env.HOME = origHome;
+        rmSync(home, { recursive: true, force: true });
+    });
+
+    const readCfg = (): string =>
+        readFileSync(join(home, "config.yaml"), "utf-8");
+
+    it("POST 保存表单后 gitBashPath / abilities 保留", async () => {
+        const res = await app.request("/api/config", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+                providers: {
+                    openai: {
+                        apiKey: "",
+                        models: [{ id: "m1" }, { id: "m2" }],
+                        defaultModel: "m2",
+                        streaming: true,
+                    },
+                },
+                default: "openai",
+                mcp: {},
+            }),
+        });
+        expect(res.status).toBe(200);
+        const cfg = readCfg();
+        expect(cfg).toContain("gitBashPath: C:\\Git\\bin\\bash.exe");
+        expect(cfg).toContain("web-fetch:");
+        expect(cfg).toContain("enabled: true");
+    });
+
+    it("PATCH 切默认模型后 gitBashPath / abilities 保留", async () => {
+        const res = await app.request("/api/config", {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ modelId: "m1" }),
+        });
+        expect(res.status).toBe(200);
+        const cfg = readCfg();
+        expect(cfg).toContain("gitBashPath: C:\\Git\\bin\\bash.exe");
+        expect(cfg).toContain("web-fetch:");
     });
 });

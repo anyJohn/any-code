@@ -6,6 +6,7 @@ import os from "node:os";
 import {
     AnyAgent,
     Config,
+    DEFAULT_TITLE,
     DURABLE_TYPES,
     createWorkspace,
     maskApiKey,
@@ -52,9 +53,8 @@ function resolveModelCreds(
 
 /**
  * AnyCode HTTP server (hono) —— 静态 SPA 的薄 driving adapter。
- * 只依赖 @any-code/domain，无业务逻辑；14 个 API 端点从 Next route.ts 迁来
- * （NextResponse.json → c.json；req.json → c.req.json；SSE Response(ReadableStream) 原样）。
- * 见 DEC-007 / SPEC-028。
+ * 只依赖 @any-code/domain，无业务逻辑；20 个 API 路由 + 1 个静态 SPA catch-all
+ * （Web Request/Response 同构，SSE 用 ReadableStream 原样）。见 DEC-007 / SPEC-028。
  */
 const TERMINAL = new Set(["Done", "Error", "Stopped"]);
 
@@ -284,7 +284,7 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         if (!workspacePath) return c.json({ statusMessage: "workspacePath required" }, 400);
         const projectKey = projectKeyOf(workspacePath);
         const service = new SessionService();
-        const session = await service.create(projectKey, "New Session");
+        const session = await service.create(projectKey, DEFAULT_TITLE);
         return c.json({ sessionId: session.id, projectKey }, 201);
     });
 
@@ -307,7 +307,14 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
             return c.json({ statusMessage: "session already running" }, 409);
         running.add(sessionId);
 
-        const agent = await AnyAgent.create({ rootPath: workspacePath, sessionId });
+        // 兜底 try/catch：create 失败（坏 config 等）必须清单并返 500 JSON，不能裸抛成 unhandled rejection
+        let agent: AnyAgent;
+        try {
+            agent = await AnyAgent.create({ rootPath: workspacePath, sessionId });
+        } catch (e) {
+            running.delete(sessionId);
+            return c.json({ statusMessage: (e as Error).message }, 500);
+        }
         if (!agent.getSession()) {
             running.delete(sessionId);
             agent.destroy();
@@ -509,6 +516,8 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
             default: body.default,
             mcp: body.mcp,
             abilities: body.abilities,
+            // 表单不含 gitBashPath（Windows 专用，install.ps1/launcher 维护）——保留已存值
+            gitBashPath: body.gitBashPath ?? existing?.gitBashPath,
         };
         try {
             Config.save(merged);
@@ -636,6 +645,9 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
                 providers: cfg.providers,
                 default: cfg.default,
                 mcp: cfg.mcpServers,
+                // PATCH 只改 default/modelId——其余段（gitBashPath/abilities）原样保留，防误清
+                gitBashPath: cfg.gitBashPath,
+                abilities: cfg.abilities,
             });
             return c.json({ statusMessage: "switched" });
         } catch (e) {
