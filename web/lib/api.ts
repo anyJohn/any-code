@@ -1,14 +1,13 @@
 /**
  * apiJson —— 统一的 JSON GET/POST 封装。
  *
- * 为什么要包一层：Next dev 模式下，某个 Route Handler 首次被请求或被 HMR
- * 重新编译时，正在编译期间的请求会返回 5xx（冷编译竞态，非业务错误）。
- * 裸 `.then(r => r.json())` 会把 5xx 的 HTML 错误页当 JSON 解析，抛出
- * `Unexpected token '<'`，成为未捕获 rejection，触发 Next dev 覆盖层报错。
+ * 为什么要包一层：5xx 时 body 可能是 HTML 错误页（反向代理/静态层），
+ * 裸 `.then(r => r.json())` 会把 HTML 当 JSON 解析，抛出
+ * `Unexpected token '<'`，成为未捕获 rejection。
  *
  * 这里做两件事：
  * 1. r.ok 不成立时不解析 body，返回 null（调用方优雅降级，不抛未捕获异常）。
- * 2. 对 5xx 重试一次（短延迟），跨过 dev 冷编译竞态；仍失败再返回 null。
+ * 2. 对 5xx 重试一次（短延迟，跨过瞬时失败）；仍失败再返回 null。
  */
 export async function apiJson<T>(
     input: string,

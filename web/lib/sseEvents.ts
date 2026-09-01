@@ -31,8 +31,6 @@ export type AgentEvent =
     | (EventBase & { type: "Done" })
     | (EventBase & { type: "Stopped" });
 
-export type EventType = AgentEvent["type"];
-
 /** SSE/payload：AgentEvent 去掉 id（distributive Omit，保 variant data/error）。 */
 type DistributiveOmit<T, K extends PropertyKey> = T extends T
     ? Omit<T, K>

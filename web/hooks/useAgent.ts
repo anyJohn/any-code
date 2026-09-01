@@ -49,7 +49,7 @@ async function* parseSSE(
  * useAgent —— 目标 C：连接持有 agent。
  * - 历史由调用方（chat 页）预取传入 initialEvents，hook 不再自取（避免双取）。
  * - submit(task)：新对话（sessionId=null）先 POST /api/sessions 建 session，replaceState 更新 URL
- *   （不触发 Next 重渲染，保留在途 run 流），再 POST /api/sessions/:sessionId/run 流式跑。
+ *   （replaceState 不触发路由重渲染，保留在途 run 流），再 POST /api/sessions/:sessionId/run 流式跑。
  * - stop：abort fetch → 服务端见 disconnect → destroy → 真停（关页面同理）。
  */
 export function useAgent(
@@ -88,7 +88,7 @@ export function useAgent(
                     const created = (await cr.json()) as { sessionId: string };
                     sid = created.sessionId;
                     setCurrentSessionId(sid);
-                    // 更新 URL 不触发 Next 路由重渲染（保留在途流），刷新后能落到 /chat/{sid}
+                    // replaceState 不触发路由重渲染（保留在途流），刷新后能落到 /chat/{sid}
                     window.history.replaceState(null, "", `/chat/${sid}`);
                 } catch {
                     setPending(false);

@@ -1,7 +1,5 @@
-# Next
+# Build
 .next
-.next-env.d.ts
-out
 dist
 node_modules
 tsconfig.tsbuildinfo
