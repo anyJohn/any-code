@@ -26,6 +26,8 @@ export type AgentEvent =
     | (EventBase & { type: "Compact"; data: CompactData })
     | (EventBase & { type: "Interaction"; data: InteractionData })
     | (EventBase & { type: "Planning" })
+    | (EventBase & { type: "Permission"; data: PermissionEventData })
+    | (EventBase & { type: "PermissionAsk"; data: PermissionAskData })
     | (EventBase & { type: "Error"; error: ErrorPayload })
     | (EventBase & { type: "Warning"; error?: ErrorPayload })
     | (EventBase & { type: "Done" })
@@ -72,6 +74,25 @@ export interface InteractionQuestion {
 export interface InteractionData {
     id: string;
     questions: InteractionQuestion[];
+}
+/** 权限审计（durable，回放可见）。镜像 domain PermissionEventData。 */
+export interface PermissionEventData {
+    tool: string;
+    pattern?: string;
+    source: "rule" | "baseline" | "mode";
+    action: "allow" | "ask" | "deny";
+    phase: "asked" | "decided";
+    decision?: "allow_once" | "allow_always" | "deny" | "timeout";
+    scope?: "project" | "global";
+    summary?: string;
+}
+/** 权限裁决请求（live-only，驱动 PermissionModal）。镜像 domain PermissionAskData。 */
+export interface PermissionAskData {
+    id: string;
+    tool: string;
+    pattern?: string;
+    summary?: string;
+    danger?: boolean;
 }
 export interface ErrorPayload {
     message: string;

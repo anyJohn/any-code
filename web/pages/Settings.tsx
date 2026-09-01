@@ -9,6 +9,7 @@ import {
     type ProviderForm,
     type McpForm,
     type RegisteredAbility,
+    type PermissionRuleForm,
     emptyProvider,
     emptyMcp,
     fromResponse,
@@ -18,6 +19,7 @@ import { DefaultProviderCard } from "./settings/DefaultProviderCard";
 import { ProvidersCard } from "./settings/ProvidersCard";
 import { AbilitiesCard } from "./settings/AbilitiesCard";
 import { McpCard } from "./settings/McpCard";
+import { PermissionsCard } from "./settings/PermissionsCard";
 
 /**
  * 设置页：全局配置 ~/.anycode/config.yaml 图形化编辑，热生效。
@@ -49,6 +51,10 @@ export default function SettingsPage() {
     const [abilityCfg, setAbilityCfg] = useState<
         Record<string, Record<string, unknown>>
     >({});
+    // 工具权限（SPEC-032）：模式 + 全局规则 + 危险命令基线
+    const [permMode, setPermMode] = useState<"standard" | "accept_edits" | "trusted">("standard");
+    const [permRules, setPermRules] = useState<PermissionRuleForm[]>([]);
+    const [permDanger, setPermDanger] = useState<string[]>([]);
 
     useEffect(() => {
         setStatus("loading");
@@ -74,6 +80,18 @@ export default function SettingsPage() {
             );
             setDef(d);
             setMcp(ms);
+            const perm = res.permissions;
+            if (perm) {
+                setPermMode(perm.mode ?? "standard");
+                setPermRules(
+                    (perm.rules ?? []).map((r) => ({
+                        tool: r.tool,
+                        pattern: r.pattern ?? "",
+                        action: r.action,
+                    }))
+                );
+                setPermDanger(perm.dangerPatterns ?? []);
+            }
             setStatus("ready");
         });
     }, []);
@@ -118,7 +136,11 @@ export default function SettingsPage() {
 
     const save = async () => {
         setSaving(true);
-        const body = toConfigShape(providers, def, mcp, abilityCfg, abilityOn);
+        const body = toConfigShape(providers, def, mcp, abilityCfg, abilityOn, {
+            mode: permMode,
+            rules: permRules,
+            dangerPatterns: permDanger,
+        });
         try {
             const res = await fetch(`/api/config`, {
                 method: "POST",
@@ -207,6 +229,14 @@ export default function SettingsPage() {
                             patchMcp={patchMcp}
                             addMcp={addMcp}
                             removeMcp={removeMcp}
+                        />
+                        <PermissionsCard
+                            mode={permMode}
+                            rules={permRules}
+                            dangerPatterns={permDanger}
+                            onMode={setPermMode}
+                            onRules={setPermRules}
+                            onDangerPatterns={setPermDanger}
                         />
                     </>
                 )}

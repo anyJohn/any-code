@@ -22,6 +22,8 @@ const tagClass: Record<AgentEvent["type"], string> = {
     Planning: "text-muted-foreground",
     Compact: "text-amber-600 dark:text-amber-400",
     Interaction: "text-amber-600 dark:text-amber-400",
+    Permission: "text-amber-600 dark:text-amber-400",
+    PermissionAsk: "text-amber-600 dark:text-amber-400",
     Error: "text-destructive",
     Warning: "text-amber-600 dark:text-amber-400",
     Done: "text-muted-foreground",

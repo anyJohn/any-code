@@ -28,6 +28,12 @@ export interface ConfigResponse {
         registered: RegisteredAbility[];
         config: Record<string, Record<string, unknown>>;
     };
+    /** 工具权限（SPEC-032）：模式 + 全局规则 + 危险命令基线。 */
+    permissions?: {
+        mode: "standard" | "accept_edits" | "trusted";
+        rules: { tool: string; pattern?: string; action: "allow" | "ask" | "deny" }[];
+        dangerPatterns: string[];
+    };
 }
 
 export interface ProviderForm {
@@ -67,6 +73,13 @@ export const emptyProvider = (): ProviderForm => ({
     maxOutputTokens: "",
     maskedKey: "",
 });
+
+/** 权限表单（SPEC-032 B-010）：模式 + 全局规则 + 危险命令基线（项目级规则另经 /api/workspaces/:key/permissions 管理）。 */
+export interface PermissionRuleForm {
+    tool: string;
+    pattern: string;
+    action: "allow" | "ask" | "deny";
+}
 
 export const emptyMcp = (): McpForm => ({
     name: "",
@@ -173,7 +186,12 @@ export function toConfigShape(
     def: string,
     mcp: McpForm[],
     abilityCfg?: Record<string, Record<string, unknown>>,
-    abilityOn?: Record<string, boolean>
+    abilityOn?: Record<string, boolean>,
+    permissions?: {
+        mode: "standard" | "accept_edits" | "trusted";
+        rules: PermissionRuleForm[];
+        dangerPatterns: string[];
+    }
 ): ConfigShape {
     const pOut: Record<string, Record<string, unknown>> = {};
     for (const p of providers) {
@@ -242,5 +260,7 @@ export function toConfigShape(
                 { ...(abilityCfg?.[name] ?? {}), enabled: on },
             ])
         ),
+        // 权限：undefined = 表单未含该卡（保留已存值，server 端 merge）
+        permissions,
     };
 }

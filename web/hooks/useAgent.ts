@@ -6,10 +6,15 @@ import {
     type AgentEventPayload,
     type InteractionData,
     type InteractionQuestion,
+    type PermissionAskData,
     nextId,
 } from "@/lib/sseEvents";
 // InteractionData/InteractionQuestion 定义于 sseEvents（AgentEvent union 引用），re-export 保 InteractionModal import 不变。
 export type { InteractionData, InteractionQuestion };
+export type { PermissionAskData };
+
+/** 权限裁决动作（SPEC-032 B-005）。 */
+export type PermissionDecision = "allow_once" | "allow_always" | "deny";
 
 const TERMINAL = new Set(["Done", "Error", "Stopped"]);
 
@@ -65,6 +70,9 @@ export function useAgent(
     // ask_question 工具阻塞等答案时，服务端发 Interaction 事件→设此状态驱动模态
     const [pendingInteraction, setPendingInteraction] =
         useState<InteractionData | null>(null);
+    // 权限裁决请求（SPEC-032）：PermissionAsk 事件（live-only）驱动裁决窗
+    const [pendingPermission, setPendingPermission] =
+        useState<PermissionAskData | null>(null);
     const abortRef = useRef<AbortController | null>(null);
 
     const submit = useCallback(
@@ -137,6 +145,10 @@ export function useAgent(
                     if (e.type === "Interaction") {
                         // ask_question 阻塞中：拦截不入 events，设 pendingInteraction 驱动模态
                         setPendingInteraction(e.data as InteractionData);
+                    } else if (e.type === "PermissionAsk") {
+                        // 权限裁决请求（live-only，不入盘）：拦截驱动裁决窗；durable 的
+                        // Permission 审计事件照常入 events（回放可见）。
+                        setPendingPermission(e.data as PermissionAskData);
                     } else {
                         setEvents((prev) => {
                             // 去重：server 的 User 事件与乐观插入的 user 气泡重复（同 message），跳过
@@ -157,6 +169,7 @@ export function useAgent(
                     if (TERMINAL.has(e.type)) {
                         setPending(false);
                         setPendingInteraction(null);
+                        setPendingPermission(null);
                     }
                 }
             } catch (err) {
@@ -223,6 +236,41 @@ export function useAgent(
         [pendingInteraction, currentSessionId]
     );
 
+    /** 提交权限裁决：POST /interact 解除服务端阻塞；永久允许/拒绝另落规则（B-006）。 */
+    const submitPermission = useCallback(
+        async (decision: PermissionDecision, scope: "project" | "global" = "project") => {
+            const data = pendingPermission;
+            const sid = currentSessionId;
+            if (!data || !sid) return;
+            const res = await fetch(`/api/sessions/${sid}/interact`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ interactionId: data.id, answers: [decision] }),
+            });
+            if (!res.ok) return;
+            setPendingPermission(null);
+            // 永久允许/拒绝：追加规则落盘（内存态由 domain 在裁决时同步追加，此处负责持久化）
+            if (decision === "allow_always" || decision === "deny") {
+                try {
+                    await fetch("/api/config/permissions/rule", {
+                        method: "POST",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({
+                            tool: data.tool,
+                            pattern: data.pattern,
+                            action: decision === "allow_always" ? "allow" : "deny",
+                            scope,
+                            workspacePath: rootPath,
+                        }),
+                    });
+                } catch {
+                    // 落盘失败不阻断——本会话内已有内存规则/缓存兜底
+                }
+            }
+        },
+        [pendingPermission, currentSessionId, rootPath]
+    );
+
     const clear = useCallback(() => setEvents([]), []);
 
     const appendSystem = useCallback((message: string) => {
@@ -247,5 +295,7 @@ export function useAgent(
         currentSessionId,
         pendingInteraction,
         submitInteraction,
+        pendingPermission,
+        submitPermission,
     };
 }

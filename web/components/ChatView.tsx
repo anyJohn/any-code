@@ -12,6 +12,7 @@ import { InputBox } from "./InputBox";
 import { MessageList } from "./MessageList";
 import { StatusBar } from "./StatusBar";
 import { InteractionModal } from "./InteractionModal";
+import { PermissionModal } from "./PermissionModal";
 
 /**
  * ChatView —— 聊天主视图容器：组合 MessageList / InputBox / StatusBar，
@@ -39,6 +40,8 @@ export function ChatView({
         currentSessionId,
         pendingInteraction,
         submitInteraction,
+        pendingPermission,
+        submitPermission,
     } = useAgent(sessionId, rootPath, initialEvents);
     const command = useCommand({
         clear,
@@ -176,6 +179,13 @@ export function ChatView({
                     data={pendingInteraction}
                     onSubmit={submitInteraction}
                     onClose={stop}
+                />
+            )}
+
+            {pendingPermission && (
+                <PermissionModal
+                    data={pendingPermission}
+                    onDecision={submitPermission}
                 />
             )}
         </div>
