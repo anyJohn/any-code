@@ -686,3 +686,99 @@ describe("createPlanWorkflowTool（FR-12 plan 模式）", () => {
         expect(planningTools).toContain("read");
     });
 });
+
+
+// ── code-review 修复回归 ──
+
+describe("toolCall 权限 gate 实时评估（code-review #3）", () => {
+    it("批内 allow_always → 同批后续同 pattern 调用直通（不二次弹窗）", async () => {
+        const handler = vi.fn().mockResolvedValue("ran");
+        const tools = [mkTool("bash", handler)];
+        const ctx = mkCtx();
+        ctx.permissions = mkPermCtx("standard");
+        const pending = toolCall(
+            [mkCall("bash", "t1", '{"command":"npm test"}'), mkCall("bash", "t2", '{"command":"npm run build"}')],
+            ctx,
+            tools,
+            "turn"
+        );
+        await new Promise((r) => setTimeout(r, 0));
+        // 第一次 ask → 永久允许
+        const asks = submitted(ctx).filter((e) => e.type === "PermissionAsk");
+        expect(asks).toHaveLength(1);
+        resolveInteraction(asks[0].data.id, ["allow_always"]);
+        await pending;
+        // 两个都执行了（第二个没有二次 ask）
+        expect(handler).toHaveBeenCalledTimes(2);
+        expect(submitted(ctx).filter((e) => e.type === "PermissionAsk")).toHaveLength(1);
+    });
+});
+
+describe("toolCall 并行规则放行审计（code-review #4）", () => {
+    it("并行批内规则 allow 的调用也发 decided 审计", async () => {
+        const handler = vi.fn().mockResolvedValue("ok");
+        const mk = (name: string): Tool => ({
+            schema: { type: "function", function: { name, description: "", parameters: { type: "object", properties: {} } } } as never,
+            handler,
+            meta: { readOnly: true, concurrencySafe: true },
+        });
+        const ctx = mkCtx();
+        ctx.permissions = mkPermCtx("standard", [
+            { tool: "grep", pattern: undefined, action: "allow" },
+            { tool: "glob", pattern: undefined, action: "allow" },
+        ]);
+        await toolCall(
+            [mkCall("grep", "t1"), mkCall("glob", "t2")],
+            ctx,
+            [mk("grep"), mk("glob")],
+            "turn"
+        );
+        const audits = submitted(ctx).filter((e) => e.type === "Permission");
+        expect(audits).toHaveLength(2);
+        expect(audits.every((e) => e.data.phase === "decided" && e.data.action === "allow")).toBe(true);
+    });
+});
+
+describe("toolCall JSON 非 object args（code-review #8）", () => {
+    it("arguments='null' → 错误结果行，不崩整轮", async () => {
+        const handler = vi.fn();
+        const ctx = mkCtx();
+        const result = await toolCall(
+            [mkCall("fakeTool", "tc1", "null")],
+            ctx,
+            [mkTool("fakeTool", handler)],
+            "turn"
+        );
+        expect(handler).not.toHaveBeenCalled();
+        expect(result[0].content).toContain("must be a JSON object");
+    });
+});
+
+describe("并行路径限只读（code-review #5）", () => {
+    it("批内含 concurrencySafe 但非 readOnly 的工具 → 退化串行（快照路径可达）", async () => {
+        const order: string[] = [];
+        const safeWriter: Tool = {
+            schema: { type: "function", function: { name: "safeW", description: "", parameters: { type: "object", properties: {} } } } as never,
+            handler: async () => {
+                order.push("w-start");
+                await sleep(20);
+                order.push("w-end");
+                return "w";
+            },
+            meta: { readOnly: false, concurrencySafe: true }, // 合法组合：写但可并行
+        };
+        const reader: Tool = {
+            schema: { type: "function", function: { name: "reader", description: "", parameters: { type: "object", properties: {} } } } as never,
+            handler: async () => {
+                order.push("r-start");
+                await sleep(5);
+                order.push("r-end");
+                return "r";
+            },
+            meta: { readOnly: true, concurrencySafe: true },
+        };
+        const ctx = mkCtx();
+        await toolCall([mkCall("safeW", "t1"), mkCall("reader", "t2")], ctx, [safeWriter, reader], "turn");
+        expect(order).toEqual(["w-start", "w-end", "r-start", "r-end"]); // 串行
+    });
+});

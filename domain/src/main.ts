@@ -96,9 +96,14 @@ class AnyAgent {
     private config!: Config;
 
     private constructor(opts: AnyAgentOptions) {
-        this.snapshots = createSnapshotService(opts.rootPath);
         this.service = opts.service ?? new SessionService();
         this.workspace = createWorkspace(opts.rootPath);
+        // AR-4：快照服务（git 解析带 gitBashPath 提示；exclude 对齐 workspace ignore）
+        this.snapshots = createSnapshotService(
+            opts.rootPath,
+            this.workspace.ignoredPatterns,
+            this.config?.gitBashPath
+        );
         this.projectKey = projectKeyOf(this.workspace.rootPath);
         this.definition = opts.definition ?? mainAgent;
         this.tools = [...this.definition.tools, ...(opts.extraTools ?? [])];
@@ -128,6 +133,12 @@ class AnyAgent {
         const provider = this.config.getCurrentProvider();
         const ctx = await detectContextWindow(provider);
         provider.contextWindow = resolveContextWindow(provider, ctx);
+        // gitBashPath 就绪后重建快照服务（git 二进制解析需要提示；AR-4）
+        this.snapshots = createSnapshotService(
+            this.workspace.rootPath,
+            this.workspace.ignoredPatterns,
+            this.config.gitBashPath
+        );
     }
 
     /** 加载 MCP 工具（真协议连接），追加到工具集，per-agent 生命周期绑定。 */
@@ -407,7 +418,7 @@ class AnyAgent {
             jobs: this.jobRegistry,
             // AR-4：写类工具执行前自动快照（label 带会话锚点）
             snapshot: {
-                snapshot: (label: string) =>
+                snapshot: async (label: string) =>
                     this.snapshots.snapshot(
                         `session ${this.session?.id ?? "-"} | ${label}`
                     ),

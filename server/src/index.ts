@@ -30,7 +30,7 @@ import {
     WorkspaceRegistry,
     workspaceConfigDir,
 } from "@any-code/domain";
-import { runningSessions } from "./singleFlight.js";
+import { runningSessions, runningWorkspaces } from "./singleFlight.js";
 
 /** 解析拉取/测试模型的凭据：表单 apiKey 留空=保留原值 → 用 config.yaml 已存 key（providerName 匹配）。 */
 function resolveModelCreds(
@@ -311,16 +311,20 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
             return c.json({ statusMessage: "session already running" }, 409);
         running.add(sessionId);
 
+        const wsKey = projectKeyOf(workspacePath);
+        runningWorkspaces().add(wsKey);
         // 兜底 try/catch：create 失败（坏 config 等）必须清单并返 500 JSON，不能裸抛成 unhandled rejection
         let agent: AnyAgent;
         try {
             agent = await AnyAgent.create({ rootPath: workspacePath, sessionId });
         } catch (e) {
             running.delete(sessionId);
+            runningWorkspaces().delete(wsKey);
             return c.json({ statusMessage: (e as Error).message }, 500);
         }
         if (!agent.getSession()) {
             running.delete(sessionId);
+            runningWorkspaces().delete(wsKey);
             agent.destroy();
             return c.json({ statusMessage: "session not found" }, 404);
         }
@@ -732,7 +736,14 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
     app.post("/api/workspaces/:projectKey/snapshots/rollback", async (c) => {
         const workspace = resolveWorkspace(c.req.param("projectKey"));
         if (!workspace) return c.json({ statusMessage: "workspace not found" }, 404);
-        let body: { id?: string } = {};
+        // AR-4 #6：拒绝与运行中 agent 的竞态（回滚期间 agent 仍在写 → 混合状态树）
+        const wsKey = c.req.param("projectKey");
+        if (runningWorkspaces().has(wsKey))
+            return c.json(
+                { statusMessage: "工作区正被运行中的会话使用，请先停止对话再回滚" },
+                409,
+            );
+        let body: { id?: string; sessionId?: string } = {};
         try {
             body = await c.req.json();
         } catch {
@@ -742,7 +753,21 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         if (!id) return c.json({ statusMessage: "id required" }, 400);
         try {
             const svc = createSnapshotService(workspace.rootPath);
-            svc.rollbackTo(id);
+            await svc.rollbackTo(id);
+            // AR-4 #7：回滚审计入会话日志（durable System，回放可见）
+            const sid = body?.sessionId?.trim();
+            if (sid) {
+                try {
+                    const key: SessionKey = { projectKey: wsKey, sessionId: sid };
+                    await new SessionService().appendEvent(key, {
+                        timestamp: Date.now(),
+                        type: "System",
+                        message: `工作区已回滚到快照 ${id.slice(0, 8)}`,
+                    } as AgentEvent);
+                } catch {
+                    // 审计落盘失败不影响回滚结果
+                }
+            }
             return c.json({ statusMessage: "rolled back" });
         } catch (e) {
             return c.json({ statusMessage: (e as Error).message }, 400);

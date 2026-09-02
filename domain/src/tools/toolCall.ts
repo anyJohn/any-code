@@ -129,6 +129,16 @@ export async function toolCall(
             );
             continue;
         }
+        // 防护：JSON 合法但非对象（如 "null"/"5"）——validateToolArgs 会解引用崩（code-review #8）
+        if (args === null || typeof args !== "object" || Array.isArray(args)) {
+            result.push(
+                toolRow(
+                    toolCall,
+                    `[Error] Invalid arguments for tool ${funcName}: arguments must be a JSON object`
+                )
+            );
+            continue;
+        }
 
         // FR-10：按工具 JSON Schema 校验参数，非法拒绝执行、错误回传模型自纠
         const invalid = validateToolArgs(args, tool.schema);
@@ -161,15 +171,28 @@ export async function toolCall(
         plans.push({ call: toolCall, tool, args, funcName, preAllowed, verdict, cacheKey });
     }
 
-    // ── FR-8 并行路径：批内全部并发安全且预判全放行 → Promise.all，结果按调用序落盘 ──
+    // ── FR-8 并行路径：批内全部并发安全、只读且预判全放行 → Promise.all，结果按调用序落盘 ──
+    // （限只读：写类工具必须走串行快照路径，AR-4 #5；权限预判全放行才并行，
+    //  ask 需逐个弹窗、deny 需逐个出结果行）
     const parallelizable =
         plans.length > 1 &&
-        plans.every((p) => p.tool.meta?.concurrencySafe === true && p.preAllowed);
+        plans.every(
+            (p) =>
+                p.tool.meta?.concurrencySafe === true &&
+                p.tool.meta?.readOnly === true &&
+                p.preAllowed
+        );
 
     if (parallelizable) {
         // ToolStart 按调用序先发（前端"执行中"卡片顺序稳定）
         for (const p of plans) emitToolStart(p, ctx, turnId);
-        // 并发安全工具约定不使用 emitProgress（共享字段，并行期不注入）
+        // AR-7 #4：用户规则放行需审计——并行路径不经过 gate，逐个补 decided 事件
+        for (const p of plans) {
+            if (p.verdict && p.verdict.action === "allow" && p.verdict.source === "rule") {
+                audit(ctx, p.funcName, p.args, p.verdict, "decided");
+            }
+        }
+        // 并发安全只读工具约定不使用 emitProgress（共享字段，并行期不注入）
         const outputs = await Promise.all(plans.map((p) => runHandler(p, ctx, turnId, false)));
         outputs.forEach((out, i) => {
             emitTool(plans[i], out, ctx, turnId);
@@ -185,9 +208,15 @@ export async function toolCall(
             result.push(toolRow(p.call, denied));
             continue;
         }
-        // AR-4：写类工具执行前自动快照（best-effort，失败不阻断）
+        // AR-4：写类工具执行前自动快照（best-effort，失败不阻断）；标签含参数摘要（code-review #9）
         if (ctx.snapshot && p.tool.meta?.readOnly !== true) {
-            ctx.snapshot.snapshot(`${p.funcName} ${truncateArgs(p.args).command ?? ""}`.trim());
+            const argSummary =
+                p.funcName === "bash"
+                    ? String(p.args.command ?? "")
+                    : typeof p.args.filePath === "string"
+                      ? p.args.filePath
+                      : JSON.stringify(truncateArgs(p.args));
+            await ctx.snapshot.snapshot(`${p.funcName} ${argSummary}`.trim());
         }
         emitToolStart(p, ctx, turnId);
         const out = await runHandler(p, ctx, turnId, true);
@@ -263,9 +292,20 @@ function emitTool(
  */
 async function permissionGate(plan: ToolPlan, ctx: ToolContext): Promise<string | null> {
     const perm = ctx.permissions;
-    if (!perm || !plan.verdict || !plan.cacheKey) return null; // 未启用（测试/兼容路径）
+    if (!perm) return null; // 未启用（测试/兼容路径）
 
-    const { verdict, cacheKey, funcName, args } = plan;
+    // 实时重新评估（code-review #3）：批内 allow_always 追加的规则对后续调用立即生效，
+    // 不复用计划阶段的冻结 verdict。
+    const { funcName, args } = plan;
+    const verdict = evaluatePermission({
+        mode: perm.mode,
+        rules: perm.rules,
+        dangerPatterns: perm.dangerPatterns,
+        readOnlyTools: perm.readOnlyTools,
+        tool: funcName,
+        args,
+    });
+    const cacheKey = `${funcName}|${verdict.ruleKey ?? funcName}`;
     const summary = JSON.stringify(truncateArgs(args));
 
     // allow：仅用户规则放行需审计（mode 默认放行不打扰事件流，AC-007）

@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { globalConfigDir } from "./workspace";
@@ -10,9 +10,11 @@ import { projectKeyOf } from "./session";
  * - 快照仓库与项目目录零污染：集中存于 ~/.anycode/snapshots/<projectKey>/（独立 git dir），
  *   工作树指向 workspace；blob 去重由 git 天然提供。
  * - 快照 = git add -A + commit（-c 注入身份，隔离宿主 git 配置）。
- * - 回滚 = git checkout <hash> -- .（恢复快照时点已跟踪文件；快照之后新建且未跟踪的
- *   文件不删除——v1 语义，回滚前必须经用户确认）。
- * - git 不可用（如 busybox-only Windows 环境）→ available:false，快照静默跳过 + 一次性告警。
+ * - 回滚 = git checkout <hash> -- .（cwd 锚定 workspaceRoot，pathspec 不随进程 cwd 漂移）。
+ * - git 二进制跨平台解析（PATH → gitBashPath 同目录 → 系统 Git for Windows），
+ *   探测失败一次性 console.warn（AR-4 头注释承诺）。
+ * - 全部 git 调用异步（spawn + await）——快照挂在工具执行路径上，
+ *   同步 spawn 会阻塞单进程 server 的事件循环（code-review 发现 #1）。
  */
 
 export interface Snapshot {
@@ -24,14 +26,14 @@ export interface Snapshot {
 }
 
 export interface SnapshotService {
-    /** git 可用性（首次探测后缓存） */
+    /** git 可用性（首次解析后缓存） */
     available(): boolean;
     /** 工作区快照；失败/不可用返回 null（best-effort，不阻断工具执行） */
-    snapshot(label: string): Snapshot | null;
+    snapshot(label: string): Promise<Snapshot | null>;
     /** 快照列表（新→旧） */
-    list(): Snapshot[];
+    list(): Promise<Snapshot[]>;
     /** 回滚工作区到指定快照（恢复该时点已跟踪文件）。失败抛错由调用方处理。 */
-    rollbackTo(id: string): void;
+    rollbackTo(id: string): Promise<void>;
 }
 
 const GIT_TIMEOUT_MS = 30_000;
@@ -46,30 +48,76 @@ function gitEnv(): Record<string, string> {
     };
 }
 
-function runGit(args: string[], gitDir: string, workTree?: string): { ok: boolean; out: string } {
-    const full = workTree
-        ? ["--git-dir", gitDir, "--work-tree", workTree, ...args]
-        : ["--git-dir", gitDir, ...args];
-    const r = spawnSync("git", full, {
-        env: gitEnv(),
-        timeout: GIT_TIMEOUT_MS,
-        windowsHide: true,
-        encoding: "utf-8",
+/** 异步 git 调用（不阻塞事件循环）；cwd 显式锚定，pathspec 不随进程 cwd 漂移。 */
+function runGit(
+    args: string[],
+    gitDir: string,
+    opts: { workTree?: string; cwd?: string }
+): Promise<{ ok: boolean; out: string }> {
+    const full = [
+        "--git-dir", gitDir,
+        ...(opts.workTree ? ["--work-tree", opts.workTree] : []),
+        ...args,
+    ];
+    return new Promise((resolve) => {
+        const child = spawn("git", full, {
+            env: gitEnv(),
+            cwd: opts.cwd,
+            windowsHide: true,
+        });
+        let out = "";
+        const timer = setTimeout(() => child.kill("SIGKILL"), GIT_TIMEOUT_MS);
+        child.stdout?.on("data", (c: Buffer) => (out += c.toString()));
+        child.stderr?.on("data", (c: Buffer) => (out += c.toString()));
+        child.on("error", () => {
+            clearTimeout(timer);
+            resolve({ ok: false, out });
+        });
+        child.on("close", (code) => {
+            clearTimeout(timer);
+            resolve({ ok: code === 0, out });
+        });
     });
-    return { ok: r.status === 0, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
 }
 
-/** 探测 git 是否可用（缓存）。 */
-let gitAvailableCache: boolean | undefined;
-export function gitAvailable(): boolean {
-    if (gitAvailableCache !== undefined) return gitAvailableCache;
-    try {
-        const r = spawnSync("git", ["--version"], { timeout: 5000, windowsHide: true });
-        gitAvailableCache = r.status === 0;
-    } catch {
-        gitAvailableCache = false;
+// ── git 二进制解析（跨平台；code-review 发现 #10）──
+
+let resolvedGit: string | null | undefined;
+let warnedUnavailable = false;
+
+/**
+ * 解析 git 可执行文件：PATH → gitBashPath 同目录（PortableGit/bin 下 git.exe 与 bash.exe
+ * 同伴）→ 系统 Git for Windows。解析结果进程级缓存。
+ */
+export function resolveGitPath(gitHint?: string): string | null {
+    if (resolvedGit !== undefined) return resolvedGit;
+    const candidates: string[] = ["git"];
+    if (process.platform === "win32") {
+        if (gitHint) {
+            const dir = path.dirname(gitHint);
+            candidates.unshift(path.join(dir, "git.exe"), path.join(dir, "..", "cmd", "git.exe"));
+        }
+        candidates.push("C:\\Program Files\\Git\\bin\\git.exe", "C:\\Program Files\\Git\\cmd\\git.exe");
     }
-    return gitAvailableCache;
+    for (const c of candidates) {
+        try {
+            if (spawnSync(c, ["--version"], { timeout: 5000, windowsHide: true }).status === 0) {
+                resolvedGit = c;
+                return c;
+            }
+        } catch {
+            // 探测失败继续下一候选
+        }
+    }
+    resolvedGit = null;
+    return null;
+}
+
+/** git 不可用时的一次性告警（AR-4 头注释承诺）。 */
+function warnGitUnavailableOnce(): void {
+    if (warnedUnavailable) return;
+    warnedUnavailable = true;
+    console.warn("[Snapshot] git 不可用，快照功能已停用（写类操作将没有回滚点）");
 }
 
 /** 快照仓库根：~/.anycode/snapshots/<projectKey>/ */
@@ -77,27 +125,52 @@ function shadowDir(workspaceRoot: string): string {
     return path.join(globalConfigDir(), "snapshots", projectKeyOf(workspaceRoot));
 }
 
-/** 创建 per-workspace 快照服务。构造时惰性初始化 shadow 仓库。 */
-export function createSnapshotService(workspaceRoot: string): SnapshotService {
+/** 创建 per-workspace 快照服务。ignoredPatterns 写入 shadow 仓库 exclude，
+ * 防 git add -A 吞 node_modules 等巨量目录（code-review 发现 #1）。 */
+export function createSnapshotService(
+    workspaceRoot: string,
+    ignoredPatterns: string[] = [],
+    gitHint?: string
+): SnapshotService {
     const repoRoot = shadowDir(workspaceRoot);
     /** 普通仓库初始化在 repoRoot，其 .git 才是 git-dir（git init <dir> 语义） */
     const gitDir = path.join(repoRoot, ".git");
     let initialized = false;
 
-    const ensureRepo = (): boolean => {
-        if (!gitAvailable()) return false;
+    const git = (): string | null => {
+        const p = resolveGitPath(gitHint);
+        if (!p) warnGitUnavailableOnce();
+        return p;
+    };
+
+    const ensureRepo = async (): Promise<boolean> => {
+        const bin = git();
+        if (!bin) return false;
         if (initialized) return true;
         try {
             fs.mkdirSync(path.dirname(repoRoot), { recursive: true });
             if (!fs.existsSync(path.join(gitDir, "HEAD"))) {
-                // 尚未初始化：git init <repoRoot>（普通仓库，--git-dir 指向其 .git）
-                const r = spawnSync("git", ["init", "--quiet", repoRoot], {
-                    env: gitEnv(),
-                    timeout: GIT_TIMEOUT_MS,
-                    windowsHide: true,
-                    encoding: "utf-8",
+                // 尚未初始化：git init <repoRoot>（不能带 --git-dir——目录此时还不存在）
+                const r = await new Promise<{ ok: boolean; out: string }>((resolve) => {
+                    // 不能设 cwd=repoRoot（此时还不存在，spawn 会 ENOENT）
+                    const c = spawn("git", ["init", "--quiet", repoRoot], {
+                        env: gitEnv(),
+                        windowsHide: true,
+                    });
+                    let out = "";
+                    c.stdout?.on("data", (d: Buffer) => (out += d.toString()));
+                    c.stderr?.on("data", (d: Buffer) => (out += d.toString()));
+                    c.on("error", () => resolve({ ok: false, out }));
+                    c.on("close", (code) => resolve({ ok: code === 0, out }));
                 });
-                if (r.status !== 0) return false;
+                if (!r.ok) return false;
+                // exclude：把常见巨量目录挡在 add 之外（workspace ignore 语义对齐）
+                const excludes = [".git", ...ignoredPatterns].map((p) => `/${p}`).join("\n");
+                try {
+                    fs.writeFileSync(path.join(gitDir, "info", "exclude"), excludes + "\n", "utf-8");
+                } catch {
+                    // exclude 写失败不阻断（退化为全量 add）
+                }
             }
             initialized = true;
         } catch {
@@ -106,39 +179,41 @@ export function createSnapshotService(workspaceRoot: string): SnapshotService {
         return true;
     };
 
-    const commitish = (label: string): Snapshot | null => {
-        // 读 HEAD 作为本次快照 hash（commit 可能是 no-op 复用旧 hash）
-        const head = runGit(["rev-parse", "HEAD"], gitDir);
+    const commitish = async (label: string): Promise<Snapshot | null> => {
+        const head = await runGit(["rev-parse", "HEAD"], gitDir, { cwd: workspaceRoot });
         if (!head.ok) return null;
         return { id: head.out.trim(), label, ts: Date.now() };
     };
 
     return {
-        available: () => ensureRepo(),
+        available: (): boolean => resolveGitPath(gitHint) !== null,
 
-        snapshot(label: string): Snapshot | null {
-            if (!ensureRepo()) return null;
-            // add -A + commit（快照与工作树对齐；无变更时 commit 失败 → 复用 HEAD）
-            const add = runGit(["add", "-A", "--"], gitDir, workspaceRoot);
+        async snapshot(label: string): Promise<Snapshot | null> {
+            if (!(await ensureRepo())) return null;
+            const add = await runGit(["add", "-A", "--"], gitDir, {
+                workTree: workspaceRoot,
+                cwd: workspaceRoot,
+            });
             if (!add.ok) return null;
-            const commit = runGit(
+            const commit = await runGit(
                 [
                     "-c", "user.name=anycode",
                     "-c", "user.email=anycode@local",
                     "commit", "--quiet", "--allow-empty", "-m", label,
                 ],
                 gitDir,
-                workspaceRoot
+                { workTree: workspaceRoot, cwd: workspaceRoot }
             );
             if (!commit.ok) return null;
             return commitish(label);
         },
 
-        list(): Snapshot[] {
-            if (!ensureRepo()) return [];
-            const log = runGit(
+        async list(): Promise<Snapshot[]> {
+            if (!(await ensureRepo())) return [];
+            const log = await runGit(
                 ["log", "--format=%H%x1f%s%x1f%ct", "--date-order", "-50"],
-                gitDir
+                gitDir,
+                { cwd: workspaceRoot }
             );
             if (!log.ok) return [];
             return log.out
@@ -150,14 +225,18 @@ export function createSnapshotService(workspaceRoot: string): SnapshotService {
                 });
         },
 
-        rollbackTo(id: string): void {
-            if (!ensureRepo()) throw new Error("git 不可用，无法回滚");
+        async rollbackTo(id: string): Promise<void> {
+            if (!(await ensureRepo())) throw new Error("git 不可用，无法回滚");
             // hash 格式白名单先行（防参数注入 checkout）
             if (!/^[0-9a-f]{7,40}$/.test(id)) throw new Error("非法快照 id");
             // 校验 id 存在（回滚目标必须来自 list，不接受任意 hash）
-            const known = this.list().some((s) => s.id === id);
+            const known = (await this.list()).some((s) => s.id === id);
             if (!known) throw new Error(`快照 ${id} 不存在`);
-            const co = runGit(["checkout", id, "--", "."], gitDir, workspaceRoot);
+            // cwd 锚定 workspaceRoot：pathspec "." 不随 server 进程 cwd 漂移（code-review 发现 #2）
+            const co = await runGit(["checkout", id, "--", "."], gitDir, {
+                workTree: workspaceRoot,
+                cwd: workspaceRoot,
+            });
             if (!co.ok) throw new Error(`回滚失败：${co.out.trim()}`);
         },
     };
