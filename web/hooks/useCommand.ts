@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiJson } from "@/lib/api";
+import { useT } from "@/i18n";
 
 export interface CommandItem {
     name: string;
@@ -8,16 +9,17 @@ export interface CommandItem {
     body?: string;
 }
 
+// desc 存 i18n key（command.*）：useCommand 内经 t() 渲染成当前语言文案
 export const BUILTIN_COMMANDS: CommandItem[] = [
-    { name: "clear", desc: "清空当前对话" },
-    { name: "new", desc: "新建对话" },
-    { name: "help", desc: "列出所有指令" },
-    { name: "config", desc: "打开设置" },
-    { name: "model", desc: "查看/切换模型（/model <id>）" },
-    { name: "provider", desc: "查看/切换 provider（/provider <name>）" },
-    { name: "sessions", desc: "列出最近会话" },
-    { name: "compact", desc: "压缩上下文（/compact [聚焦]）" },
-    { name: "rewind", desc: "回滚工作区到快照（AR-4）" },
+    { name: "clear", desc: "command.clearDesc" },
+    { name: "new", desc: "command.newDesc" },
+    { name: "help", desc: "command.helpDesc" },
+    { name: "config", desc: "command.configDesc" },
+    { name: "model", desc: "command.modelDesc" },
+    { name: "provider", desc: "command.providerDesc" },
+    { name: "sessions", desc: "command.sessionsDesc" },
+    { name: "compact", desc: "command.compactDesc" },
+    { name: "rewind", desc: "command.rewindDesc" },
 ];
 
 interface UseCommandDeps {
@@ -38,6 +40,7 @@ interface UseCommandDeps {
  */
 export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, currentSessionId, openSnapshots }: UseCommandDeps) {
     const navigate = useNavigate();
+    const { t } = useT();
     const [customCommands, setCustomCommands] = useState<CommandItem[]>([]);
     const [draft, setDraft] = useState("");
     // /compact 进行中（调摘要 LLM 数秒）：驱动 indeterminate 进度条
@@ -51,7 +54,7 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
         ).then((list) => {
             if (cancelled) return;
             setCustomCommands(
-                (list ?? []).map((c) => ({ name: c.name, desc: "自定义", body: c.body }))
+                (list ?? []).map((c) => ({ name: c.name, desc: "command.customDesc", body: c.body }))
             );
         });
         return () => {
@@ -59,9 +62,13 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
         };
     }, [projectKey]);
 
+    // desc 是 i18n key：统一在此经 t() 翻译成当前语言（命令弹层 filtered 与 /help 共用）
     const commandList = useMemo<CommandItem[]>(
-        () => [...BUILTIN_COMMANDS, ...customCommands],
-        [customCommands]
+        () => [
+            ...BUILTIN_COMMANDS.map((c) => ({ ...c, desc: t(c.desc) })),
+            ...customCommands.map((c) => ({ ...c, desc: t(c.desc) })),
+        ],
+        [t, customCommands]
     );
 
     const commandMode = draft.startsWith("/");
@@ -77,13 +84,13 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
     );
 
     const buildHelpText = useCallback(() => {
-        const lines = BUILTIN_COMMANDS.map((c) => `/${c.name} — ${c.desc}`);
+        const lines = BUILTIN_COMMANDS.map((c) => `/${c.name} — ${t(c.desc)}`);
         if (customCommands.length) {
-            lines.push("", "自定义:");
+            lines.push("", t("command.helpCustomHeader"));
             lines.push(...customCommands.map((c) => `/${c.name}`));
         }
         return lines.join("\n");
-    }, [customCommands]);
+    }, [customCommands, t]);
 
     // 执行斜杠指令：name=命令名（无 /），args=首个空格之后的参数串
     const executeCommand = useCallback(
@@ -91,7 +98,7 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
             switch (name) {
                 case "clear":
                     clear();
-                    appendSystem("已清空对话");
+                    appendSystem(t("command.cleared"));
                     return;
                 case "new":
                     navigate("/chat/new");
@@ -101,14 +108,14 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
                     return;
                 case "rewind":
                     if (openSnapshots) openSnapshots();
-                    else appendSystem("当前会话不支持快照回滚");
+                    else appendSystem(t("command.rewindUnsupported"));
                     return;
                 case "help":
                     appendSystem(buildHelpText());
                     return;
                 case "model":
                     if (!projectKey) {
-                        appendSystem("未选择工作区");
+                        appendSystem(t("command.noWorkspace"));
                         return;
                     }
                     if (!args) {
@@ -127,15 +134,19 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
                             }>(`/api/config`),
                         ]);
                         if (!st) {
-                            appendSystem("无法获取当前模型");
+                            appendSystem(t("command.cannotGetModel"));
                             return;
                         }
                         const lines: string[] = [
-                            `当前: ${st.provider} / ${st.modelName} (${st.model})`,
+                            t("command.currentModel", {
+                                provider: st.provider,
+                                modelName: st.modelName,
+                                model: st.model,
+                            }),
                         ];
                         const provider = cfg?.providers[cfg.default];
                         if (provider?.models.length) {
-                            lines.push("", "可选模型:");
+                            lines.push("", t("command.availableModels"));
                             for (const m of provider.models) {
                                 lines.push(
                                     `  ${m.id}${m.name ? ` (${m.name})` : ""}`
@@ -150,9 +161,9 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
                             body: JSON.stringify({ modelId: args }),
                         });
                         if (res.ok) {
-                            appendSystem(`已切到模型 ${args}（下次对话生效）`);
+                            appendSystem(t("command.modelSwitched", { model: args }));
                         } else {
-                            let text = "切换失败";
+                            let text = t("command.switchFailed");
                             try {
                                 const j = (await res.json()) as {
                                     statusMessage?: string;
@@ -167,7 +178,7 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
                     return;
                 case "provider":
                     if (!projectKey) {
-                        appendSystem("未选择工作区");
+                        appendSystem(t("command.noWorkspace"));
                         return;
                     }
                     if (!args) {
@@ -175,9 +186,13 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
                             `/api/workspaces/${projectKey}/status`
                         );
                         if (data) {
-                            appendSystem(`当前 provider: ${data.provider}`);
+                            appendSystem(
+                                t("command.currentProvider", {
+                                    provider: data.provider,
+                                })
+                            );
                         } else {
-                            appendSystem("无法获取当前 provider");
+                            appendSystem(t("command.cannotGetProvider"));
                         }
                     } else {
                         const res = await fetch(`/api/config`, {
@@ -186,9 +201,11 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
                             body: JSON.stringify({ default: args }),
                         });
                         if (res.ok) {
-                            appendSystem(`已切到 provider ${args}（下次对话生效）`);
+                            appendSystem(
+                                t("command.providerSwitched", { provider: args })
+                            );
                         } else {
-                            let text = "切换失败";
+                            let text = t("command.switchFailed");
                             try {
                                 const j = (await res.json()) as {
                                     statusMessage?: string;
@@ -203,7 +220,7 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
                     return;
                 case "sessions":
                     if (!projectKey) {
-                        appendSystem("未选择工作区");
+                        appendSystem(t("command.noWorkspace"));
                         return;
                     }
                     {
@@ -217,15 +234,19 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
                                         s.updatedAt
                                     ).toLocaleString()})`
                             );
-                            appendSystem("会话列表:\n" + lines.join("\n"));
+                            appendSystem(
+                                t("command.sessionList") +
+                                    "\n" +
+                                    lines.join("\n")
+                            );
                         } else {
-                            appendSystem("暂无会话");
+                            appendSystem(t("command.noSessions"));
                         }
                     }
                     return;
                 case "compact": {
                     if (!currentSessionId) {
-                        appendSystem("无会话历史可压缩");
+                        appendSystem(t("command.compactNoHistory"));
                         return;
                     }
                     setCompacting(true);
@@ -249,11 +270,14 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
                             };
                             appendSystem(
                                 r.compacted
-                                    ? `已压缩上下文 ${r.beforeTokens}→${r.afterTokens} tokens`
-                                    : "无可压缩内容（上下文已足够短）"
+                                    ? t("command.compacted", {
+                                          before: r.beforeTokens,
+                                          after: r.afterTokens,
+                                      })
+                                    : t("command.compactNotNeeded")
                             );
                         } else {
-                            let text = "压缩失败";
+                            let text = t("command.compactFailed");
                             try {
                                 const j = (await res.json()) as {
                                     statusMessage?: string;
@@ -274,7 +298,7 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
                     if (custom && custom.body != null) {
                         submit(custom.body + (args ? "\n" + args : ""));
                     } else {
-                        appendSystem("未知指令: " + name);
+                        appendSystem(t("command.unknownCommand", { name }));
                     }
                 }
             }
@@ -289,6 +313,7 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
             customCommands,
             submit,
             buildHelpText,
+            t,
         ]
     );
 

@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { InteractionData } from "@/hooks/useAgent";
+import { useT } from "@/i18n";
 
 /**
  * InteractionModal —— ask_question 工具阻塞时弹的模态。
@@ -27,6 +28,7 @@ export function InteractionModal({
     onSubmit: (answers: string[]) => void;
     onClose: () => void;
 }) {
+    const { t } = useT();
     const n = data.questions.length;
     const [answers, setAnswers] = useState<string[]>(() =>
         Array.from({ length: n }, () => "")
@@ -45,7 +47,7 @@ export function InteractionModal({
         <Dialog open onOpenChange={(o) => !o && onClose()}>
             <DialogContent className="max-w-lg">
                 <DialogHeader>
-                    <DialogTitle>需要你的输入</DialogTitle>
+                    <DialogTitle>{t("interactionModal.title")}</DialogTitle>
                 </DialogHeader>
                 <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto py-1">
                     {data.questions.map((q, i) => (
@@ -113,7 +115,9 @@ export function InteractionModal({
                                         </span>
                                         <Input
                                             className="h-7 text-sm"
-                                            placeholder="输入自定义答案"
+                                            placeholder={t(
+                                                "interactionModal.otherPlaceholder"
+                                            )}
                                             value={
                                                 // 若 answers[i] 不在 options 里 → 它是 Other 文本
                                                 q.options.includes(answers[i])
@@ -131,7 +135,9 @@ export function InteractionModal({
                             ) : (
                                 <Input
                                     className="h-8 text-sm"
-                                    placeholder="输入你的回答"
+                                    placeholder={t(
+                                        "interactionModal.answerPlaceholder"
+                                    )}
                                     value={answers[i]}
                                     onChange={(e) =>
                                         setAns(i, e.target.value)
@@ -144,13 +150,13 @@ export function InteractionModal({
                 </div>
                 <DialogFooter>
                     <Button variant="ghost" onClick={onClose}>
-                        停止任务
+                        {t("interactionModal.stopTask")}
                     </Button>
                     <Button
                         disabled={!allAnswered}
                         onClick={() => onSubmit(answers)}
                     >
-                        提交
+                        {t("interactionModal.submit")}
                     </Button>
                 </DialogFooter>
             </DialogContent>

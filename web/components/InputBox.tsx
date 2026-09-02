@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { CommandItem } from "@/hooks/useCommand";
 import type { FileEntry } from "@/hooks/useFileReference";
+import { useT } from "@/i18n";
 
 interface InputBoxProps {
     draft: string;
@@ -57,6 +58,7 @@ export function InputBox({
     stop,
     runRawCommand,
 }: InputBoxProps) {
+    const { t } = useT();
     const taRef = useRef<HTMLTextAreaElement>(null);
 
     // 自动增高（按内容，上限 160px 后滚动）
@@ -169,7 +171,7 @@ export function InputBox({
                             value={draft}
                             disabled={pending}
                             rows={1}
-                            placeholder="输入任务... (Enter 发送，Alt+Enter 换行，/ 指令 Tab 补全，@ 文件)"
+                            placeholder={t("inputBox.placeholder")}
                             className="flex-1 resize-none border-0 focus-visible:ring-0 bg-transparent text-sm leading-6 max-h-40 overflow-y-auto py-1.5"
                             onChange={(e) => setDraft(e.target.value)}
                             onKeyDown={(e) => {
@@ -277,10 +279,10 @@ export function InputBox({
                         />
                         {pending ? (
                             <Button variant="destructive" onClick={stop}>
-                                停止
+                                {t("inputBox.stop")}
                             </Button>
                         ) : (
-                            <Button onClick={send}>发送</Button>
+                            <Button onClick={send}>{t("inputBox.send")}</Button>
                         )}
                     </div>
                 </div>

@@ -3,22 +3,23 @@
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/i18n";
 import { CollapsibleCard } from "./CollapsibleCard";
 import { apiJson } from "@/lib/api";
 import { useAppSelector } from "@/hooks/useRedux";
 import type { PermissionRuleForm } from "./model";
 
-/** 预设模式三档（SPEC-032 B-009/D-008）。 */
+/** 预设模式三档（SPEC-032 B-009/D-008）。label/desc 存 i18n key，渲染时经 t() 翻译。 */
 const MODES: { value: "standard" | "accept_edits" | "trusted"; label: string; desc: string }[] = [
-    { value: "standard", label: "标准", desc: "命令 / 写文件 / MCP 都先询问（出厂默认）" },
-    { value: "accept_edits", label: "编辑放行", desc: "写文件自动放行，命令与 MCP 仍询问" },
-    { value: "trusted", label: "信任", desc: "全部直通（危险命令基线仍拦截）" },
+    { value: "standard", label: "permissionsCard.modeStandard", desc: "permissionsCard.modeStandardDesc" },
+    { value: "accept_edits", label: "permissionsCard.modeAcceptEdits", desc: "permissionsCard.modeAcceptEditsDesc" },
+    { value: "trusted", label: "permissionsCard.modeTrusted", desc: "permissionsCard.modeTrustedDesc" },
 ];
 
 const ACTIONS: { value: PermissionRuleForm["action"]; label: string }[] = [
-    { value: "allow", label: "允许" },
-    { value: "ask", label: "询问" },
-    { value: "deny", label: "拒绝" },
+    { value: "allow", label: "permissionsCard.actionAllow" },
+    { value: "ask", label: "permissionsCard.actionAsk" },
+    { value: "deny", label: "permissionsCard.actionDeny" },
 ];
 
 /**
@@ -41,6 +42,7 @@ export function PermissionsCard({
     onDangerPatterns: (patterns: string[]) => void;
 }) {
     const workspace = useAppSelector((s) => s.workspace.selected);
+    const { t } = useT();
     const [projectRules, setProjectRules] = useState<PermissionRuleForm[]>([]);
     // 新增规则草稿
     const [draft, setDraft] = useState<PermissionRuleForm>({
@@ -89,11 +91,13 @@ export function PermissionsCard({
         `${r.tool}${r.pattern ? `(${r.pattern})` : ""} → ${r.action}`;
 
     return (
-        <CollapsibleCard title="工具权限">
+        <CollapsibleCard title={t("permissionsCard.title")}>
             <div className="flex flex-col gap-4 px-1">
                 {/* 模式三档 */}
                 <div className="flex flex-col gap-1.5">
-                    <span className="text-xs text-muted-foreground">预设模式</span>
+                    <span className="text-xs text-muted-foreground">
+                        {t("permissionsCard.presetMode")}
+                    </span>
                     <div className="flex flex-col gap-1.5">
                         {MODES.map((m) => (
                             <button
@@ -106,9 +110,9 @@ export function PermissionsCard({
                                 }`}
                                 onClick={() => onMode(m.value)}
                             >
-                                <span className="font-medium">{m.label}</span>
+                                <span className="font-medium">{t(m.label)}</span>
                                 <span className="ml-2 text-xs text-muted-foreground">
-                                    {m.desc}
+                                    {t(m.desc)}
                                 </span>
                             </button>
                         ))}
@@ -118,7 +122,7 @@ export function PermissionsCard({
                 {/* 全局规则 */}
                 <div className="flex flex-col gap-1.5">
                     <span className="text-xs text-muted-foreground">
-                        全局规则（所有项目生效；按顺序匹配，后面的覆盖前面的）
+                        {t("permissionsCard.globalRules")}
                     </span>
                     {rules.map((r, i) => (
                         <div
@@ -134,20 +138,20 @@ export function PermissionsCard({
                                 className="h-6 px-2 text-xs text-destructive"
                                 onClick={() => onRules(rules.filter((_, j) => j !== i))}
                             >
-                                删除
+                                {t("common.delete")}
                             </Button>
                         </div>
                     ))}
                     <div className="flex items-center gap-1.5">
                         <Input
                             className="h-7 text-xs font-mono w-28"
-                            placeholder="工具名（bash）"
+                            placeholder={t("permissionsCard.toolPlaceholder")}
                             value={draft.tool}
                             onChange={(e) => setDraft({ ...draft, tool: e.target.value })}
                         />
                         <Input
                             className="h-7 text-xs font-mono flex-1"
-                            placeholder="匹配模式（可选，如 npm * / src/**）"
+                            placeholder={t("permissionsCard.patternPlaceholder")}
                             value={draft.pattern}
                             onChange={(e) => setDraft({ ...draft, pattern: e.target.value })}
                         />
@@ -163,12 +167,12 @@ export function PermissionsCard({
                         >
                             {ACTIONS.map((a) => (
                                 <option key={a.value} value={a.value}>
-                                    {a.label}
+                                    {t(a.label)}
                                 </option>
                             ))}
                         </select>
                         <Button size="sm" className="h-7 px-2 text-xs" onClick={addRule}>
-                            添加
+                            {t("permissionsCard.add")}
                         </Button>
                     </div>
                 </div>
@@ -177,11 +181,13 @@ export function PermissionsCard({
                 {workspace?.projectKey && (
                     <div className="flex flex-col gap-1.5">
                         <span className="text-xs text-muted-foreground">
-                            项目级规则（{workspace.name} /.anycode/permissions.yaml）
+                            {t("permissionsCard.projectRules", {
+                                name: workspace.name,
+                            })}
                         </span>
                         {projectRules.length === 0 && (
                             <span className="text-xs text-muted-foreground px-1">
-                                （无——裁决"永久允许"时自动产生）
+                                {t("permissionsCard.projectRulesEmpty")}
                             </span>
                         )}
                         {projectRules.map((r, i) => (
@@ -198,7 +204,7 @@ export function PermissionsCard({
                                     className="h-6 px-2 text-xs text-destructive"
                                     onClick={() => removeProjectRule(i)}
                                 >
-                                    删除
+                                    {t("common.delete")}
                                 </Button>
                             </div>
                         ))}
@@ -208,7 +214,7 @@ export function PermissionsCard({
                 {/* 危险命令基线 */}
                 <div className="flex flex-col gap-1.5">
                     <span className="text-xs text-muted-foreground">
-                        危险命令基线（命中即询问，任何模式不可越过）
+                        {t("permissionsCard.dangerBaseline")}
                     </span>
                     <div className="flex flex-wrap gap-1.5">
                         {dangerPatterns.map((p) => (
@@ -232,12 +238,12 @@ export function PermissionsCard({
                     <div className="flex items-center gap-1.5">
                         <Input
                             className="h-7 text-xs font-mono w-48"
-                            placeholder="新增基线模式（子串匹配）"
+                            placeholder={t("permissionsCard.dangerPlaceholder")}
                             value={newDanger}
                             onChange={(e) => setNewDanger(e.target.value)}
                         />
                         <Button size="sm" className="h-7 px-2 text-xs" onClick={addDanger}>
-                            添加
+                            {t("permissionsCard.add")}
                         </Button>
                     </div>
                 </div>

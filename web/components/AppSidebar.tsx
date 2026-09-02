@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiJson } from "@/lib/api";
+import { useT } from "@/i18n";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { Logo } from "./Logo";
 import { Link } from "react-router-dom";
@@ -68,6 +69,7 @@ export function AppSidebar({
         useAppSelector(selectWorkspace);
     const dispatch = useAppDispatch();
     const navigate = useNavigate();
+    const { t } = useT();
 
     const [sessionsMap, setSessionsMap] = useState<Record<string, SessionListItem[]>>({});
     const sessionsMapRef = useRef(sessionsMap);
@@ -166,7 +168,7 @@ export function AppSidebar({
             body: JSON.stringify({ path }),
         });
         if (!meta) {
-            setAddError("添加工作区失败，请重试");
+            setAddError(t("sidebar.addWorkspaceFailed"));
             return;
         }
         await dispatch(refreshWorkspaces());
@@ -273,26 +275,26 @@ export function AppSidebar({
     };
 
     const confirmDeleteWorkspace = async () => {
-        const t = deleteWsTarget;
-        if (!t) return;
+        const target = deleteWsTarget;
+        if (!target) return;
         const r = await apiJson<{ status: string }>("/api/workspaces", {
             method: "DELETE",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ path: t.rootPath }),
+            body: JSON.stringify({ path: target.rootPath }),
         });
         setDeleteWsTarget(null);
         if (!r) {
-            setSidebarErr("删除工作区失败，请重试");
+            setSidebarErr(t("sidebar.deleteWorkspaceFailed"));
             return;
         }
         // 清该工作区本地 sessions 缓存 + 刷新注册表
         setSessionsMap((p) => {
             const next = { ...p };
-            delete next[t.projectKey];
+            delete next[target.projectKey];
             return next;
         });
         await dispatch(refreshWorkspaces());
-        if (selected?.projectKey === t.projectKey) {
+        if (selected?.projectKey === target.projectKey) {
             dispatch(setSelected(null));
             dispatch(setActiveSession(null));
             navigate("/");
@@ -300,39 +302,39 @@ export function AppSidebar({
     };
 
     const confirmDelete = async () => {
-        const t = deleteTarget;
-        if (!t) return;
+        const target = deleteTarget;
+        if (!target) return;
         const r = await apiJson<{ status: string }>(
-            `/api/workspaces/${t.w.projectKey}/sessions/${t.s.id}`,
+            `/api/workspaces/${target.w.projectKey}/sessions/${target.s.id}`,
             { method: "DELETE" }
         );
         setDeleteTarget(null);
         if (!r) {
-            setSidebarErr("删除会话失败，请重试");
+            setSidebarErr(t("sidebar.deleteSessionFailed"));
             return;
         }
         // 本地 filter 掉
         setSessionsMap((p) => ({
             ...p,
-            [t.w.projectKey]: (p[t.w.projectKey] ?? []).filter(
-                (s) => s.id !== t.s.id
+            [target.w.projectKey]: (p[target.w.projectKey] ?? []).filter(
+                (s) => s.id !== target.s.id
             ),
         }));
         // 删的是当前活动 session → 跳回列表（session 文件已删即可）
-        if (activeSessionId === t.s.id) {
+        if (activeSessionId === target.s.id) {
             dispatch(setActiveSession(null));
             navigate("/");
         }
     };
 
-    const submitRename = async (t: NonNullable<typeof renameTarget>) => {
-        const title = t.value.trim();
-        if (!title || title === t.s.title) {
+    const submitRename = async (target: NonNullable<typeof renameTarget>) => {
+        const title = target.value.trim();
+        if (!title || title === target.s.title) {
             setRenameTarget(null);
             return;
         }
         const r = await apiJson<{ status: string; title: string }>(
-            `/api/workspaces/${t.w.projectKey}/sessions/${t.s.id}`,
+            `/api/workspaces/${target.w.projectKey}/sessions/${target.s.id}`,
             {
                 method: "PATCH",
                 headers: { "content-type": "application/json" },
@@ -340,15 +342,15 @@ export function AppSidebar({
             }
         );
         if (!r) {
-            setSidebarErr("重命名会话失败，请重试");
+            setSidebarErr(t("sidebar.renameSessionFailed"));
             setRenameTarget(null);
             return;
         }
         // 本地更新 title
         setSessionsMap((p) => ({
             ...p,
-            [t.w.projectKey]: (p[t.w.projectKey] ?? []).map((s) =>
-                s.id === t.s.id ? { ...s, title } : s
+            [target.w.projectKey]: (p[target.w.projectKey] ?? []).map((s) =>
+                s.id === target.s.id ? { ...s, title } : s
             ),
         }));
         setRenameTarget(null);
@@ -367,7 +369,7 @@ export function AppSidebar({
                 </Link>
                 <button
                     onClick={onExpand}
-                    title="展开侧栏"
+                    title={t("sidebar.expandSidebar")}
                     className="p-2 rounded-md hover:bg-accent"
                 >
                     <PanelLeftOpen className="size-4" />
@@ -375,7 +377,7 @@ export function AppSidebar({
                 <div className="flex-1" />
                 <Link
                     to="/settings"
-                    title="设置"
+                    title={t("sidebar.settings")}
                     className="p-2 rounded-md hover:bg-accent"
                 >
                     <Settings className="size-4 text-muted-foreground" />
@@ -400,7 +402,7 @@ export function AppSidebar({
                 </Link>
                 <button
                     onClick={onCollapse}
-                    title="折叠侧栏"
+                    title={t("sidebar.collapseSidebar")}
                     className="p-1.5 rounded-md hover:bg-accent shrink-0"
                 >
                     <PanelLeftClose className="size-4" />
@@ -415,7 +417,7 @@ export function AppSidebar({
                     className="w-full gap-1.5"
                     onClick={() => setPickerOpen(true)}
                 >
-                    <Plus className="size-4" /> 添加工作区
+                    <Plus className="size-4" /> {t("sidebar.addWorkspace")}
                 </Button>
             </div>
 
@@ -426,14 +428,14 @@ export function AppSidebar({
                     <input
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
-                        placeholder="搜索工作区 / 会话…"
+                        placeholder={t("sidebar.searchPlaceholder")}
                         className="flex-1 min-w-0 border-0 bg-transparent text-sm py-1.5 outline-none"
                     />
                     {query && (
                         <button
                             onClick={() => setQuery("")}
                             className="text-muted-foreground hover:text-foreground text-xs shrink-0"
-                            title="清除"
+                            title={t("sidebar.clearSearch")}
                         >
                             ×
                         </button>
@@ -446,20 +448,20 @@ export function AppSidebar({
                     <div className="p-2 flex flex-col gap-2">
                         {searching && (
                             <p className="px-2 py-1 text-xs text-muted-foreground">
-                                搜索中…
+                                {t("sidebar.searching")}
                             </p>
                         )}
                         {!searching && results &&
                             results.workspaces.length === 0 &&
                             results.sessions.length === 0 && (
                                 <p className="px-2 py-4 text-xs text-muted-foreground">
-                                    无匹配结果
+                                    {t("sidebar.noResults")}
                                 </p>
                             )}
                         {results && results.workspaces.length > 0 && (
                             <div className="flex flex-col gap-1">
                                 <p className="px-2 text-[11px] uppercase text-muted-foreground">
-                                    工作区
+                                    {t("sidebar.workspaces")}
                                 </p>
                                 {results.workspaces.map((w) => (
                                     <button
@@ -476,7 +478,7 @@ export function AppSidebar({
                         {results && results.sessions.length > 0 && (
                             <div className="flex flex-col gap-1">
                                 <p className="px-2 text-[11px] uppercase text-muted-foreground">
-                                    会话
+                                    {t("sidebar.sessions")}
                                 </p>
                                 {results.sessions.map((s) => (
                                     <button
@@ -503,7 +505,7 @@ export function AppSidebar({
                     <div className="p-2 flex flex-col gap-1">
                         {workspaces.length === 0 && (
                             <p className="px-2 py-4 text-xs text-muted-foreground">
-                                点上方「添加工作区」选一个本地目录开始
+                                {t("sidebar.emptyHint")}
                             </p>
                         )}
                         {workspaces.map((w) => (
@@ -521,9 +523,11 @@ export function AppSidebar({
                                 <CollapsibleTrigger asChild>
                                     <button
                                         className="shrink-0 p-0.5 rounded hover:bg-accent"
-                                        aria-label={
-                                            openKeys[w.projectKey] ? "折叠" : "展开"
-                                        }
+                                        aria-label={t(
+                                            openKeys[w.projectKey]
+                                                ? "sidebar.collapse"
+                                                : "sidebar.expand"
+                                        )}
                                     >
                                         <ChevronRight
                                             className="size-3.5 transition-transform"
@@ -543,7 +547,7 @@ export function AppSidebar({
                                     <span className="truncate">{w.name}</span>
                                 </button>
                                 <button
-                                    title="新建对话"
+                                    title={t("sidebar.newChat")}
                                     className="shrink-0 p-0.5 rounded hover:bg-accent text-muted-foreground"
                                     onClick={(e) => {
                                         e.stopPropagation();
@@ -553,7 +557,7 @@ export function AppSidebar({
                                     <Plus className="size-3.5" />
                                 </button>
                                 <button
-                                    title="删除工作区"
+                                    title={t("sidebar.deleteWorkspace")}
                                     className="shrink-0 p-0.5 rounded hover:bg-accent text-muted-foreground"
                                     onClick={(e) => {
                                         e.stopPropagation();
@@ -581,7 +585,7 @@ export function AppSidebar({
                                         ))}
                                     {sessionsStatus[w.projectKey] === "error" && (
                                         <p className="px-2 py-1 text-[11px] text-destructive">
-                                            加载会话失败
+                                            {t("sidebar.loadSessionsFailed")}
                                         </p>
                                     )}
                                     {sessionsStatus[w.projectKey] === "ready" &&
@@ -623,7 +627,7 @@ export function AppSidebar({
                                                     ) : (
                                                         <button
                                                             className="flex-1 min-w-0 truncate text-left"
-                                                            title={s.title || "（无标题）"}
+                                                            title={s.title || t("sidebar.untitled")}
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 resume(w, s.id);
@@ -637,14 +641,14 @@ export function AppSidebar({
                                                                 });
                                                             }}
                                                         >
-                                                            {s.title || "（无标题）"}
+                                                            {s.title || t("sidebar.untitled")}
                                                         </button>
                                                     )}
                                                     {/* FR-30 B-004：运行状态徽标（名称右侧） */}
                                                     {!rt && s.status === "running" && (
                                                         <Loader2
                                                             className="size-3 shrink-0 animate-spin text-primary"
-                                                            aria-label="运行中"
+                                                            aria-label={t("sidebar.running")}
                                                         />
                                                     )}
                                                     {!rt && s.status === "waiting_ask" && (
@@ -652,21 +656,23 @@ export function AppSidebar({
                                                             className="size-2 shrink-0 rounded-full bg-amber-500 animate-pulse"
                                                             title={
                                                                 s.pendingAsk?.tool
-                                                                    ? `等待确认：${s.pendingAsk.tool}`
-                                                                    : "等待确认"
+                                                                    ? t("sidebar.waitingConfirmWithTool", {
+                                                                          tool: s.pendingAsk.tool,
+                                                                      })
+                                                                    : t("sidebar.waitingConfirm")
                                                             }
                                                         />
                                                     )}
                                                     {!rt && s.status === "queued" && (
                                                         <Clock3
                                                             className="size-3 shrink-0 text-muted-foreground"
-                                                            aria-label="排队中"
+                                                            aria-label={t("sidebar.queued")}
                                                         />
                                                     )}
                                                     {!rt && (
                                                         <span className="flex items-center gap-0.5 shrink-0">
                                                             <button
-                                                                title="重命名"
+                                                                title={t("sidebar.rename")}
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
                                                                     setRenameTarget({
@@ -679,7 +685,7 @@ export function AppSidebar({
                                                                 <Pencil className="size-3 text-muted-foreground" />
                                                             </button>
                                                             <button
-                                                                title="删除"
+                                                                title={t("common.delete")}
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
                                                                     setDeleteTarget({ w, s });
@@ -695,7 +701,7 @@ export function AppSidebar({
                                     {sessionsStatus[w.projectKey] === "ready" &&
                                         (sessionsMap[w.projectKey] ?? []).length === 0 && (
                                             <p className="px-2 py-1 text-[11px] text-muted-foreground">
-                                                暂无会话
+                                                {t("sidebar.noSessions")}
                                             </p>
                                         )}
                                 </div>
@@ -718,7 +724,7 @@ export function AppSidebar({
                     className="flex items-center gap-1.5 w-full px-2 py-1.5 rounded-md text-sm hover:bg-accent"
                 >
                     <Settings className="size-3.5 text-muted-foreground shrink-0" />
-                    <span>设置</span>
+                    <span>{t("sidebar.settings")}</span>
                 </Link>
             </div>
 
@@ -737,17 +743,19 @@ export function AppSidebar({
             >
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>删除会话？</DialogTitle>
+                        <DialogTitle>{t("sidebar.deleteSessionTitle")}</DialogTitle>
                     </DialogHeader>
                     <p className="text-sm text-muted-foreground">
-                        删除后无法恢复：{deleteTarget?.s.title || "（无标题）"}
+                        {t("sidebar.deleteSessionBody", {
+                            title: deleteTarget?.s.title || t("sidebar.untitled"),
+                        })}
                     </p>
                     <DialogFooter>
                         <DialogClose asChild>
-                            <Button variant="ghost">取消</Button>
+                            <Button variant="ghost">{t("common.cancel")}</Button>
                         </DialogClose>
                         <Button variant="destructive" onClick={confirmDelete}>
-                            删除
+                            {t("common.delete")}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -759,21 +767,22 @@ export function AppSidebar({
             >
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>删除工作区？</DialogTitle>
+                        <DialogTitle>{t("sidebar.deleteWorkspaceTitle")}</DialogTitle>
                     </DialogHeader>
                     <p className="text-sm text-muted-foreground">
-                        从侧栏移除「{deleteWsTarget?.name}」。该工作区下的会话文件保留在磁盘
-                        （重新添加同一路径可恢复），不会删除你的项目源码。
+                        {t("sidebar.deleteWorkspaceBody", {
+                            name: deleteWsTarget?.name ?? "",
+                        })}
                     </p>
                     <DialogFooter>
                         <DialogClose asChild>
-                            <Button variant="ghost">取消</Button>
+                            <Button variant="ghost">{t("common.cancel")}</Button>
                         </DialogClose>
                         <Button
                             variant="destructive"
                             onClick={confirmDeleteWorkspace}
                         >
-                            移除
+                            {t("sidebar.remove")}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

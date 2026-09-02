@@ -13,11 +13,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Logo } from "@/components/Logo";
 import { FolderOpen } from "lucide-react";
 import { apiJson } from "@/lib/api";
+import { useT } from "@/i18n";
 
 type SessionsStatus = "loading" | "ready" | "error";
 
 // 中央：品牌 hero + 当前选中工作区的会话列表（或空状态引导选工作区）
 export default function Page() {
+    const { t } = useT();
     const { selected, workspaces } = useAppSelector(selectWorkspace);
     const dispatch = useAppDispatch();
     const navigate = useNavigate();
@@ -101,7 +103,7 @@ export default function Page() {
                                     onClick={newChat}
                                     disabled={busy}
                                 >
-                                    {busy ? "创建中…" : "＋ 新建对话"}
+                                    {busy ? t("home.creating") : t("home.newChat")}
                                 </Button>
                             </div>
                         </CardHeader>
@@ -118,7 +120,7 @@ export default function Page() {
                                 ))}
                             {status === "error" && (
                                 <p className="text-sm text-destructive px-3 py-2">
-                                    加载会话失败，请重试
+                                    {t("home.loadSessionsFailed")}
                                 </p>
                             )}
                             {status === "ready" &&
@@ -130,7 +132,7 @@ export default function Page() {
                                         disabled={busy}
                                     >
                                         <span className="text-sm text-accent-foreground truncate">
-                                            {s.title || "（无标题）"}
+                                            {s.title || t("home.untitled")}
                                         </span>
                                         <span className="text-xs text-muted-foreground whitespace-nowrap">
                                             {new Date(s.updatedAt).toLocaleString()}
@@ -139,7 +141,7 @@ export default function Page() {
                                 ))}
                             {status === "ready" && sessions.length === 0 && (
                                 <p className="text-sm text-muted-foreground px-3 py-2">
-                                    暂无会话，点「新建对话」开始
+                                    {t("home.emptySessions")}
                                 </p>
                             )}
                         </CardContent>
@@ -148,7 +150,7 @@ export default function Page() {
                     <div className="rounded-xl border border-dashed border-border p-8 flex flex-col items-center gap-2 text-center">
                         <FolderOpen className="size-6 text-muted-foreground" />
                         <p className="text-sm text-muted-foreground">
-                            还没有工作区。在侧栏点「添加工作区」选一个本地目录开始。
+                            {t("home.noWorkspace")}
                         </p>
                     </div>
                 )}

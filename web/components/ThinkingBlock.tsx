@@ -7,6 +7,7 @@ import {
     CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n";
 
 /**
  * ThinkingBlock —— 模型的思考过程展示。
@@ -21,6 +22,7 @@ export function ThinkingBlock({
     /** 思考已结束：模型已输出正式内容（assistant text）或本回合结束 */
     finished?: boolean;
 }) {
+    const { t } = useT();
     const [open, setOpen] = useState(false);
     const [elapsed, setElapsed] = useState(0);
     const startRef = useRef<number | null>(null);
@@ -61,7 +63,7 @@ export function ThinkingBlock({
                     {open ? "▾" : "▸"}
                 </span>
                 <span className="text-[11px] text-muted-foreground italic">
-                    思考
+                    {t("thinkingBlock.label")}
                 </span>
                 <span className="text-[10px] text-muted-foreground/60 tabular-nums font-mono">
                     {elapsed.toFixed(1)}s

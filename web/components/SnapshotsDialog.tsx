@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { apiJson } from "@/lib/api";
+import { useT } from "@/i18n";
 
 interface Snapshot {
     id: string;
@@ -29,6 +30,7 @@ export function SnapshotsDialog({
     projectKey: string;
     onClose: () => void;
 }) {
+    const { t } = useT();
     const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
     const [gitAvailable, setGitAvailable] = useState(true);
     const [loading, setLoading] = useState(true);
@@ -45,11 +47,11 @@ export function SnapshotsDialog({
                 setSnapshots(res.snapshots ?? []);
                 setGitAvailable(res.gitAvailable);
             } else {
-                setError("加载快照失败");
+                setError(t("snapshots.loadFailed"));
             }
             setLoading(false);
         });
-    }, [projectKey]);
+    }, [projectKey, t]);
 
     const rollback = async (id: string) => {
         setRolling(true);
@@ -68,12 +70,12 @@ export function SnapshotsDialog({
                 const j = (await res.json().catch(() => ({}))) as {
                     statusMessage?: string;
                 };
-                setError(j.statusMessage ?? "回滚失败");
+                setError(j.statusMessage ?? t("snapshots.rollbackFailed"));
                 setRolling(false);
                 setArmed(null);
             }
         } catch {
-            setError("网络错误，回滚失败");
+            setError(t("snapshots.networkError"));
             setRolling(false);
             setArmed(null);
         }
@@ -86,23 +88,23 @@ export function SnapshotsDialog({
         <Dialog open onOpenChange={(o) => !o && onClose()}>
             <DialogContent className="max-w-xl">
                 <DialogHeader>
-                    <DialogTitle>回滚工作区到快照</DialogTitle>
+                    <DialogTitle>{t("snapshots.title")}</DialogTitle>
                 </DialogHeader>
                 <div className="flex flex-col gap-2 max-h-[55vh] overflow-y-auto py-1">
                     {loading && (
-                        <p className="text-sm text-muted-foreground">加载中…</p>
+                        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
                     )}
                     {!loading && error && (
                         <p className="text-sm text-destructive">{error}</p>
                     )}
                     {!loading && !error && !gitAvailable && (
                         <p className="text-sm text-muted-foreground">
-                            本机未安装 git，快照功能不可用。
+                            {t("snapshots.gitUnavailable")}
                         </p>
                     )}
                     {!loading && !error && gitAvailable && snapshots.length === 0 && (
                         <p className="text-sm text-muted-foreground">
-                            暂无快照——agent 执行写类操作时会自动创建。
+                            {t("snapshots.empty")}
                         </p>
                     )}
                     {!loading &&
@@ -118,7 +120,7 @@ export function SnapshotsDialog({
                                     </span>
                                     <span className="text-[11px] text-muted-foreground font-mono">
                                         {fmt(s.ts)} · {s.id.slice(0, 8)}
-                                        {i === 0 ? " · 最新" : ""}
+                                        {i === 0 ? ` · ${t("snapshots.latest")}` : ""}
                                     </span>
                                 </span>
                                 <Button
@@ -138,15 +140,15 @@ export function SnapshotsDialog({
                                 >
                                     {armed === s.id
                                         ? rolling
-                                            ? "回滚中…"
-                                            : "确认回滚"
-                                        : "回滚"}
+                                            ? t("snapshots.rolling")
+                                            : t("snapshots.confirmRollback")
+                                        : t("snapshots.rollback")}
                                 </Button>
                             </div>
                         ))}
                     {!loading && gitAvailable && snapshots.length > 0 && (
                         <p className="text-[11px] text-muted-foreground">
-                            回滚恢复该时点已跟踪的文件；快照之后新建且未被跟踪的文件会保留。回滚前请确认已保存手头工作。
+                            {t("snapshots.rollbackHint")}
                         </p>
                     )}
                 </div>

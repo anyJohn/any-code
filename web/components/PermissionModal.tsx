@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PermissionAskData } from "@/hooks/useAgent";
 import type { PermissionDecision } from "@/hooks/useAgent";
+import { useT } from "@/i18n";
 
 /**
  * PermissionModal —— 权限裁决窗（SPEC-032 B-005）。
@@ -26,6 +27,7 @@ export function PermissionModal({
     data: PermissionAskData;
     onDecision: (decision: PermissionDecision, scope: "project" | "global") => void;
 }) {
+    const { t } = useT();
     const [mode, setMode] = useState<"once" | "always">("once");
     const [pattern, setPattern] = useState(data.pattern ?? data.tool);
     const [scope, setScope] = useState<"project" | "global">("project");
@@ -45,10 +47,10 @@ export function PermissionModal({
             <DialogContent className="max-w-lg" onInteractOutside={(e) => e.preventDefault()}>
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        需要你的许可
+                        {t("permissionModal.title")}
                         {data.danger && (
                             <span className="text-[11px] font-medium rounded px-1.5 py-0.5 bg-destructive/15 text-destructive">
-                                命中危险命令基线
+                                {t("permissionModal.dangerBadge")}
                             </span>
                         )}
                     </DialogTitle>
@@ -60,7 +62,11 @@ export function PermissionModal({
                             {data.tool}
                         </span>
                         <span className="text-muted-foreground text-xs">
-                            {data.pattern ? `匹配：${data.pattern}` : ""}
+                            {data.pattern
+                                ? t("permissionModal.matchPattern", {
+                                      pattern: data.pattern,
+                                  })
+                                : ""}
                         </span>
                     </div>
                     {summary && (
@@ -79,7 +85,7 @@ export function PermissionModal({
                             }`}
                             onClick={() => setMode("once")}
                         >
-                            允许一次
+                            {t("permissionModal.allowOnce")}
                         </button>
                         <button
                             type="button"
@@ -90,14 +96,14 @@ export function PermissionModal({
                             }`}
                             onClick={() => setMode("always")}
                         >
-                            永久允许
+                            {t("permissionModal.allowAlways")}
                         </button>
                     </div>
 
                     {mode === "always" && (
                         <div className="flex flex-col gap-2 rounded-md border border-border p-2.5">
                             <label className="text-xs text-muted-foreground">
-                                生效范围（匹配模式可编辑）
+                                {t("permissionModal.scopeLabel")}
                             </label>
                             <Input
                                 className="h-7 font-mono text-xs"
@@ -114,7 +120,7 @@ export function PermissionModal({
                                     }`}
                                     onClick={() => setScope("project")}
                                 >
-                                    仅当前项目
+                                    {t("permissionModal.scopeProject")}
                                 </button>
                                 <button
                                     type="button"
@@ -125,7 +131,7 @@ export function PermissionModal({
                                     }`}
                                     onClick={() => setScope("global")}
                                 >
-                                    所有项目
+                                    {t("permissionModal.scopeGlobal")}
                                 </button>
                             </div>
                         </div>
@@ -137,7 +143,7 @@ export function PermissionModal({
                         variant="outline"
                         onClick={() => onDecision("deny", scope)}
                     >
-                        拒绝
+                        {t("permissionModal.deny")}
                     </Button>
                     <Button
                         onClick={() =>
@@ -147,7 +153,11 @@ export function PermissionModal({
                             )
                         }
                     >
-                        {mode === "once" ? "允许一次" : "永久允许"}
+                        {t(
+                            mode === "once"
+                                ? "permissionModal.allowOnce"
+                                : "permissionModal.allowAlways"
+                        )}
                     </Button>
                 </DialogFooter>
             </DialogContent>

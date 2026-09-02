@@ -148,6 +148,29 @@ describe("POST/PATCH /api/config 保留非表单段", () => {
         expect(cfg).toContain("gitBashPath: C:\\Git\\bin\\bash.exe");
         expect(cfg).toContain("web-fetch:");
     });
+
+    it("PATCH language → 写入 ui.language；maxConcurrentRuns 等其余段保留（FR-29）", async () => {
+        const res = await app.request("/api/config", {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ language: "en" }),
+        });
+        expect(res.status).toBe(200);
+        const cfg = readCfg();
+        expect(cfg).toContain("language: en");
+        expect(cfg).toContain("gitBashPath: C:\\Git\\bin\\bash.exe");
+        // GET 读回 ui 段
+        const get = await app.request("/api/config");
+        const json = (await get.json()) as { ui?: { language?: string } };
+        expect(json.ui?.language).toBe("en");
+        // 非法值 → 400
+        const bad = await app.request("/api/config", {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ language: "fr" }),
+        });
+        expect(bad.status).toBe(400);
+    });
 });
 
 

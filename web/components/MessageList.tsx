@@ -2,6 +2,7 @@
 
 import type { AgentEvent } from "@/lib/sseEvents";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n";
 import { SubagentBlock } from "./SubagentBlock";
 import { TurnBlock } from "./TurnBlock";
 import { Logo } from "./Logo";
@@ -56,6 +57,7 @@ export function MessageList({
     toggleSub,
     scrollRef,
 }: MessageListProps) {
+    const { t } = useT();
     // pending 且本轮尚未产出实质内容（Assistant 文本 / 思考 / 工具）→ 显示 typing dots。
     // 一旦出现 Assistant/AssistantDelta/Thinking/Tool/ToolStart/ToolProgress 即"有反馈"→ 隐藏 dots
     // （工具运行期改由活动工具卡片显实时输出，不再靠 dots）。SPEC-018 B-006
@@ -211,14 +213,18 @@ export function MessageList({
                         {activeTool.phase === "generating" ? (
                             <span className="text-[11px] font-mono uppercase text-muted-foreground flex items-center gap-1.5">
                                 <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
-                                {activeTool.name} · 正在生成… {activeTool.bytes}{" "}
-                                bytes
+                                {t("messageList.generating", {
+                                    name: activeTool.name,
+                                    bytes: activeTool.bytes,
+                                })}
                             </span>
                         ) : (
                             <>
                                 <span className="text-[11px] font-mono uppercase text-muted-foreground flex items-center gap-1.5">
                                     <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
-                                    {activeTool.name} · 执行中
+                                    {t("messageList.running", {
+                                        name: activeTool.name,
+                                    })}
                                 </span>
                                 {activeTool.progress && (
                                     <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-y-auto max-h-60 ml-4 border-l border-border pl-3">
@@ -251,7 +257,7 @@ export function MessageList({
                     <div className="flex flex-col items-center gap-3 py-10 text-center">
                         <Logo size={36} />
                         <p className="text-sm text-muted-foreground">
-                            发送一条消息开始对话
+                            {t("messageList.emptyHint")}
                         </p>
                     </div>
                 )}

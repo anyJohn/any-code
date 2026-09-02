@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Minus, Square, Copy, X } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 /**
@@ -13,6 +14,7 @@ import { cn } from "@/lib/utils";
  */
 export function TitleBar() {
     const [maximized, setMaximized] = useState(false);
+    const { t } = useT();
 
     useEffect(() => {
         const off = window.anycode?.onMaximizeChange(setMaximized);
@@ -36,7 +38,7 @@ export function TitleBar() {
             <div className="flex items-center">
                 <button
                     type="button"
-                    title="最小化"
+                    title={t("titleBar.minimize")}
                     className={btn}
                     onClick={() => api.minimize()}
                 >
@@ -44,7 +46,7 @@ export function TitleBar() {
                 </button>
                 <button
                     type="button"
-                    title={maximized ? "还原" : "最大化"}
+                    title={t(maximized ? "titleBar.restore" : "titleBar.maximize")}
                     className={btn}
                     onClick={() => api.toggleMaximize()}
                 >
@@ -56,7 +58,7 @@ export function TitleBar() {
                 </button>
                 <button
                     type="button"
-                    title="关闭"
+                    title={t("common.close")}
                     className={cn(
                         btn,
                         "hover:bg-destructive hover:text-white",

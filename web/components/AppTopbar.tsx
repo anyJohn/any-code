@@ -17,10 +17,11 @@ import {
     DropdownMenuSeparator,
     DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { ChevronsUpDown, Plus, FolderOpen } from "lucide-react";
+import { ChevronsUpDown, Plus, FolderOpen, Languages } from "lucide-react";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { Logo } from "./Logo";
 import { apiJson } from "@/lib/api";
+import { useT, type Language } from "@/i18n";
 
 /**
  * AppTopbar —— 当前工作区名 + 下拉（切换最近 / 添加工作区）。
@@ -28,8 +29,13 @@ import { apiJson } from "@/lib/api";
 export function AppTopbar() {
     const { selected, workspaces } = useAppSelector(selectWorkspace);
     const dispatch = useAppDispatch();
+    const { language, setLanguage, t } = useT();
     const [pickerOpen, setPickerOpen] = useState(false);
     const [addError, setAddError] = useState("");
+
+    // 一键切换（FR-29）：本地即时生效 + localStorage + PATCH config 持久化（Provider 内处理）
+    const toggleLanguage = () =>
+        setLanguage((language === "zh" ? "en" : "zh") as Language);
 
     useEffect(() => {
         dispatch(refreshWorkspaces());
@@ -43,7 +49,7 @@ export function AppTopbar() {
             body: JSON.stringify({ path }),
         });
         if (!meta) {
-            setAddError("添加工作区失败，请重试");
+            setAddError(t("topbar.addWorkspaceFailed"));
             return;
         }
         await dispatch(refreshWorkspaces());
@@ -60,17 +66,17 @@ export function AppTopbar() {
                     <Button variant="ghost" size="sm" className="gap-2">
                         <FolderOpen className="size-4" />
                         <span className="truncate max-w-[200px]">
-                            {selected?.name || "选择工作区"}
+                            {selected?.name || t("topbar.selectWorkspace")}
                         </span>
                         <ChevronsUpDown className="size-3 text-muted-foreground" />
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-64">
-                    <DropdownMenuLabel>最近工作区</DropdownMenuLabel>
+                    <DropdownMenuLabel>{t("topbar.recentWorkspaces")}</DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     {workspaces.length === 0 && (
                         <div className="px-2 py-3 text-xs text-muted-foreground">
-                            尚未添加任何工作区
+                            {t("topbar.noWorkspaces")}
                         </div>
                     )}
                     {workspaces.map((w) => (
@@ -87,7 +93,7 @@ export function AppTopbar() {
                     ))}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setPickerOpen(true)}>
-                        <Plus className="size-4" /> 添加工作区
+                        <Plus className="size-4" /> {t("topbar.addWorkspace")}
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
@@ -102,6 +108,18 @@ export function AppTopbar() {
                     {addError}
                 </span>
             )}
+
+            {/* 语言切换（FR-29）：显目标语言 */}
+            <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto shrink-0 gap-1.5 px-2"
+                title={t("topbar.switchLanguage")}
+                onClick={toggleLanguage}
+            >
+                <Languages className="size-4" />
+                <span className="text-xs">{language === "zh" ? "EN" : "中文"}</span>
+            </Button>
 
             <DirectoryPicker
                 open={pickerOpen}

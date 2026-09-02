@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useT } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { apiJson } from "@/lib/api";
 import {
@@ -27,6 +28,7 @@ import { PermissionsCard } from "./settings/PermissionsCard";
  * 数据在页面层统一持有，各卡片只收 props 渲染（见 settings/ 目录）。
  */
 export default function SettingsPage() {
+    const { t } = useT();
     const [providers, setProviders] = useState<ProviderForm[]>([]);
     const [def, setDef] = useState("");
     const [mcp, setMcp] = useState<McpForm[]>([]);
@@ -148,9 +150,9 @@ export default function SettingsPage() {
                 body: JSON.stringify(body),
             });
             if (res.ok) {
-                toast.success("已保存，下次对话生效");
+                toast.success(t("settings.savedNextConversation"));
             } else {
-                let text = "保存失败";
+                let text = t("settings.saveFailed");
                 try {
                     const j = (await res.json()) as {
                         statusMessage?: string;
@@ -162,7 +164,7 @@ export default function SettingsPage() {
                 toast.error(text);
             }
         } catch {
-            toast.error("网络错误，保存失败");
+            toast.error(t("settings.networkSaveFailed"));
         } finally {
             setSaving(false);
         }
@@ -174,10 +176,10 @@ export default function SettingsPage() {
                 <div className="flex items-start justify-between gap-3">
                     <div className="flex flex-col gap-1">
                         <h1 className="text-2xl font-bold text-foreground">
-                            设置
+                            {t("settings.title")}
                         </h1>
                         <span className="text-xs text-muted-foreground font-mono">
-                            全局配置 ~/.anycode/config.yaml
+                            {t("settings.subtitle")}
                         </span>
                     </div>
                     <Button
@@ -185,16 +187,18 @@ export default function SettingsPage() {
                         onClick={save}
                         disabled={saving || status !== "ready"}
                     >
-                        {saving ? "保存中…" : "保存"}
+                        {saving ? t("settings.saving") : t("common.save")}
                     </Button>
                 </div>
 
                 {status === "loading" && (
-                    <p className="text-sm text-muted-foreground">加载配置中…</p>
+                    <p className="text-sm text-muted-foreground">
+                        {t("settings.loadingConfig")}
+                    </p>
                 )}
                 {status === "error" && (
                     <p className="text-sm text-destructive">
-                        加载配置失败，请重试
+                        {t("settings.loadFailed")}
                     </p>
                 )}
 

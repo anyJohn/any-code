@@ -207,6 +207,8 @@ export interface ConfigShape {
     permissions?: PermissionsConfig;
     /** server 并发运行上限（FR-30 / SPEC-033 DEC-102）：缺省 3，0 = 不限。 */
     maxConcurrentRuns?: number;
+    /** 界面偏好（FR-29）：language = 界面语言（缺省跟随系统语言）。 */
+    ui?: { language?: "zh" | "en" };
 }
 
 /** 单个能力配置：enabled 开关 + 能力私有 config（如 web-search 的 provider/apiKey）。 */
@@ -265,6 +267,8 @@ export class Config {
     permissions: Required<PermissionsConfig>;
     /** server 并发运行上限（FR-30）：缺省 3，0 = 不限。server 侧消费，domain 仅承载。 */
     maxConcurrentRuns: number;
+    /** 界面偏好（FR-29）：language 缺省 undefined = 跟随系统语言。 */
+    ui: { language?: "zh" | "en" };
 
     private constructor(
         providers: Record<string, LlmProvider>,
@@ -273,7 +277,8 @@ export class Config {
         gitBashPath: string | undefined,
         abilities: Record<string, AbilityConfig>,
         permissions: Required<PermissionsConfig>,
-        maxConcurrentRuns: number
+        maxConcurrentRuns: number,
+        ui: { language?: "zh" | "en" }
     ) {
         this.providers = providers;
         this.default = def;
@@ -282,6 +287,7 @@ export class Config {
         this.abilities = abilities;
         this.permissions = permissions;
         this.maxConcurrentRuns = maxConcurrentRuns;
+        this.ui = ui;
     }
 
     static load(): Config {
@@ -341,7 +347,8 @@ export class Config {
             parsed?.gitBashPath,
             parsed?.abilities ?? {},
             normalizePermissions(parsed?.permissions),
-            normalizeMaxConcurrentRuns(parsed?.maxConcurrentRuns)
+            normalizeMaxConcurrentRuns(parsed?.maxConcurrentRuns),
+            normalizeUi(parsed?.ui)
         );
     }
 
@@ -408,6 +415,7 @@ export class Config {
                 abilities: data.abilities ?? {},
                 permissions: normalizePermissions(data.permissions),
                 maxConcurrentRuns: normalizeMaxConcurrentRuns(data.maxConcurrentRuns),
+                ui: normalizeUi(data.ui),
             }),
             "utf-8"
         );
@@ -421,6 +429,12 @@ function normalizeMaxConcurrentRuns(v?: number): number {
         return DEFAULT_MAX_CONCURRENT_RUNS;
     }
     return Math.floor(v);
+}
+
+/** ui 段归一化（FR-29）：language 仅接受 zh/en，其余视为未设置（跟随系统语言）。 */
+function normalizeUi(v?: { language?: "zh" | "en" }): { language?: "zh" | "en" } {
+    const language = v?.language === "zh" || v?.language === "en" ? v.language : undefined;
+    return language ? { language } : {};
 }
 
 /** permissions 段归一化：mode 缺省 standard；dangerPatterns 缺省内置集（D-005）。 */

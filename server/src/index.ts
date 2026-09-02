@@ -637,6 +637,7 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
                 abilities: { registered, config: cfg.abilities },
                 permissions: cfg.permissions,
                 maxConcurrentRuns: cfg.maxConcurrentRuns,
+                ui: cfg.ui,
             });
         } catch {
             return c.json({ providers: {}, default: undefined, mcp: {} });
@@ -675,6 +676,8 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
             permissions: body.permissions ?? existing?.permissions,
             // 表单不含 maxConcurrentRuns 时保留已存值（FR-30）
             maxConcurrentRuns: body.maxConcurrentRuns ?? existing?.maxConcurrentRuns,
+            // 表单不含 ui 段时保留已存值（FR-29 语言偏好）
+            ui: body.ui ?? existing?.ui,
         };
         try {
             Config.save(merged);
@@ -767,9 +770,13 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
     });
 
     app.patch("/api/config", async (c) => {
-        let body: { default?: string; modelId?: string };
+        let body: { default?: string; modelId?: string; language?: string };
         try {
-            body = (await c.req.json()) as { default?: string; modelId?: string };
+            body = (await c.req.json()) as {
+                default?: string;
+                modelId?: string;
+                language?: string;
+            };
         } catch {
             return c.json({ statusMessage: "invalid json body" }, 400);
         }
@@ -780,6 +787,13 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
             return c.json({ statusMessage: (e as Error).message }, 400);
         }
         try {
+            // FR-29：语言偏好（ui.language）单独 PATCH——与 default/modelId 互不依赖
+            if (body.language !== undefined) {
+                if (body.language !== "zh" && body.language !== "en") {
+                    return c.json({ statusMessage: "language 仅支持 zh / en" }, 400);
+                }
+                cfg.ui = { ...cfg.ui, language: body.language };
+            }
             if (body.modelId) {
                 const provider = cfg.providers[cfg.default];
                 if (!provider)
@@ -795,18 +809,19 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
                 if (!cfg.providers[newDefault])
                     return c.json({ statusMessage: `provider "${newDefault}" 不存在` }, 400);
                 cfg.default = newDefault;
-            } else {
-                return c.json({ statusMessage: "需要 default 或 modelId" }, 400);
+            } else if (body.language === undefined) {
+                return c.json({ statusMessage: "需要 default / modelId / language 之一" }, 400);
             }
             Config.save({
                 providers: cfg.providers,
                 default: cfg.default,
                 mcp: cfg.mcpServers,
-                // PATCH 只改 default/modelId——其余段原样保留，防误清
+                // PATCH 只改 default/modelId/language——其余段原样保留，防误清
                 gitBashPath: cfg.gitBashPath,
                 abilities: cfg.abilities,
                 permissions: cfg.permissions,
                 maxConcurrentRuns: cfg.maxConcurrentRuns,
+                ui: cfg.ui,
             });
             return c.json({ statusMessage: "switched" });
         } catch (e) {

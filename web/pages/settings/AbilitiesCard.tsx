@@ -2,6 +2,7 @@
 
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { useT } from "@/i18n";
 import { CollapsibleCard } from "./CollapsibleCard";
 import type { RegisteredAbility } from "./model";
 
@@ -30,11 +31,12 @@ export function AbilitiesCard({
     abilityCfg: Record<string, Record<string, unknown>>;
     patchCfg: (name: string, patch: Record<string, unknown>) => void;
 }) {
+    const { t } = useT();
     return (
-        <CollapsibleCard title="内置能力">
+        <CollapsibleCard title={t("abilitiesCard.title")}>
             {abilities.length === 0 && (
                 <p className="text-sm text-muted-foreground px-1">
-                    （无内置能力）
+                    {t("abilitiesCard.empty")}
                 </p>
             )}
             {abilities.map((a) => {
@@ -51,7 +53,7 @@ export function AbilitiesCard({
                                         {a.name}
                                     </span>
                                     <span className="text-[10px] font-mono uppercase rounded bg-muted px-1 py-0.5 text-muted-foreground">
-                                        连接器
+                                        {t("abilitiesCard.connector")}
                                     </span>
                                 </span>
                                 <span className="text-xs text-muted-foreground">
@@ -62,14 +64,16 @@ export function AbilitiesCard({
                                 className="mt-0.5 shrink-0"
                                 checked={abilityOn[a.name] ?? false}
                                 onCheckedChange={(v) => onToggle(a.name, v)}
-                                aria-label={`启用 ${a.name}`}
+                                aria-label={t("abilitiesCard.enable", {
+                                    name: a.name,
+                                })}
                             />
                         </div>
                         {a.name === "web-search" && (
                             <div className="mt-3 pt-3 border-t border-border flex flex-col gap-2 sm:flex-row sm:items-end">
                                 <label className="flex flex-col gap-1 flex-1">
                                     <span className="text-xs text-muted-foreground">
-                                        搜索服务
+                                        {t("abilitiesCard.searchProvider")}
                                     </span>
                                     <select
                                         className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -96,13 +100,15 @@ export function AbilitiesCard({
                                         API Key
                                         {cfg.provider === "tavily" ||
                                         cfg.provider === "bing"
-                                            ? "（必填）"
-                                            : "（ddg 免 key）"}
+                                            ? t("abilitiesCard.apiKeyRequired")
+                                            : t("abilitiesCard.apiKeyFree")}
                                     </span>
                                     <Input
                                         className="h-8 font-mono"
                                         type="password"
-                                        placeholder="ddg 可留空"
+                                        placeholder={t(
+                                            "abilitiesCard.apiKeyPlaceholder"
+                                        )}
                                         value={
                                             typeof cfg.apiKey === "string"
                                                 ? cfg.apiKey
@@ -121,7 +127,7 @@ export function AbilitiesCard({
                             <div className="mt-3 pt-3 border-t border-border flex flex-col gap-1">
                                 <label className="flex flex-col gap-1">
                                     <span className="text-xs text-muted-foreground">
-                                        浏览器调试地址（cdpUrl）
+                                        {t("abilitiesCard.cdpUrlLabel")}
                                     </span>
                                     <Input
                                         className="h-8 font-mono"
@@ -140,9 +146,9 @@ export function AbilitiesCard({
                                     />
                                 </label>
                                 <span className="text-[10px] text-muted-foreground">
-                                    启动 chrome --remote-debugging-port=9222
-                                    后填 {DEFAULT_CDPURL}（连接器自动发现
-                                    page）
+                                    {t("abilitiesCard.cdpUrlHint", {
+                                        url: DEFAULT_CDPURL,
+                                    })}
                                 </span>
                             </div>
                         )}

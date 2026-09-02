@@ -247,6 +247,7 @@ anycode 守"最小可读内核"定位：**小而全 + 真协议接入生态 + �
 | 安装生命周期 | `anycode update`（复用安装器重拉重建）/ `uninstall`（删 ~/.anycode）/ `help` |
 | P2 扩展性（FR-17/AR-18/AR-16/AR-15/AR-19） | MCP 命名空间+连接池+resources/prompts+重连；项目扩展点（tools/*.mjs + hooks.mjs）；Anthropic 协议适配；domain 分层守卫测试 |
 | 后台运行与多 agent 并行（FR-30/SPEC-033） | 切换会话/关标签页不中止任务（关软件才停）；多项目多会话并行；侧栏状态徽标 + 跨会话 ask 提醒；断线自动重挂续传；任意视图显式 `/stop`；并发上限可配（满载排队） |
+| i18n 中英文切换（FR-29） | 顶栏一键切换全量 UI 文案；偏好持久化 config.yaml（跨端同源）、缺省跟随系统语言；轻量自研无框架依赖 |
 | 内核可靠性（FR-6/AR-9/FR-11/FR-13/FR-12） | 分级压缩（microcompact+buffer 阈值+被动压缩）、sub-agent 能力补全、bash 后台任务、plan 模式（规划-审批） |
 | 工具系统升级（FR-10/AR-7/FR-8） | 参数 schema 校验 + 结构化 ToolResult + 工具元数据（readOnly/concurrencySafe）+ 并行执行 |
 | 快照与回滚（AR-4） | 写类工具前自动 shadow-git 快照（~/.anycode/snapshots/）+ /rewind 二次确认回滚 |

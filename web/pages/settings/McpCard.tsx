@@ -4,6 +4,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { useT } from "@/i18n";
 import { CollapsibleCard } from "./CollapsibleCard";
 import type { McpForm } from "./model";
 
@@ -19,12 +20,13 @@ export function McpCard({
     addMcp: () => void;
     removeMcp: (i: number) => void;
 }) {
+    const { t } = useT();
     return (
         <CollapsibleCard
-            title="MCP 服务"
+            title={t("mcpCard.title")}
             action={
                 <Button variant="outline" size="sm" onClick={addMcp}>
-                    <Plus className="size-3.5" /> 添加
+                    <Plus className="size-3.5" /> {t("mcpCard.add")}
                 </Button>
             }
         >
@@ -36,7 +38,7 @@ export function McpCard({
                     <div className="flex items-center gap-2">
                         <Input
                             className="h-8 flex-1"
-                            placeholder="服务名称"
+                            placeholder={t("mcpCard.namePlaceholder")}
                             value={m.name}
                             onChange={(e) =>
                                 patchMcp(i, { name: e.target.value })
@@ -57,14 +59,14 @@ export function McpCard({
                         <Switch
                             checked={m.enabled}
                             onCheckedChange={(v) => patchMcp(i, { enabled: v })}
-                            aria-label="启用"
+                            aria-label={t("mcpCard.enableAria")}
                         />
                         <Button
                             variant="ghost"
                             size="icon"
                             className="size-8"
                             onClick={() => removeMcp(i)}
-                            title="删除"
+                            title={t("common.delete")}
                         >
                             <Trash2 className="size-3.5 text-muted-foreground" />
                         </Button>
@@ -88,7 +90,7 @@ export function McpCard({
                             </label>
                             <label className="flex flex-col gap-1">
                                 <span className="text-xs text-muted-foreground">
-                                    args（每行一个）
+                                    {t("mcpCard.argsLabel")}
                                 </span>
                                 <textarea
                                     className="rounded-md border border-input bg-transparent px-3 py-1.5 text-sm font-mono focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -104,7 +106,7 @@ export function McpCard({
                             </label>
                             <label className="flex flex-col gap-1">
                                 <span className="text-xs text-muted-foreground">
-                                    env（每行 KEY=VALUE）
+                                    {t("mcpCard.envLabel")}
                                 </span>
                                 <textarea
                                     className="rounded-md border border-input bg-transparent px-3 py-1.5 text-sm font-mono focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -134,7 +136,7 @@ export function McpCard({
                             </label>
                             <label className="flex flex-col gap-1">
                                 <span className="text-xs text-muted-foreground">
-                                    headers（每行 KEY:VALUE）
+                                    {t("mcpCard.headersLabel")}
                                 </span>
                                 <textarea
                                     className="rounded-md border border-input bg-transparent px-3 py-1.5 text-sm font-mono focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -154,7 +156,7 @@ export function McpCard({
             ))}
             {mcp.length === 0 && (
                 <p className="text-sm text-muted-foreground px-1">
-                    暂无 MCP 服务
+                    {t("mcpCard.empty")}
                 </p>
             )}
         </CollapsibleCard>

@@ -2,6 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/i18n";
 import { CollapsibleCard } from "./CollapsibleCard";
 import { ProviderItem } from "./ProviderItem";
 import type { ProviderForm } from "./model";
@@ -28,12 +29,13 @@ export function ProvidersCard({
     addProvider: () => void;
     removeProvider: (i: number) => void;
 }) {
+    const { t } = useT();
     return (
         <CollapsibleCard
-            title="模型提供方"
+            title={t("providersCard.title")}
             action={
                 <Button variant="outline" size="sm" onClick={addProvider}>
-                    <Plus className="size-3.5" /> 添加
+                    <Plus className="size-3.5" /> {t("providersCard.add")}
                 </Button>
             }
         >

@@ -14,6 +14,7 @@ import { StatusBar } from "./StatusBar";
 import { InteractionModal } from "./InteractionModal";
 import { PermissionModal } from "./PermissionModal";
 import { SnapshotsDialog } from "./SnapshotsDialog";
+import { useT } from "@/i18n";
 
 /**
  * ChatView —— 聊天主视图容器：组合 MessageList / InputBox / StatusBar，
@@ -31,6 +32,7 @@ export function ChatView({
     initialEvents: AgentEvent[];
     projectKey?: string;
 }) {
+    const { t } = useT();
     const {
         events,
         pending,
@@ -139,7 +141,9 @@ export function ChatView({
             {command.compacting && (
                 <div className="shrink-0 w-full max-w-3xl mx-auto px-4 pb-1">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span className="shrink-0">正在压缩上下文…</span>
+                        <span className="shrink-0">
+                            {t("chatView.compacting")}
+                        </span>
                         <div className="relative h-1 flex-1 rounded-full bg-muted overflow-hidden">
                             <span className="compact-progress-bar rounded-full bg-primary" />
                         </div>

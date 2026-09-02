@@ -12,6 +12,7 @@ import { ChatView } from "@/components/ChatView";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { apiJson } from "@/lib/api";
+import { useT } from "@/i18n";
 import {
     nextId,
     type AgentEvent,
@@ -22,6 +23,7 @@ import {
 // 聊天页 /chat/:sessionId —— sessionId-URL，盘后盾，随时 resume，无"已失效"。
 // /chat/new = 新对话（点"新建对话"不调服务端，首条消息时 useAgent 建 session）。
 export default function ChatPage() {
+    const { t } = useT();
     const params = useParams<{ sessionId: string }>();
     const routeSessionId = params.sessionId ?? null; // 'new' 或真实 sessionId
     const dispatch = useAppDispatch();
@@ -95,7 +97,7 @@ export default function ChatPage() {
         return (
             <div className="h-full flex flex-col items-center justify-center gap-3 px-6 text-center">
                 <p className="text-sm text-muted-foreground">
-                    会话不存在，请从左侧栏选择一个会话。
+                    {t("chat.sessionMissing")}
                 </p>
             </div>
         );
@@ -105,10 +107,10 @@ export default function ChatPage() {
         return (
             <div className="h-full flex flex-col items-center justify-center gap-3 px-6 text-center">
                 <p className="text-sm text-muted-foreground">
-                    请先在顶栏选择一个工作区，再开始新对话。
+                    {t("chat.noWorkspace")}
                 </p>
                 <Button variant="outline" size="sm" onClick={() => window.history.back()}>
-                    返回
+                    {t("chat.back")}
                 </Button>
             </div>
         );

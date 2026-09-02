@@ -8,6 +8,7 @@ import { AppTopbar } from "@/components/AppTopbar";
 import { useAppSelector } from "@/hooks/useRedux";
 import { selectWorkspace } from "@/store/workspaceSlice";
 import { apiJson } from "@/lib/api";
+import { useT } from "@/i18n";
 import type { RunningSessionInfo } from "@/lib/sseEvents";
 
 const MIN_W = 200;
@@ -25,6 +26,7 @@ const COLLAPSED_KEY = "anycode:sidebarCollapsed";
 function RunningBanner() {
     const { activeSessionId } = useAppSelector(selectWorkspace);
     const navigate = useNavigate();
+    const { t } = useT();
     const [waiting, setWaiting] = useState<RunningSessionInfo[]>([]);
 
     useEffect(() => {
@@ -45,15 +47,21 @@ function RunningBanner() {
 
     const target = waiting.find((s) => s.sessionId !== activeSessionId);
     if (!target) return null;
-    const extra = waiting.length > 1 ? ` 等 ${waiting.length} 个会话` : "";
     return (
         <button
             onClick={() => navigate(`/chat/${target.sessionId}`)}
             className="shrink-0 w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 border-b border-amber-500/30 hover:bg-amber-500/20 transition-colors"
         >
             <span className="size-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
-            「{target.title || "会话"}」等待权限确认
-            {extra}——点击前往处理
+            {t(
+                waiting.length > 1
+                    ? "shell.bannerWaitingMulti"
+                    : "shell.bannerWaitingSingle",
+                {
+                    title: target.title || t("shell.session"),
+                    count: waiting.length,
+                }
+            )}
         </button>
     );
 }

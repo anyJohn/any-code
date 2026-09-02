@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useT } from "@/i18n";
 import {
     type AgentEvent,
     type AgentEventPayload,
@@ -77,6 +78,7 @@ export function useAgent(
     rootPath: string,
     initialEvents: AgentEvent[]
 ) {
+    const { t } = useT();
     const [events, setEvents] = useState<AgentEvent[]>(initialEvents);
     const [pending, setPending] = useState(false);
     const [currentSessionId, setCurrentSessionId] = useState<string | null>(
@@ -184,12 +186,12 @@ export function useAgent(
                 }
                 // 首连即失败（/run 非 200）不重试；后续为流中断重挂
                 if (!ok && curInit) {
-                    appendLocal("Error", `运行失败，请检查服务端状态`);
+                    appendLocal("Error", t("agent.runFailed"));
                     setPending(false);
                     return;
                 }
                 if (attempts >= MAX_RECONNECT) {
-                    appendLocal("System", "连接中断，多次重连失败；任务仍在后台运行，可稍后重进会话查看。");
+                    appendLocal("System", t("agent.connectionLost"));
                     setPending(false);
                     return;
                 }
@@ -200,7 +202,7 @@ export function useAgent(
                 curInit = undefined;
             }
         },
-        [consumeStream, appendLocal]
+        [consumeStream, appendLocal, t]
     );
 
     // mount 时重挂运行中会话（FR-30 B-009）：/stream?since=-1 重放 + live；404 = 空闲。
@@ -311,7 +313,7 @@ export function useAgent(
                         abortRef.current?.abort();
                         attachRef.current?.abort();
                         setPending(false);
-                        appendLocal("Stopped", "已取消排队任务");
+                        appendLocal("Stopped", t("agent.queuedTaskCancelled"));
                         return;
                     }
                     // "stopping"：等服务端 Stopped 终态帧收尾
@@ -324,7 +326,7 @@ export function useAgent(
         abortRef.current?.abort();
         attachRef.current?.abort();
         setPending(false);
-    }, [currentSessionId, appendLocal]);
+    }, [currentSessionId, appendLocal, t]);
 
     /** 提交 ask_question 答案：POST /interact 解除服务端 handler 阻塞。 */
     const submitInteraction = useCallback(

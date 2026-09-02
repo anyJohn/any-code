@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronUp, Folder, Check } from "lucide-react";
 import { apiJson } from "@/lib/api";
+import { useT } from "@/i18n";
 
 interface BrowseResult {
     current: string;
@@ -33,6 +34,7 @@ export function DirectoryPicker({
     onOpenChange: (v: boolean) => void;
     onPicked: (path: string) => void;
 }) {
+    const { t } = useT();
     const [current, setCurrent] = useState("");
     const [parent, setParent] = useState<string | null>(null);
     const [dirs, setDirs] = useState<BrowseResult["dirs"]>([]);
@@ -46,7 +48,7 @@ export function DirectoryPicker({
             `/api/fs/browse${dir ? `?dir=${encodeURIComponent(dir)}` : ""}`
         );
         if (!r) {
-            setError("读取目录失败（服务端冷编译中，请重试）");
+            setError(t("dirPicker.browseFailed"));
         } else {
             setCurrent(r.current);
             setParent(r.parent);
@@ -73,7 +75,7 @@ export function DirectoryPicker({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-lg">
                 <DialogHeader>
-                    <DialogTitle>选择工作区目录</DialogTitle>
+                    <DialogTitle>{t("dirPicker.title")}</DialogTitle>
                 </DialogHeader>
                 <div className="flex items-center gap-2 mb-2">
                     <Button
@@ -82,7 +84,7 @@ export function DirectoryPicker({
                         disabled={!parent}
                         onClick={goUp}
                     >
-                        <ChevronUp className="size-4" /> 上级
+                        <ChevronUp className="size-4" /> {t("dirPicker.goUp")}
                     </Button>
                     <span className="text-xs text-muted-foreground font-mono truncate flex-1">
                         {current}
@@ -98,7 +100,7 @@ export function DirectoryPicker({
                             ))}
                         </div>
                     ) : dirs.length === 0 ? (
-                        <div className="p-3 text-sm text-muted-foreground">无子目录</div>
+                        <div className="p-3 text-sm text-muted-foreground">{t("dirPicker.noSubdirs")}</div>
                     ) : (
                         dirs.map((d) => (
                             <button
@@ -114,13 +116,13 @@ export function DirectoryPicker({
                 </ScrollArea>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
-                        取消
+                        {t("common.cancel")}
                     </Button>
                     <Button
                         onClick={confirm}
                         disabled={!current || current === "此电脑"}
                     >
-                        <Check className="size-4" /> 选定此目录
+                        <Check className="size-4" /> {t("dirPicker.selectDirectory")}
                     </Button>
                 </DialogFooter>
             </DialogContent>

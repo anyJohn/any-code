@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2, ChevronRight } from "lucide-react";
+import { useT } from "@/i18n";
 import {
     Collapsible,
     CollapsibleTrigger,
@@ -43,6 +44,7 @@ export function ProviderItem({
     commitName: (i: number) => void;
     removeProvider: (i: number) => void;
 }) {
+    const { t } = useT();
     // 模型 拉取/测试 状态（Settings「拉取模型/测试模型/选择模型」）
     const [testResults, setTestResults] = useState<
         Record<string, ModelTestResult>
@@ -78,18 +80,18 @@ export function ProviderItem({
                 statusMessage?: string;
             };
             if (!res.ok) {
-                toast.error(j.statusMessage ?? "拉取模型失败");
+                toast.error(j.statusMessage ?? t("providerItem.fetchFailed"));
                 return;
             }
             const ids = (j.models ?? []).filter(Boolean);
             if (!ids.length) {
-                toast.error("模型列表为空（检查 baseURL 与 apiKey）");
+                toast.error(t("providerItem.fetchEmpty"));
                 return;
             }
             setFetchedModels(ids);
             setSelectedIds(new Set(ids)); // 默认全选，用户取消勾选不要的
         } catch {
-            toast.error("网络错误，拉取模型失败");
+            toast.error(t("providerItem.fetchNetworkError"));
         } finally {
             setFetching(false);
         }
@@ -108,7 +110,7 @@ export function ProviderItem({
         if (!p.defaultModel.trim() && fresh.length) {
             patchProvider(index, { defaultModel: fresh[0] });
         }
-        toast.success(`已添加 ${fresh.length} 个模型`);
+        toast.success(t("providerItem.addedModels", { count: fresh.length }));
         setFetchedModels(null);
     };
 
@@ -130,7 +132,7 @@ export function ProviderItem({
     const testDialogSelected = async () => {
         const ids = notAddedOf([...selectedIds]);
         if (!ids.length) {
-            toast.error("请先勾选要测试的模型");
+            toast.error(t("providerItem.selectModelsFirst"));
             return;
         }
         setDialogTesting(true);
@@ -151,7 +153,7 @@ export function ProviderItem({
                 statusMessage?: string;
             };
             if (!res.ok) {
-                toast.error(j.statusMessage ?? "测试模型失败");
+                toast.error(j.statusMessage ?? t("providerItem.testFailed"));
                 return;
             }
             setDialogTestResults(
@@ -160,7 +162,7 @@ export function ProviderItem({
                 )
             );
         } catch {
-            toast.error("网络错误，测试模型失败");
+            toast.error(t("providerItem.testNetworkError"));
         } finally {
             setDialogTesting(false);
         }
@@ -176,7 +178,9 @@ export function ProviderItem({
             for (const id of invalid) next.delete(id);
             return next;
         });
-        toast.success(`已剔除 ${invalid.length} 个无效模型`);
+        toast.success(
+            t("providerItem.purgedInvalid", { count: invalid.length })
+        );
     };
     const invalidCount = Object.values(dialogTestResults).filter(
         (r) => !r.available
@@ -186,7 +190,7 @@ export function ProviderItem({
     const testModels = async () => {
         const ids = p.models.map((m) => m.id.trim()).filter(Boolean);
         if (!ids.length) {
-            toast.error("请先填写 model id 或拉取模型");
+            toast.error(t("providerItem.enterModelFirst"));
             return;
         }
         setTesting(true);
@@ -207,7 +211,7 @@ export function ProviderItem({
                 statusMessage?: string;
             };
             if (!res.ok) {
-                toast.error(j.statusMessage ?? "测试模型失败");
+                toast.error(j.statusMessage ?? t("providerItem.testFailed"));
                 return;
             }
             setTestResults(
@@ -216,7 +220,7 @@ export function ProviderItem({
                 )
             );
         } catch {
-            toast.error("网络错误，测试模型失败");
+            toast.error(t("providerItem.testNetworkError"));
         } finally {
             setTesting(false);
         }
@@ -235,11 +239,13 @@ export function ProviderItem({
                                 )}
                             />
                             <span className="text-sm font-medium truncate">
-                                {nameCommitted || "未命名提供方"}
+                                {nameCommitted || t("providerItem.unnamed")}
                             </span>
                             {p.defaultModel && (
                                 <span className="text-xs text-muted-foreground shrink-0">
-                                    默认 {p.defaultModel}
+                                    {t("providerItem.defaultBadge", {
+                                        model: p.defaultModel,
+                                    })}
                                 </span>
                             )}
                             <div className="flex-1" />
@@ -252,7 +258,7 @@ export function ProviderItem({
                                     size="icon"
                                     className="size-8"
                                     onClick={() => removeProvider(index)}
-                                    title="删除"
+                                    title={t("common.delete")}
                                 >
                                     <Trash2 className="size-3.5 text-muted-foreground" />
                                 </Button>
@@ -263,14 +269,14 @@ export function ProviderItem({
                         <div className="flex flex-col gap-2 px-3 pb-3">
                             <label className="flex flex-col gap-1">
                                 <span className="text-xs text-muted-foreground">
-                                    名称
+                                    {t("providerItem.nameLabel")}
                                 </span>
                                 <Input
                                     className={cn(
                                         "h-8 flex-1",
                                         nameError && "border-destructive"
                                     )}
-                                    placeholder="名称（如 openai）"
+                                    placeholder={t("providerItem.namePlaceholder")}
                                     value={p.name}
                                     onChange={(e) =>
                                         patchProvider(index, {
@@ -285,13 +291,13 @@ export function ProviderItem({
                                 />
                                 {nameError && (
                                     <span className="text-xs text-destructive">
-                                        名称不能为空
+                                        {t("providerItem.nameRequired")}
                                     </span>
                                 )}
                             </label>
                             <label className="flex flex-col gap-1">
                                 <span className="text-xs text-muted-foreground">
-                                    Base URL（可选）支持 openai 格式 base url
+                                    {t("providerItem.baseUrlLabel")}
                                 </span>
                                 <Input
                                     className="h-8"
@@ -308,12 +314,14 @@ export function ProviderItem({
                                 <span className="text-xs text-muted-foreground">
                                     API Key
                                     {p.maskedKey &&
-                                        ` （当前 ${p.maskedKey}，留空不改）`}
+                                        t("providerItem.currentKey", {
+                                            key: p.maskedKey,
+                                        })}
                                 </span>
                                 <Input
                                     className="h-8 font-mono"
                                     type="password"
-                                    placeholder="留空保留原值"
+                                    placeholder={t("providerItem.apiKeyPlaceholder")}
                                     value={p.apiKey}
                                     onChange={(e) =>
                                         patchProvider(index, {
@@ -325,12 +333,14 @@ export function ProviderItem({
                             <div className="grid grid-cols-1 gap-2">
                                 <label className="flex flex-col gap-1">
                                     <span className="text-xs text-muted-foreground">
-                                        上下文窗口（留空=自动探测）
+                                        {t("providerItem.contextWindowLabel")}
                                     </span>
                                     <Input
                                         className="h-8 font-mono"
                                         type="number"
-                                        placeholder="留空自动，或填上限（与探测取最小）"
+                                        placeholder={t(
+                                            "providerItem.autoLimitPlaceholder"
+                                        )}
                                         value={p.contextWindow}
                                         onChange={(e) =>
                                             patchProvider(index, {
@@ -341,12 +351,14 @@ export function ProviderItem({
                                 </label>
                                 <label className="flex flex-col gap-1">
                                     <span className="text-xs text-muted-foreground">
-                                        最大输出 token（留空=自动）
+                                        {t("providerItem.maxOutputTokensLabel")}
                                     </span>
                                     <Input
                                         className="h-8 font-mono"
                                         type="number"
-                                        placeholder="留空自动，或填上限（与探测取最小）"
+                                        placeholder={t(
+                                            "providerItem.autoLimitPlaceholder"
+                                        )}
                                         value={p.maxOutputTokens}
                                         onChange={(e) =>
                                             patchProvider(index, {
@@ -358,7 +370,7 @@ export function ProviderItem({
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <span className="text-xs text-muted-foreground">
-                                    模型列表
+                                    {t("providerItem.modelsLabel")}
                                 </span>
                                 {p.models.map((m, mi) => (
                                     <div
@@ -367,7 +379,9 @@ export function ProviderItem({
                                     >
                                         <Input
                                             className="h-8 font-mono"
-                                            placeholder="model id（如 gpt-4o）"
+                                            placeholder={t(
+                                                "providerItem.modelIdPlaceholder"
+                                            )}
                                             value={m.id}
                                             onChange={(e) =>
                                                 patchProvider(index, {
@@ -387,7 +401,9 @@ export function ProviderItem({
                                         />
                                         <Input
                                             className="h-8"
-                                            placeholder="展示名（可选）"
+                                            placeholder={t(
+                                                "providerItem.modelNamePlaceholder"
+                                            )}
                                             value={m.name}
                                             onChange={(e) =>
                                                 patchProvider(index, {
@@ -416,7 +432,7 @@ export function ProviderItem({
                                                     ),
                                                 })
                                             }
-                                            title="删除模型"
+                                            title={t("providerItem.deleteModel")}
                                         >
                                             <Trash2 className="size-3.5 text-muted-foreground" />
                                         </Button>
@@ -425,10 +441,14 @@ export function ProviderItem({
                                             if (!r) return null;
                                             return r.available ? (
                                                 <span
-                                                    title={`首字 ${
-                                                        r.first_token_latency_ms ??
-                                                        "?"
-                                                    }ms`}
+                                                    title={t(
+                                                        "providerItem.firstTokenLatency",
+                                                        {
+                                                            ms:
+                                                                r.first_token_latency_ms ??
+                                                                "?",
+                                                        }
+                                                    )}
                                                     className="text-[10px] shrink-0 text-emerald-600 dark:text-emerald-500"
                                                 >
                                                     ✓
@@ -439,7 +459,12 @@ export function ProviderItem({
                                                 </span>
                                             ) : (
                                                 <span
-                                                    title={r.error ?? "不可用"}
+                                                    title={
+                                                        r.error ??
+                                                        t(
+                                                            "providerItem.unavailable"
+                                                        )
+                                                    }
                                                     className="text-[10px] shrink-0 text-destructive"
                                                 >
                                                     ✗
@@ -456,7 +481,9 @@ export function ProviderItem({
                                         onClick={fetchModels}
                                         disabled={fetching}
                                     >
-                                        {fetching ? "拉取中…" : "拉取模型"}
+                                        {fetching
+                                            ? t("providerItem.fetching")
+                                            : t("providerItem.fetchModels")}
                                     </Button>
                                     <Button
                                         variant="outline"
@@ -465,10 +492,12 @@ export function ProviderItem({
                                         onClick={testModels}
                                         disabled={testing || fetching}
                                     >
-                                        {testing ? "测试中…" : "测试模型"}
+                                        {testing
+                                            ? t("providerItem.testing")
+                                            : t("providerItem.testModels")}
                                     </Button>
                                     <span className="text-[10px] text-muted-foreground">
-                                        测试通过可作默认模型
+                                        {t("providerItem.testHint")}
                                     </span>
                                 </div>
                                 <Button
@@ -484,12 +513,13 @@ export function ProviderItem({
                                         })
                                     }
                                 >
-                                    <Plus className="size-3.5" /> 添加模型
+                                    <Plus className="size-3.5" />{" "}
+                                    {t("providerItem.addModel")}
                                 </Button>
                             </div>
                             <label className="flex flex-col gap-1">
                                 <span className="text-xs text-muted-foreground">
-                                    默认模型
+                                    {t("providerItem.defaultModelLabel")}
                                 </span>
                                 <select
                                     className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -522,7 +552,7 @@ export function ProviderItem({
                                     }
                                 />
                                 <span className="text-xs text-muted-foreground">
-                                    流式输出
+                                    {t("providerItem.streamingLabel")}
                                 </span>
                             </label>
                         </div>
@@ -539,13 +569,13 @@ export function ProviderItem({
             >
                 <DialogContent className="max-w-lg">
                     <DialogHeader>
-                        <DialogTitle>选择要添加的模型</DialogTitle>
+                        <DialogTitle>{t("providerItem.selectModelsTitle")}</DialogTitle>
                     </DialogHeader>
                     {/* 工具栏：搜索过滤 + 全选/全不选（作用于当前过滤、未添加项） */}
                     <div className="flex items-center gap-2">
                         <Input
                             className="h-8 flex-1"
-                            placeholder="搜索模型…"
+                            placeholder={t("providerItem.searchPlaceholder")}
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                         />
@@ -555,7 +585,7 @@ export function ProviderItem({
                             onClick={selectAll}
                             disabled={filteredIds.length === 0}
                         >
-                            全选
+                            {t("providerItem.selectAll")}
                         </Button>
                         <Button
                             variant="ghost"
@@ -563,7 +593,7 @@ export function ProviderItem({
                             onClick={selectNone}
                             disabled={filteredIds.length === 0}
                         >
-                            全不选
+                            {t("providerItem.selectNone")}
                         </Button>
                     </div>
                     {/* 可选表格：勾选 + 模型 + 测试状态 */}
@@ -595,10 +625,10 @@ export function ProviderItem({
                                         />
                                     </th>
                                     <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">
-                                        模型
+                                        {t("providerItem.columnModel")}
                                     </th>
                                     <th className="w-20 px-2 py-1.5 text-right font-medium text-muted-foreground">
-                                        测试
+                                        {t("providerItem.columnTest")}
                                     </th>
                                 </tr>
                             </thead>
@@ -653,16 +683,21 @@ export function ProviderItem({
                                                 }
                                             >
                                                 {id}
-                                                {added && "（已添加）"}
+                                                {added &&
+                                                    t("providerItem.added")}
                                             </td>
                                             <td className="px-2 py-1 text-right">
                                                 {r ? (
                                                     r.available ? (
                                                         <span
-                                                            title={`首字 ${
-                                                                r.first_token_latency_ms ??
-                                                                "?"
-                                                            }ms`}
+                                                            title={t(
+                                                                "providerItem.firstTokenLatency",
+                                                                {
+                                                                    ms:
+                                                                        r.first_token_latency_ms ??
+                                                                        "?",
+                                                                }
+                                                            )}
                                                             className="text-[11px] text-emerald-600 dark:text-emerald-500"
                                                         >
                                                             ✓
@@ -675,7 +710,9 @@ export function ProviderItem({
                                                         <span
                                                             title={
                                                                 r.error ??
-                                                                "不可用"
+                                                                t(
+                                                                    "providerItem.unavailable"
+                                                                )
                                                             }
                                                             className="text-[11px] text-destructive"
                                                         >
@@ -693,7 +730,7 @@ export function ProviderItem({
                                             colSpan={3}
                                             className="px-2 py-4 text-center text-xs text-muted-foreground"
                                         >
-                                            无匹配模型
+                                            {t("providerItem.noMatch")}
                                         </td>
                                     </tr>
                                 )}
@@ -705,7 +742,7 @@ export function ProviderItem({
                             variant="ghost"
                             onClick={() => setFetchedModels(null)}
                         >
-                            取消
+                            {t("common.cancel")}
                         </Button>
                         <Button
                             variant="outline"
@@ -715,20 +752,26 @@ export function ProviderItem({
                                 dialogTesting
                             }
                         >
-                            {dialogTesting ? "测试中…" : "测试"}
+                            {dialogTesting
+                                ? t("providerItem.testing")
+                                : t("providerItem.test")}
                         </Button>
                         <Button
                             variant="outline"
                             onClick={purgeInvalidModels}
                             disabled={invalidCount === 0 || dialogTesting}
                         >
-                            剔除无效模型 ({invalidCount})
+                            {t("providerItem.purgeInvalid", {
+                                count: invalidCount,
+                            })}
                         </Button>
                         <Button
                             onClick={confirmAddModels}
                             disabled={selectedIds.size === 0}
                         >
-                            添加 {selectedIds.size} 个
+                            {t("providerItem.addN", {
+                                count: selectedIds.size,
+                            })}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
