@@ -11,7 +11,7 @@ describe("ask_question schema/分组（AC-001）", () => {
             ts.map((t) => t.schema.function.name);
         expect(names(ToolKit.allTools)).toContain("ask_question");
         expect(names(ToolKit.executeTools)).toContain("ask_question");
-        expect(names(ToolKit.readOnlyTools)).not.toContain("ask_question");
+        expect(ToolKit.allTools.find((t) => t.schema.function.name === "ask_question")?.meta?.readOnly).toBe(true);
     });
 
     it("schema questions minItems1/maxItems5、options min2/max4", () => {

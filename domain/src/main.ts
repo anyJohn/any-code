@@ -40,6 +40,7 @@ import {
     type PermissionContext,
     type PermissionRule,
 } from "./permissions";
+import { createSnapshotService } from "./snapshot";
 import {
     BehaviorSubject,
     catchError,
@@ -85,11 +86,14 @@ class AnyAgent {
     private mcpCleanup: (() => Promise<void>) | null = null;
     // 会话内"允许一次"权限缓存（SPEC-032 C-004：per-agent，不跨 session）
     private permissionAllowOnce = new Set<string>();
+    // 工作区快照服务（AR-4）：per-agent，写类工具执行前自动快照
+    private snapshots: ReturnType<typeof createSnapshotService>;
     // 当前生效的 LLM provider 配置（多 provider + 流式开关）；create 时 initConfig 从 config.yaml 加载。
     // per-request 语义下热更 = 下一次 AnyAgent.create 重读磁盘，无需 reload 机制。
     private config!: Config;
 
     private constructor(opts: AnyAgentOptions) {
+        this.snapshots = createSnapshotService(opts.rootPath);
         this.service = opts.service ?? new SessionService();
         this.workspace = createWorkspace(opts.rootPath);
         this.projectKey = projectKeyOf(this.workspace.rootPath);
@@ -392,6 +396,13 @@ class AnyAgent {
             // 技能目录合并表：use_skill 工具按 name 取全文（SPEC-031 B-005）
             skills: resolveSkills(this.workspace),
             permissions: this.buildPermissionContext(),
+            // AR-4：写类工具执行前自动快照（label 带会话锚点）
+            snapshot: {
+                snapshot: (label: string) =>
+                    this.snapshots.snapshot(
+                        `session ${this.session?.id ?? "-"} | ${label}`
+                    ),
+            },
         };
         await agentLoop(
             task,
@@ -435,10 +446,18 @@ class AnyAgent {
                 }`,
             });
         }
+        // AR-7：只读集合从工具元数据推导（MCP/无 meta 工具不在集合内 = 保守 ask）
+        const readOnlyTools = new Set(
+            this.tools
+                .filter((t) => t.meta?.readOnly === true)
+                .map((t) => (t.schema as { function?: { name: string } }).function?.name ?? "")
+                .filter(Boolean)
+        );
         return {
             mode: cfg.mode,
             rules: [...cfg.rules, ...projectRules],
             dangerPatterns: cfg.dangerPatterns,
+            readOnlyTools,
             allowOnce: this.permissionAllowOnce,
         };
     }

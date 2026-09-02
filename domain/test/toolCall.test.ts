@@ -179,12 +179,14 @@ import type { PermissionContext } from "../src/permissions";
 
 function mkPermCtx(
     mode: PermissionContext["mode"],
-    rules: PermissionContext["rules"] = []
+    rules: PermissionContext["rules"] = [],
+    readOnly: string[] = ["read", "grep", "glob", "explore", "use_skill", "ask_question", "save_memory"]
 ): PermissionContext {
     return {
         mode,
         rules,
         dangerPatterns: ["rm -rf", "sudo"],
+        readOnlyTools: new Set(readOnly),
         allowOnce: new Set<string>(),
     };
 }
@@ -337,5 +339,136 @@ describe("toolCall 权限 seam（SPEC-032）", () => {
         expect(ask.data.danger).toBe(true);
         resolveInteraction(ask.data.id, ["deny"]);
         await pending;
+    });
+});
+
+
+// ── FR-8 并行执行 / FR-10 结构化结果 / AR-7 元数据 ──
+
+import { ToolKit } from "../src/tools";
+import type { ToolResult } from "../src/tools";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+describe("toolCall 并行执行（FR-8）", () => {
+    it("批内全部 concurrencySafe → 并行执行（总耗时≈最慢者），结果按调用序落盘", async () => {
+        const calls: string[] = [];
+        const mk = (name: string, delay: number): Tool => ({
+            schema: {
+                type: "function",
+                function: { name, description: "", parameters: { type: "object", properties: {} } },
+            } as never,
+            handler: async () => {
+                calls.push(`start:${name}`);
+                await sleep(delay);
+                calls.push(`end:${name}`);
+                return `done-${name}`;
+            },
+            meta: { readOnly: true, concurrencySafe: true },
+        });
+        // A 慢、B 快：并行时 A 先 start、B 先 end
+        const tools = [mk("slowA", 60), mk("fastB", 10)];
+        const ctx = mkCtx();
+        const result = await toolCall(
+            [mkCall("slowA", "t1"), mkCall("fastB", "t2")],
+            ctx,
+            tools,
+            "turn"
+        );
+        expect(result.map((r) => r.content)).toEqual(["done-slowA", "done-fastB"]); // 落盘按调用序
+        expect(calls.indexOf("end:fastB")).toBeLessThan(calls.indexOf("end:slowA")); // B 先完成=并行
+        // ToolStart 按调用序
+        const starts = submitted(ctx).filter((e) => e.type === "ToolStart");
+        expect(starts.map((e) => e.data.name)).toEqual(["slowA", "fastB"]);
+    }, 10_000);
+
+    it("批内含非并发安全工具（bash）→ 整批退化串行", async () => {
+        const order: string[] = [];
+        const safeTool: Tool = {
+            schema: { type: "function", function: { name: "safeT", description: "", parameters: { type: "object", properties: {} } } } as never,
+            handler: async () => {
+                order.push("safe-start");
+                await sleep(20);
+                order.push("safe-end");
+                return "s";
+            },
+            meta: { readOnly: true, concurrencySafe: true },
+        };
+        const bashLike: Tool = {
+            schema: { type: "function", function: { name: "bash", description: "", parameters: { type: "object", properties: {} } } } as never,
+            handler: async () => {
+                order.push("bash-start");
+                await sleep(20);
+                order.push("bash-end");
+                return "b";
+            },
+            meta: { readOnly: false, concurrencySafe: false },
+        };
+        const ctx = mkCtx();
+        await toolCall([mkCall("safeT", "t1"), mkCall("bash", "t2")], ctx, [safeTool, bashLike], "turn");
+        // 串行：safe 完整跑完才开始 bash
+        expect(order).toEqual(["safe-start", "safe-end", "bash-start", "bash-end"]);
+    }, 10_000);
+});
+
+describe("toolCall 结构化结果（FR-10）", () => {
+    it("handler 返回 ToolResult → role:tool 拿 content，Tool 事件带 meta", async () => {
+        const handler = vi.fn().mockResolvedValue({
+            content: "visible-to-model",
+            data: { filePath: "/x/a.ts", exitCode: 0 },
+        } satisfies ToolResult);
+        const ctx = mkCtx();
+        await toolCall([mkCall("edit", "tc1")], ctx, [mkTool("edit", handler)], "turn");
+        expect(handler).toHaveBeenCalledOnce();
+        const toolEvents = submitted(ctx).filter((e) => e.type === "Tool");
+        expect(toolEvents[0].data.result).toBe("visible-to-model");
+        expect(toolEvents[0].data.meta).toEqual({ filePath: "/x/a.ts", exitCode: 0 });
+    });
+
+    it("handler 返回 undefined → 兜底空串（不炸事件流）", async () => {
+        const handler = vi.fn().mockResolvedValue(undefined);
+        const ctx = mkCtx();
+        const result = await toolCall([mkCall("weird", "tc1")], ctx, [mkTool("weird", handler)], "turn");
+        expect(result[0].content).toBe("");
+    });
+});
+
+describe("toolCall 参数校验（FR-10）", () => {
+    it("args 缺 required → 拒绝执行，错误回传模型", async () => {
+        const handler = vi.fn();
+        const badTool: Tool = {
+            schema: {
+                type: "function",
+                function: {
+                    name: "strict",
+                    description: "",
+                    parameters: {
+                        type: "object",
+                        properties: { command: { type: "string" } },
+                        required: ["command"],
+                    },
+                },
+            } as never,
+            handler,
+        };
+        const ctx = mkCtx();
+        const result = await toolCall([mkCall("strict", "tc1", "{}")], ctx, [badTool], "turn");
+        expect(handler).not.toHaveBeenCalled();
+        expect(result[0].content).toContain("Invalid arguments");
+        expect(result[0].content).toContain("command");
+    });
+});
+
+describe("AR-7 工具元数据", () => {
+    it("内置工具 meta：只读集合与权限默认一致，bash/写类非并发安全", () => {
+        const byName = Object.fromEntries(
+            ToolKit.allTools.map((t) => [t.schema.function.name ?? "", t.meta ?? {}])
+        );
+        expect(byName["bash"]).toEqual({ readOnly: false, concurrencySafe: false });
+        expect(byName["write"]?.readOnly).toBe(false);
+        expect(byName["edit"]?.concurrencySafe).toBe(false);
+        for (const ro of ["read", "grep", "glob", "explore", "use_skill", "save_memory", "ask_question"]) {
+            expect(byName[ro]?.readOnly).toBe(true);
+        }
     });
 });

@@ -13,6 +13,7 @@ import { MessageList } from "./MessageList";
 import { StatusBar } from "./StatusBar";
 import { InteractionModal } from "./InteractionModal";
 import { PermissionModal } from "./PermissionModal";
+import { SnapshotsDialog } from "./SnapshotsDialog";
 
 /**
  * ChatView —— 聊天主视图容器：组合 MessageList / InputBox / StatusBar，
@@ -43,6 +44,7 @@ export function ChatView({
         pendingPermission,
         submitPermission,
     } = useAgent(sessionId, rootPath, initialEvents);
+    const [snapshotsOpen, setSnapshotsOpen] = useState(false);
     const command = useCommand({
         clear,
         appendSystem,
@@ -50,6 +52,7 @@ export function ChatView({
         projectKey,
         rootPath,
         currentSessionId,
+        openSnapshots: () => setSnapshotsOpen(true),
     });
     const fileRef = useFileReference({
         projectKey,
@@ -186,6 +189,13 @@ export function ChatView({
                 <PermissionModal
                     data={pendingPermission}
                     onDecision={submitPermission}
+                />
+            )}
+
+            {snapshotsOpen && projectKey && (
+                <SnapshotsDialog
+                    projectKey={projectKey}
+                    onClose={() => setSnapshotsOpen(false)}
                 />
             )}
         </div>

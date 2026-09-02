@@ -172,8 +172,7 @@ describe("POST /api/config/permissions/rule + 项目级 permissions 路由", () 
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ tool: "bash", pattern: "git *", action: "allow", scope: "global" }),
         });
-        const bodyText = await res.text();
-        expect(res.status).toBe(200, bodyText);
+        expect(res.status).toBe(200);
         const cfg = readFileSync(join(home, ".anycode", "config.yaml"), "utf-8");
         expect(cfg).toContain("tool: bash");
         expect(cfg).toContain("pattern: git *");

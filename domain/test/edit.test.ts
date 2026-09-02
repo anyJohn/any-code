@@ -21,10 +21,10 @@ describe("editFunc（staleness）", () => {
     it("正常替换成功：Removed/Added 齐全", async () => {
         const f = path.join(tmp, "a.txt");
         fs.writeFileSync(f, "hello world");
-        const out = await editFunc(
+        const out = (await editFunc(
             { filePath: "a.txt", oldString: "world", newString: "anycode" },
             P()
-        );
+        )).content;
         expect(out).toMatch(/Successfully edited file/);
         expect(fs.readFileSync(f).toString()).toBe("hello anycode");
     });
@@ -32,10 +32,10 @@ describe("editFunc（staleness）", () => {
     it("oldString 不存在 → Error，不落盘", async () => {
         const f = path.join(tmp, "b.txt");
         fs.writeFileSync(f, "original");
-        const out = await editFunc(
+        const out = (await editFunc(
             { filePath: "b.txt", oldString: "nope", newString: "x" },
             P()
-        );
+        )).content;
         expect(out).toMatch(/not found/);
         expect(fs.readFileSync(f).toString()).toBe("original");
     });
@@ -43,10 +43,10 @@ describe("editFunc（staleness）", () => {
     it("oldString 多次出现 → Error 要求唯一，不落盘", async () => {
         const f = path.join(tmp, "c.txt");
         fs.writeFileSync(f, "dup dup");
-        const out = await editFunc(
+        const out = (await editFunc(
             { filePath: "c.txt", oldString: "dup", newString: "x" },
             P()
-        );
+        )).content;
         expect(out).toMatch(/appears 2 times/);
         expect(fs.readFileSync(f).toString()).toBe("dup dup");
     });
@@ -58,10 +58,10 @@ describe("editFunc（staleness）", () => {
         fileState.set(f, fs.statSync(f).mtimeMs); // 模拟 read 记录
         const future = new Date(Date.now() + 5000);
         fs.utimesSync(f, future, future); // 模拟外部改动 mtime
-        const out = await editFunc(
+        const out = (await editFunc(
             { filePath: "d.txt", oldString: "world", newString: "anycode" },
             P(fileState)
-        );
+        )).content;
         expect(out).toMatch(/外部改动/);
         expect(fs.readFileSync(f).toString()).toBe("hello anycode"); // 仍编辑
     });
@@ -69,10 +69,10 @@ describe("editFunc（staleness）", () => {
     it("无 read 记录 → 无 staleness 警告", async () => {
         const f = path.join(tmp, "e.txt");
         fs.writeFileSync(f, "hello world");
-        const out = await editFunc(
+        const out = (await editFunc(
             { filePath: "e.txt", oldString: "world", newString: "x" },
             P()
-        );
+        )).content;
         expect(out).not.toMatch(/外部改动/);
     });
 
@@ -91,6 +91,6 @@ describe("editFunc（staleness）", () => {
             { filePath: "f.txt", oldString: "hello", newString: "hi" },
             P(fileState)
         );
-        expect(out2).not.toMatch(/外部改动/); // mtime 对齐 → 无警告
+        expect(out2.content).not.toMatch(/外部改动/); // mtime 对齐 → 无警告
     });
 });

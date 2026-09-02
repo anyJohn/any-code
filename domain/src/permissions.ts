@@ -42,17 +42,6 @@ export interface PermissionsConfig {
     dangerPatterns?: string[];
 }
 
-/** 只读工具：模式默认策略恒 allow（B-004）。 */
-export const READ_ONLY_TOOLS: ReadonlySet<string> = new Set([
-    "read",
-    "grep",
-    "glob",
-    "explore",
-    "use_skill",
-    "ask_question",
-    "save_memory",
-]);
-
 /** 写文件类工具：模式匹配走路径 glob。 */
 export const FILE_WRITE_TOOLS: ReadonlySet<string> = new Set(["write", "edit"]);
 
@@ -81,6 +70,8 @@ export interface PermissionContext {
     /** 合并后的用户规则：全局在前、项目在后（后匹配覆盖）。运行中"永久允许"追加到此数组（内存态，web 端另行落盘）。 */
     rules: PermissionRule[];
     dangerPatterns: readonly string[];
+    /** 只读工具名集合（AR-7：从 Tool.meta.readOnly 推导；MCP/无 meta 工具不在其中=保守 ask） */
+    readOnlyTools: ReadonlySet<string>;
     /** 会话内"允许一次"缓存：key = tool + "|" + ruleKey（D-007）。 */
     allowOnce: Set<string>;
 }
@@ -166,6 +157,8 @@ export interface EvaluateInput {
     /** 合并后的用户规则：全局在前、项目在后（后匹配覆盖，D-003） */
     rules: PermissionRule[];
     dangerPatterns: readonly string[];
+    /** 只读工具名集合（AR-7：由 Tool.meta.readOnly 推导，缺省保守=不在集合内） */
+    readOnlyTools: ReadonlySet<string>;
     tool: string;
     args: Record<string, unknown>;
 }
@@ -193,11 +186,11 @@ export function evaluatePermission(input: EvaluateInput): PermissionVerdict {
         }
     }
 
-    // ③ 模式默认策略
+    // ③ 模式默认策略（只读判定来自工具元数据，AR-7）
     if (mode === "trusted") {
         return { action: "allow", source: "mode", ruleKey: tool };
     }
-    if (READ_ONLY_TOOLS.has(tool)) {
+    if (input.readOnlyTools.has(tool)) {
         return { action: "allow", source: "mode", ruleKey: tool };
     }
     if (mode === "accept_edits" && FILE_WRITE_TOOLS.has(tool)) {

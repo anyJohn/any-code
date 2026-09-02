@@ -40,7 +40,7 @@ describe("executeBashFunc 流式（SPEC-018 AC-001）", () => {
     it("逐行 stdout 经 emitProgress 上抛 + result 含全部输出", async () => {
         const chunks: string[] = [];
         const ctx = mkCtx((c) => chunks.push(c));
-        const out = await executeBashFunc({ command: "echo a; echo b" }, ctx);
+        const out = (await executeBashFunc({ command: "echo a; echo b" }, ctx)).content;
         const joined = chunks.join("");
         expect(joined).toContain("a");
         expect(joined).toContain("b");
@@ -50,21 +50,21 @@ describe("executeBashFunc 流式（SPEC-018 AC-001）", () => {
 
     it("无 emitProgress 也正常返回 result", async () => {
         const ctx = mkCtx();
-        const out = await executeBashFunc({ command: "echo hi" }, ctx);
+        const out = (await executeBashFunc({ command: "echo hi" }, ctx)).content;
         expect(out.trim()).toBe("hi");
     });
 
     it("stderr 也流式上抛 + result 含 stderr", async () => {
         const chunks: string[] = [];
         const ctx = mkCtx((c) => chunks.push(c));
-        const out = await executeBashFunc({ command: "echo err 1>&2" }, ctx);
+        const out = (await executeBashFunc({ command: "echo err 1>&2" }, ctx)).content;
         expect(chunks.join("")).toContain("err");
         expect(out).toContain("err");
     });
 
     it("非零退出码不抛，返回输出或 exit code", async () => {
         const ctx = mkCtx();
-        const out = await executeBashFunc({ command: "exit 3" }, ctx);
+        const out = (await executeBashFunc({ command: "exit 3" }, ctx)).content;
         expect(out).toMatch(/exit code 3|Error/);
     });
 });
@@ -124,7 +124,7 @@ describe("resolveShell（SPEC-024 AC-004）", () => {
 describe("executeBashFunc 输出治理（AR-2）", () => {
     it("超限输出：截断标记（总行数）+ spill 文件路径，spill 含全量", async () => {
         const ctx = mkCtx();
-        const out = await executeBashFunc({ command: "seq 1 5000" }, ctx);
+        const out = (await executeBashFunc({ command: "seq 1 5000" }, ctx)).content;
         expect(out).toContain("[输出截断：共 5000 行");
         const m = out.match(/完整输出已写入文件：([^\s（]+)/);
         expect(m).toBeTruthy();
@@ -137,7 +137,7 @@ describe("executeBashFunc 输出治理（AR-2）", () => {
 
     it("未超限输出原样返回（无截断标记）", async () => {
         const ctx = mkCtx();
-        const out = await executeBashFunc({ command: "echo hi" }, ctx);
+        const out = (await executeBashFunc({ command: "echo hi" }, ctx)).content;
         expect(out.trim()).toBe("hi");
         expect(out).not.toContain("[输出截断");
     });
@@ -145,10 +145,10 @@ describe("executeBashFunc 输出治理（AR-2）", () => {
     it("timeout_ms 参数生效：1500ms 超时杀掉 sleep 5（clamp 下限 1s）", async () => {
         const ctx = mkCtx();
         const t0 = Date.now();
-        const out = await executeBashFunc(
+        const out = (await executeBashFunc(
             { command: "sleep 5", timeout_ms: 1500 },
             ctx
-        );
+        )).content;
         expect(Date.now() - t0).toBeLessThan(3000);
         expect(out).toContain("[Timed out after 1500ms]");
     }, 10_000);

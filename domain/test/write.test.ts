@@ -46,19 +46,19 @@ describe("writeFunc（SPEC-022）", () => {
         // 模拟外部改动 mtime
         const future = new Date(Date.now() + 5000);
         fs.utimesSync(f, future, future);
-        const out = await writeFunc(
+        const out = (await writeFunc(
             { filePath: "c.txt", content: "new" },
             P(fileState)
-        );
+        )).content;
         expect(out).toMatch(/外部改动/);
         expect(fs.readFileSync(f).toString()).toBe("new"); // 仍写入
     });
 
     it("无 read 记录 → 无 staleness 警告（正常写新文件）", async () => {
-        const out = await writeFunc(
+        const out = (await writeFunc(
             { filePath: "d.txt", content: "fresh" },
             P()
-        );
+        )).content;
         expect(out).not.toMatch(/外部改动/);
     });
 });

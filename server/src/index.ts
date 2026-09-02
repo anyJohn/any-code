@@ -7,6 +7,7 @@ import {
     AnyAgent,
     Config,
     DEFAULT_TITLE,
+    createSnapshotService,
     loadProjectPermissions,
     saveProjectPermissions,
     DURABLE_TYPES,
@@ -716,6 +717,35 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
             return c.json({ statusMessage: "saved" });
         } catch (e) {
             return c.json({ statusMessage: (e as Error).message }, 500);
+        }
+    });
+
+    // ==================== snapshots（AR-4 快照与回滚） ====================
+    // 快照存于 ~/.anycode/snapshots/<projectKey>/（shadow-git，项目目录零污染）。
+    app.get("/api/workspaces/:projectKey/snapshots", (c) => {
+        const workspace = resolveWorkspace(c.req.param("projectKey"));
+        if (!workspace) return c.json({ statusMessage: "workspace not found" }, 404);
+        const svc = createSnapshotService(workspace.rootPath);
+        return c.json({ gitAvailable: svc.available(), snapshots: svc.list() });
+    });
+
+    app.post("/api/workspaces/:projectKey/snapshots/rollback", async (c) => {
+        const workspace = resolveWorkspace(c.req.param("projectKey"));
+        if (!workspace) return c.json({ statusMessage: "workspace not found" }, 404);
+        let body: { id?: string } = {};
+        try {
+            body = await c.req.json();
+        } catch {
+            return c.json({ statusMessage: "invalid json body" }, 400);
+        }
+        const id = body?.id?.trim();
+        if (!id) return c.json({ statusMessage: "id required" }, 400);
+        try {
+            const svc = createSnapshotService(workspace.rootPath);
+            svc.rollbackTo(id);
+            return c.json({ statusMessage: "rolled back" });
+        } catch (e) {
+            return c.json({ statusMessage: (e as Error).message }, 400);
         }
     });
 

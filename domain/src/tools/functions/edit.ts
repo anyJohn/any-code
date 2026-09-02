@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import type { ToolContext } from "../../context";
+import type { ToolResult } from "../index";
 import { resolvePath } from "../../workspace";
 import { stalenessWarning, recordMtime } from "./fileState";
 
@@ -16,7 +17,7 @@ interface EditFileArgs {
 export const editFunc = async (
     args: EditFileArgs,
     ctx: ToolContext
-): Promise<string> => {
+): Promise<ToolResult> => {
     const { workspace } = ctx;
     try {
         const { oldString, newString } = args;
@@ -24,7 +25,7 @@ export const editFunc = async (
         const content = await fs.readFile(filePath, "utf-8");
 
         if (!content.includes(oldString)) {
-            return `Error: oldString not found in file. Cannot perform replacement.`;
+            return { content: `Error: oldString not found in file. Cannot perform replacement.` };
         }
 
         const occurrences = (
@@ -37,7 +38,9 @@ export const editFunc = async (
         ).length;
 
         if (occurrences > 1) {
-            return `Error: oldString appears ${occurrences} times in the file. Please make the oldString more specific to match only once.`;
+            return {
+                content: `Error: oldString appears ${occurrences} times in the file. Please make the oldString more specific to match only once.`,
+            };
         }
 
         const stalenessWarn = stalenessWarning(
@@ -50,11 +53,14 @@ export const editFunc = async (
         await fs.writeFile(filePath, newContent, "utf-8");
         recordMtime(ctx.fileState, filePath);
 
-        return `Successfully edited file.\n--- Removed:\n${oldString}\n--- Added:\n${newString}${stalenessWarn}`;
+        return {
+            content: `Successfully edited file.\n--- Removed:\n${oldString}\n--- Added:\n${newString}${stalenessWarn}`,
+            data: { filePath },
+        };
     } catch (error) {
         if (error instanceof Error) {
-            return `Error: ${error.message}`;
+            return { content: `Error: ${error.message}` };
         }
-        return `Error: ${String(error)}`;
+        return { content: `Error: ${String(error)}` };
     }
 };

@@ -17,6 +17,7 @@ export const BUILTIN_COMMANDS: CommandItem[] = [
     { name: "provider", desc: "查看/切换 provider（/provider <name>）" },
     { name: "sessions", desc: "列出最近会话" },
     { name: "compact", desc: "压缩上下文（/compact [聚焦]）" },
+    { name: "rewind", desc: "回滚工作区到快照（AR-4）" },
 ];
 
 interface UseCommandDeps {
@@ -26,6 +27,8 @@ interface UseCommandDeps {
     projectKey?: string;
     rootPath: string;
     currentSessionId: string | null;
+    /** 打开快照回滚窗（AR-4 /rewind） */
+    openSnapshots?: () => void;
 }
 
 /**
@@ -33,7 +36,7 @@ interface UseCommandDeps {
  * draft 是受控的：本 hook 不持有 draft，由调用方传入。
  * runCommand(name) 从 draft 提取 args，清空 draft 后执行。
  */
-export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, currentSessionId }: UseCommandDeps) {
+export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, currentSessionId, openSnapshots }: UseCommandDeps) {
     const navigate = useNavigate();
     const [customCommands, setCustomCommands] = useState<CommandItem[]>([]);
     const [draft, setDraft] = useState("");
@@ -95,6 +98,10 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
                     return;
                 case "config":
                     navigate("/settings");
+                    return;
+                case "rewind":
+                    if (openSnapshots) openSnapshots();
+                    else appendSystem("当前会话不支持快照回滚");
                     return;
                 case "help":
                     appendSystem(buildHelpText());

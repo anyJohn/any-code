@@ -62,6 +62,10 @@ export function AgentTool(def: AgentDefinition): Tool {
                 llm: ctx.llm,
                 fileState: ctx.fileState,
                 gitBashPath: ctx.gitBashPath,
+                // 权限上下文透传（SPEC-032）：子 agent 同受权限门控
+                permissions: ctx.permissions,
+                // 快照钩子透传（AR-4）：子 agent 写类工具同样先快照
+                snapshot: ctx.snapshot,
             };
             const messages: ChatMessage[] = [
                 { role: "system", content: def.instruction },
@@ -77,6 +81,8 @@ export function AgentTool(def: AgentDefinition): Tool {
             );
             return result;
         },
+        // sub-agent 会执行任意工具：保守元数据（非只读、非并发安全）
+        meta: { readOnly: false, concurrencySafe: false },
     };
 }
 

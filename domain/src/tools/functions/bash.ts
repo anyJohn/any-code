@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import type { ToolContext } from "../../context";
+import type { ToolResult } from "../index";
 import { globalConfigDir } from "../../workspace";
 
 interface ExecuteBashArgs {
@@ -34,12 +35,19 @@ function spillOutput(out: string): string | null {
     }
 }
 
+/** 截断结果：text 给模型，truncated/spillFile 进结构化 meta（FR-10）。 */
+interface CappedOutput {
+    text: string;
+    truncated: boolean;
+    spillFile?: string;
+}
+
 /** 双限截断：保留头部，附截断标记（总行数/字节 + spill 路径）。未超限原样返回。 */
-function capBashOutput(out: string): string {
+function capBashOutput(out: string): CappedOutput {
     const lines = out.split("\n");
     const truncated =
         lines.length > OUTPUT_MAX_LINES || Buffer.byteLength(out, "utf-8") > OUTPUT_MAX_BYTES;
-    if (!truncated) return out;
+    if (!truncated) return { text: out, truncated: false };
 
     let kept = out;
     if (Buffer.byteLength(kept, "utf-8") > OUTPUT_MAX_BYTES) {
@@ -51,14 +59,15 @@ function capBashOutput(out: string): string {
     } else {
         kept = lines.slice(0, OUTPUT_MAX_LINES).join("\n");
     }
-    const spill = spillOutput(out);
-    const spillNote = spill
-        ? `\n[完整输出已写入文件：${spill}（可用 read 工具分段查看）]`
+    const spill: string | null = spillOutput(out);
+    const spillFile = spill ?? undefined;
+    const spillNote = spillFile
+        ? `\n[完整输出已写入文件：${spillFile}（可用 read 工具分段查看）]`
         : "";
-    return (
+    const text =
         `${kept}\n[输出截断：共 ${lines.length} 行 / ${Buffer.byteLength(out, "utf-8")} 字节，` +
-        `仅保留前 ${kept.split("\n").length} 行]${spillNote}`
-    );
+        `仅保留前 ${kept.split("\n").length} 行]${spillNote}`;
+    return { text, truncated: true, spillFile };
 }
 
 /** 解析超时：clamp 到 [1s, 600s]，非法/缺省用默认值。 */
@@ -141,14 +150,14 @@ export function resolveShellKind(gitBashPath?: string): ShellKind {
 export const executeBashFunc = async (
     args: ExecuteBashArgs,
     ctx: ToolContext
-): Promise<string> => {
+): Promise<ToolResult> => {
     const { workspace } = ctx;
-    return new Promise<string>((resolve) => {
+    return new Promise<ToolResult>((resolve) => {
         let stdout = "";
         let stderr = "";
         let settled = false;
 
-        const finish = (value: string) => {
+        const finish = (value: ToolResult) => {
             if (settled) return;
             settled = true;
             clearTimeout(timer);
@@ -167,7 +176,7 @@ export const executeBashFunc = async (
                 windowsHide: true,
             });
         } catch (err) {
-            finish(`Error: ${(err as Error).message}`);
+            finish({ content: `Error: ${(err as Error).message}`, data: { exitCode: null } });
             return;
         }
 
@@ -186,21 +195,28 @@ export const executeBashFunc = async (
         child.stderr?.on("data", (c: Buffer) => onChunk(c, "stderr"));
 
         child.on("error", (err) => {
-            finish(`Error: ${err.message}`);
+            finish({ content: `Error: ${err.message}`, data: { exitCode: null } });
         });
         child.on("close", (code, signal) => {
             const raw = `${stdout}${stderr}`.trim();
-            if (signal === "SIGTERM") {
-                finish(
-                    `[Timed out after ${resolveTimeoutMs(args.timeout_ms)}ms]\n` +
-                        capBashOutput(raw)
-                );
-            } else if (code !== 0) {
-                // 非零退出码（grep 无匹配、ls 目标不存在等）也走这里，输出对 agent 有用，不丢弃
-                finish(capBashOutput(raw) || `Error: exit code ${code}`);
-            } else {
-                finish(capBashOutput(raw));
-            }
+            const timedOut = signal === "SIGTERM";
+            const cap = capBashOutput(raw);
+            const content = timedOut
+                ? `[Timed out after ${resolveTimeoutMs(args.timeout_ms)}ms]\n${cap.text}`
+                : code !== 0
+                  ? // 非零退出码（grep 无匹配、ls 目标不存在等）也走这里，输出对 agent 有用，不丢弃
+                    cap.text || `Error: exit code ${code}`
+                  : cap.text;
+            // FR-10 结构化 meta：退出码/截断/spill 供 UI 与系统消费（模型只见 content）
+            finish({
+                content,
+                data: {
+                    exitCode: code,
+                    timedOut,
+                    truncated: cap.truncated,
+                    ...(cap.spillFile ? { spillFile: cap.spillFile } : {}),
+                },
+            });
         });
     });
 };

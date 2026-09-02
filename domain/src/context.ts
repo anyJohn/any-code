@@ -3,6 +3,7 @@ import type { AgentEventPayload } from "./type";
 import type { LlmProvider } from "./config";
 import type { SkillEntry } from "./skill";
 import type { PermissionContext } from "./permissions";
+import type { Snapshot } from "./snapshot";
 
 /** 最小事件发射接口。EventStream 实现它;AgentTool 的 tagged proxy 也实现它。 */
 export interface EventEmitter {
@@ -36,4 +37,6 @@ export interface ToolContext {
     skills?: Map<string, SkillEntry>;
     /** 工具权限上下文（SPEC-032）：undefined = 权限系统未启用（直通，测试/兼容路径）。 */
     permissions?: PermissionContext;
+    /** 工作区快照钩子（AR-4）：写类工具执行前自动快照；undefined = 未启用（跳过）。 */
+    snapshot?: { snapshot(label: string): Snapshot | null };
 }

@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import type { ToolContext } from "../../context";
+import type { ToolResult } from "../index";
 import { resolvePath } from "../../workspace";
 import { stalenessWarning, recordMtime } from "./fileState";
 
@@ -17,7 +18,7 @@ interface WriteArgs {
 export const writeFunc = async (
     args: WriteArgs,
     ctx: ToolContext
-): Promise<string> => {
+): Promise<ToolResult> => {
     const { workspace } = ctx;
     let tmp: string | null = null;
     try {
@@ -37,7 +38,10 @@ export const writeFunc = async (
         tmp = null; // rename 成功，无需清理
 
         recordMtime(ctx.fileState, filePath);
-        return `Successfully wrote ${args.content.length} characters to ${args.filePath}${stalenessWarn}`;
+        return {
+            content: `Successfully wrote ${args.content.length} characters to ${args.filePath}${stalenessWarn}`,
+            data: { filePath },
+        };
     } catch (error) {
         if (tmp) {
             try {
@@ -47,8 +51,8 @@ export const writeFunc = async (
             }
         }
         if (error instanceof Error) {
-            return `Error: ${error.message}`;
+            return { content: `Error: ${error.message}` };
         }
-        return `Error: ${String(error)}`;
+        return { content: `Error: ${String(error)}` };
     }
 };

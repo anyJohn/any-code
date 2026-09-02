@@ -55,6 +55,8 @@ export interface ToolEventData {
     name: string;
     args: unknown;
     result: string;
+    /** 结构化元数据（FR-10）：handler 返回 ToolResult.data——exitCode/spillFile/filePath 等，UI/系统消费 */
+    meta?: Record<string, unknown>;
 }
 export interface ToolStartData {
     name: string;
