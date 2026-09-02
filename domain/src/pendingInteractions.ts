@@ -17,7 +17,7 @@ export function registerInteraction(id: string, p: PendingInteraction): void {
     interactions.set(id, p);
 }
 
-/** web /interact 调：按 id 唤醒 handler。未知 id（超时/abort 已清）→ false，无副作用。 */
+/** web /interact 调：按 id 唤醒 handler。未知 id（abort 已清）→ false，无副作用。 */
 export function resolveInteraction(id: string, answers: string[]): boolean {
     const p = interactions.get(id);
     if (!p) return false;
@@ -26,7 +26,12 @@ export function resolveInteraction(id: string, answers: string[]): boolean {
     return true;
 }
 
-/** handler race 落败（超时/abort）后清自己的注册，防泄漏 + 防迟到的 POST 唤醒。 */
+/** handler race 落败（abort）后清自己的注册，防泄漏 + 防迟到的 POST 唤醒。 */
 export function unregisterInteraction(id: string): void {
     interactions.delete(id);
+}
+
+/** 真值查询：id 是否仍在等待答案。server 组装会话状态（waiting_ask）用。 */
+export function hasInteraction(id: string): boolean {
+    return interactions.has(id);
 }

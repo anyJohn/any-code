@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "@/hooks/useRedux";
 import {
@@ -9,7 +9,8 @@ import {
     setActiveSession,
     refreshWorkspaces,
 } from "@/store/workspaceSlice";
-import type { WorkspaceMeta, SessionMeta } from "@any-code/domain";
+import type { WorkspaceMeta } from "@any-code/domain";
+import type { SessionListItem } from "@/lib/sseEvents";
 import {
     Collapsible,
     CollapsibleTrigger,
@@ -37,6 +38,8 @@ import {
     Search,
     PanelLeftClose,
     PanelLeftOpen,
+    Loader2,
+    Clock3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiJson } from "@/lib/api";
@@ -66,7 +69,9 @@ export function AppSidebar({
     const dispatch = useAppDispatch();
     const navigate = useNavigate();
 
-    const [sessionsMap, setSessionsMap] = useState<Record<string, SessionMeta[]>>({});
+    const [sessionsMap, setSessionsMap] = useState<Record<string, SessionListItem[]>>({});
+    const sessionsMapRef = useRef(sessionsMap);
+    sessionsMapRef.current = sessionsMap;
     const [sessionsStatus, setSessionsStatus] = useState<Record<string, SessionsStatus>>({});
     const [openKeys, setOpenKeys] = useState<Record<string, boolean>>({});
     const [sidebarErr, setSidebarErr] = useState("");
@@ -75,11 +80,11 @@ export function AppSidebar({
     // 删除目标（弹窗受控）；重命名目标（inline 编辑受控）
     const [deleteTarget, setDeleteTarget] = useState<{
         w: WorkspaceMeta;
-        s: SessionMeta;
+        s: SessionListItem;
     } | null>(null);
     const [renameTarget, setRenameTarget] = useState<{
         w: WorkspaceMeta;
-        s: SessionMeta;
+        s: SessionListItem;
         value: string;
     } | null>(null);
     // 工作区删除目标（弹窗受控）
@@ -124,7 +129,7 @@ export function AppSidebar({
 
     const loadSessions = async (w: WorkspaceMeta) => {
         setSessionsStatus((p) => ({ ...p, [w.projectKey]: "loading" }));
-        const list = await apiJson<SessionMeta[]>(
+        const list = await apiJson<SessionListItem[]>(
             `/api/workspaces/${w.projectKey}/sessions`
         );
         if (list === null) {
@@ -134,6 +139,24 @@ export function AppSidebar({
         setSessionsMap((p) => ({ ...p, [w.projectKey]: list }));
         setSessionsStatus((p) => ({ ...p, [w.projectKey]: "ready" }));
     };
+
+    // FR-30 B-004：运行状态轮询（3s，页面可见时）。静默刷新已加载工作区的会话列表——
+    // 服务端在 SessionMeta 上合并 status/pendingAsk（running/waiting_ask/queued），驱动行内徽标。
+    useEffect(() => {
+        const tick = () => {
+            if (document.visibilityState !== "visible") return;
+            for (const projectKey of Object.keys(sessionsMapRef.current)) {
+                void (async () => {
+                    const list = await apiJson<SessionListItem[]>(
+                        `/api/workspaces/${projectKey}/sessions`
+                    );
+                    if (list) setSessionsMap((p) => ({ ...p, [projectKey]: list }));
+                })();
+            }
+        };
+        const t = setInterval(tick, 3000);
+        return () => clearInterval(t);
+    }, []);
 
     const onPicked = async (path: string) => {
         setAddError("");
@@ -616,6 +639,29 @@ export function AppSidebar({
                                                         >
                                                             {s.title || "（无标题）"}
                                                         </button>
+                                                    )}
+                                                    {/* FR-30 B-004：运行状态徽标（名称右侧） */}
+                                                    {!rt && s.status === "running" && (
+                                                        <Loader2
+                                                            className="size-3 shrink-0 animate-spin text-primary"
+                                                            aria-label="运行中"
+                                                        />
+                                                    )}
+                                                    {!rt && s.status === "waiting_ask" && (
+                                                        <span
+                                                            className="size-2 shrink-0 rounded-full bg-amber-500 animate-pulse"
+                                                            title={
+                                                                s.pendingAsk?.tool
+                                                                    ? `等待确认：${s.pendingAsk.tool}`
+                                                                    : "等待确认"
+                                                            }
+                                                        />
+                                                    )}
+                                                    {!rt && s.status === "queued" && (
+                                                        <Clock3
+                                                            className="size-3 shrink-0 text-muted-foreground"
+                                                            aria-label="排队中"
+                                                        />
                                                     )}
                                                     {!rt && (
                                                         <span className="flex items-center gap-0.5 shrink-0">

@@ -56,6 +56,24 @@ describe("@any-code/server routes", () => {
         const json = (await res.json()) as { sessions: unknown[]; workspaces: unknown[] };
         expect(json.sessions).toEqual([]);
     });
+
+    // ---- FR-30 / SPEC-033 新路由 ----
+
+    it("GET /api/running → 200 + 数组（无运行中会话为空）", async () => {
+        const res = await app.request("/api/running");
+        expect(res.status).toBe(200);
+        expect(Array.isArray(await res.json())).toBe(true);
+    });
+
+    it("POST /api/sessions/none/stop → 404（未运行）", async () => {
+        const res = await app.request("/api/sessions/none/stop", { method: "POST" });
+        expect(res.status).toBe(404);
+    });
+
+    it("GET /api/sessions/none/stream → 404（未运行，客户端回退 /history）", async () => {
+        const res = await app.request("/api/sessions/none/stream?since=-1");
+        expect(res.status).toBe(404);
+    });
 });
 
 // 配置抹除回归：POST/PATCH /api/config 不得丢掉表单之外的段（gitBashPath/abilities）。

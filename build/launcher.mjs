@@ -24,7 +24,7 @@ const NODE_BIN = win ? join(NODE_DIR, "node.exe") : join(NODE_DIR, "bin", "node"
 // anycode 运行时布局（DEC-007 / SPEC-028）：
 //   app/web/dist/         Vite 静态 SPA（无 node_modules / 无 junction）
 //   app/server/dist/server.mjs  hono server bundle（自包含，external 仅 @vscode/ripgrep）
-// launcher 起 server.mjs，注入 PORT/HOSTNAME/ANYCODE_WEB_DIST/ANYCODE_RG_PATH。
+// launcher 起 server.mjs，注入 PORT/ANYCODE_WEB_DIST/ANYCODE_RG_PATH（绑定地址由 server 恒设 127.0.0.1）。
 const WEB_DIST = join(APP, "web", "dist");
 const SERVER_MJS = join(APP, "server", "dist", "server.mjs");
 const RG = join(ANYCODE_HOME, "runtime", "rg", win ? "rg.exe" : "rg");
@@ -220,10 +220,9 @@ const PORT = await freePort(startPort);
 const URL = "http://127.0.0.1:" + PORT;
 console.log(">> Starting anycode web -> " + URL + " (Ctrl+C to stop)");
 
-// hono server.mjs reads PORT + HOSTNAME + ANYCODE_WEB_DIST + ANYCODE_RG_PATH from env.
-// HOSTNAME=127.0.0.1 (localhost-only, security — bash 工具跑 LLM 生成的命令，不暴露公网).
+// hono server.mjs reads PORT + ANYCODE_WEB_DIST + ANYCODE_RG_PATH from env.
+// 绑定地址由 server 恒设为 127.0.0.1（localhost-only，security — bash 工具跑 LLM 生成的命令，不暴露公网）。
 process.env.PORT = String(PORT);
-process.env.HOSTNAME = "127.0.0.1";
 process.env.ANYCODE_WEB_DIST = WEB_DIST; // server serve 静态 SPA
 // vendored rg path so domain ripgrep.ts finds it（无 @vscode/ripgrep 二进制时降级到此）
 process.env.ANYCODE_RG_PATH = RG;

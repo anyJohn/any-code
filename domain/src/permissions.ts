@@ -61,9 +61,6 @@ export const DEFAULT_DANGER_PATTERNS: readonly string[] = [
     "|sh",
 ];
 
-/** 权限 ask 超时（D-006）：超时按拒绝处理。 */
-export const PERMISSION_TIMEOUT_MS = 120_000;
-
 /** per-agent 权限上下文（C-004：随 agent 生命周期，会话内缓存不跨 session）。 */
 export interface PermissionContext {
     mode: PermissionMode;

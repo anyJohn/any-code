@@ -1,9 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AppTopbar } from "@/components/AppTopbar";
+import { useAppSelector } from "@/hooks/useRedux";
+import { selectWorkspace } from "@/store/workspaceSlice";
+import { apiJson } from "@/lib/api";
+import type { RunningSessionInfo } from "@/lib/sseEvents";
 
 const MIN_W = 200;
 const MAX_W = 480;
@@ -11,6 +16,47 @@ const DEFAULT_W = 256;
 const COLLAPSED_W = 44; // 折叠态 rail 宽度（= 折叠按钮大小）
 const STORAGE_KEY = "anycode:sidebarWidth";
 const COLLAPSED_KEY = "anycode:sidebarCollapsed";
+
+/**
+ * RunningBanner —— 跨会话 pending ask 提醒（FR-30 B-004）。
+ * 轮询 GET /api/running（3s，页面可见时）；有"等待确认"且非当前查看的会话时显示提醒条，
+ * 点击跳到该会话处理。当前会话的 ask 由 ChatView 的 PermissionModal 承载，不重复提醒。
+ */
+function RunningBanner() {
+    const { activeSessionId } = useAppSelector(selectWorkspace);
+    const navigate = useNavigate();
+    const [waiting, setWaiting] = useState<RunningSessionInfo[]>([]);
+
+    useEffect(() => {
+        let stopped = false;
+        const tick = async () => {
+            if (document.visibilityState !== "visible") return;
+            const list = await apiJson<RunningSessionInfo[]>("/api/running");
+            if (stopped) return;
+            setWaiting((list ?? []).filter((s) => s.status === "waiting_ask"));
+        };
+        const t = setInterval(tick, 3000);
+        void tick();
+        return () => {
+            stopped = true;
+            clearInterval(t);
+        };
+    }, []);
+
+    const target = waiting.find((s) => s.sessionId !== activeSessionId);
+    if (!target) return null;
+    const extra = waiting.length > 1 ? ` 等 ${waiting.length} 个会话` : "";
+    return (
+        <button
+            onClick={() => navigate(`/chat/${target.sessionId}`)}
+            className="shrink-0 w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 border-b border-amber-500/30 hover:bg-amber-500/20 transition-colors"
+        >
+            <span className="size-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+            「{target.title || "会话"}」等待权限确认
+            {extra}——点击前往处理
+        </button>
+    );
+}
 
 /**
  * AppShell —— 圆角卡片可拖拽布局。
@@ -89,6 +135,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <header className="shrink-0 border-b border-border bg-background">
                     <AppTopbar />
                 </header>
+                <RunningBanner />
                 <main className="flex-1 min-h-0 overflow-hidden">{children}</main>
             </div>
             <Toaster richColors position="top-center" />

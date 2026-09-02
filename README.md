@@ -46,7 +46,7 @@ iwr -useb https://raw.githubusercontent.com/anyJohn/any-code/main/build/install.
 
 agent 自主调 `bash` / `read` / `grep` 等工具完成任务，过程实时显示在聊天里：**思考 → 工具调用 → 结果 → 回答**，按回合块状展示，工具调用默认折叠、点开看参数与输出。随时点「停止」可中断进行中的任务（会真正打断 LLM 调用，不是只断开页面）。
 
-> ⚠️ **安全提示：** Web 模式下 `bash` 工具会在本机执行 LLM 生成的 shell 命令。服务**仅监听 127.0.0.1**，切勿暴露公网。工具级权限策略 / 危险命令确认尚在路线图。
+> ⚠️ **安全提示：** Web 模式下 `bash` 工具会在本机执行 LLM 生成的 shell 命令。服务**仅监听 127.0.0.1**，切勿暴露公网。工具级权限策略（allow / ask / deny + 危险命令确认）已内置，见「工具系统」。
 
 ---
 
@@ -246,6 +246,7 @@ anycode 守"最小可读内核"定位：**小而全 + 真协议接入生态 + �
 | 端到端安装（v1） | Linux/Windows 一行安装脚本 + `anycode web`（非技术用户开箱即用）|
 | 安装生命周期 | `anycode update`（复用安装器重拉重建）/ `uninstall`（删 ~/.anycode）/ `help` |
 | P2 扩展性（FR-17/AR-18/AR-16/AR-15/AR-19） | MCP 命名空间+连接池+resources/prompts+重连；项目扩展点（tools/*.mjs + hooks.mjs）；Anthropic 协议适配；domain 分层守卫测试 |
+| 后台运行与多 agent 并行（FR-30/SPEC-033） | 切换会话/关标签页不中止任务（关软件才停）；多项目多会话并行；侧栏状态徽标 + 跨会话 ask 提醒；断线自动重挂续传；任意视图显式 `/stop`；并发上限可配（满载排队） |
 | 内核可靠性（FR-6/AR-9/FR-11/FR-13/FR-12） | 分级压缩（microcompact+buffer 阈值+被动压缩）、sub-agent 能力补全、bash 后台任务、plan 模式（规划-审批） |
 | 工具系统升级（FR-10/AR-7/FR-8） | 参数 schema 校验 + 结构化 ToolResult + 工具元数据（readOnly/concurrencySafe）+ 并行执行 |
 | 快照与回滚（AR-4） | 写类工具前自动 shadow-git 快照（~/.anycode/snapshots/）+ /rewind 二次确认回滚 |
@@ -257,7 +258,6 @@ anycode 守"最小可读内核"定位：**小而全 + 真协议接入生态 + �
 
 | 项 | 说明 |
 | --- | --- |
-| 权限策略层 | `TOOL` 事件已留 `{name,args,result}` 拦截点，缺 allow/deny/ask 策略 + 危险命令确认；`ask_question` 工具（模型向 human 提问/选择）待加 |
 | 程序性记忆 / 自学习 | 加 `create_skill` 工具让 agent 自造 skill，"越用越强"最小循环 |
 | 轻量编排切入 | ACP 委托外部 harness，或 `delegate_to_cli` 调外部 coding agent |
 | CI/CD | 无 workflow（`anycode update` 已实现，自更新靠重跑安装器） |

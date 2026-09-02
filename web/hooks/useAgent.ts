@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
     type AgentEvent,
     type AgentEventPayload,
     type InteractionData,
     type InteractionQuestion,
     type PermissionAskData,
+    type StreamFrame,
     nextId,
 } from "@/lib/sseEvents";
 // InteractionData/InteractionQuestion 定义于 sseEvents（AgentEvent union 引用），re-export 保 InteractionModal import 不变。
@@ -17,14 +18,22 @@ export type { PermissionAskData };
 export type PermissionDecision = "allow_once" | "allow_always" | "deny";
 
 const TERMINAL = new Set(["Done", "Error", "Stopped"]);
+/** 断线重连上限（FR-21⑤/FR-30 B-002）：指数退避 0.5s×2^n，5 次后放弃。 */
+const MAX_RECONNECT = 5;
+
+/** 事件去重键（attach 重放 vs /history 已载 durable 事件可能重叠）。 */
+function eventKey(e: AgentEventPayload): string {
+    return `${e.type}|${e.message}|${e.timestamp}`;
+}
 
 /**
  * 解析 SSE 流：读 fetch body，按 \n\n 分帧，取 data: 行 JSON.parse。
- * fetch streaming SSE（非 EventSource）——支持 POST 带 body + abort=stop。
+ * fetch streaming SSE（非 EventSource）——支持 POST 带 body + abort。
+ * FR-30：server 发 {seq, event} 帧；兼容裸事件（测试/旧格式）。
  */
 async function* parseSSE(
     body: ReadableStream<Uint8Array>
-): AsyncGenerator<AgentEventPayload> {
+): AsyncGenerator<StreamFrame> {
     const reader = body.getReader();
     const dec = new TextDecoder();
     let buf = "";
@@ -41,7 +50,13 @@ async function* parseSSE(
                 const json = line.slice(5).trim();
                 if (!json) continue;
                 try {
-                    yield JSON.parse(json);
+                    const parsed = JSON.parse(json) as Partial<StreamFrame> &
+                        AgentEventPayload;
+                    if (parsed && typeof parsed.seq === "number" && parsed.event) {
+                        yield parsed as StreamFrame;
+                    } else {
+                        yield { seq: -1, event: parsed };
+                    }
                 } catch {
                     // 跳过损坏帧
                 }
@@ -51,11 +66,11 @@ async function* parseSSE(
 }
 
 /**
- * useAgent —— 目标 C：连接持有 agent。
- * - 历史由调用方（chat 页）预取传入 initialEvents，hook 不再自取（避免双取）。
- * - submit(task)：新对话（sessionId=null）先 POST /api/sessions 建 session，replaceState 更新 URL
- *   （replaceState 不触发路由重渲染，保留在途 run 流），再 POST /api/sessions/:sessionId/run 流式跑。
- * - stop：abort fetch → 服务端见 disconnect → destroy → 真停（关页面同理）。
+ * useAgent —— FR-30 后台运行模型。
+ * - agent 存活期在 server（AgentManager 托管）；断开连接/切走会话只结束本地订阅，
+ *   不中止运行。真停走 POST /stop；关软件（server 退出）才全停。
+ * - submit(task)：POST /run（SSE 首订）；流中断自动以 GET /stream?since=N 续传（重连）。
+ * - mount 时探测运行中会话并重挂（since=-1 重放 + live），恢复 pending 与 pending ask。
  */
 export function useAgent(
     sessionId: string | null,
@@ -74,6 +89,161 @@ export function useAgent(
     const [pendingPermission, setPendingPermission] =
         useState<PermissionAskData | null>(null);
     const abortRef = useRef<AbortController | null>(null);
+    const attachRef = useRef<AbortController | null>(null);
+    // per-run 已见最大 seq（续传 since）
+    const lastSeqRef = useRef<number>(-1);
+    // events 镜像 ref（attach 去重快照用，避免闭包陈旧）
+    const eventsRef = useRef<AgentEvent[]>(initialEvents);
+    useEffect(() => {
+        eventsRef.current = events;
+    }, [events]);
+
+    const appendLocal = useCallback(
+        (type: "System" | "Error" | "Stopped", message: string) => {
+            setEvents((prev) => [
+                ...prev,
+                { id: nextId("local"), timestamp: Date.now(), type, message } as AgentEvent,
+            ]);
+        },
+        []
+    );
+
+    /** 单帧入列：ask 类拦截驱动模态；其余去重（可选）后入 events。 */
+    const ingest = useCallback(
+        (e: AgentEventPayload, seen?: Set<string>) => {
+            if (e.type === "Interaction") {
+                setPendingInteraction(e.data as InteractionData);
+                return;
+            }
+            if (e.type === "PermissionAsk") {
+                setPendingPermission(e.data as PermissionAskData);
+                return;
+            }
+            if (seen) {
+                const k = eventKey(e);
+                if (seen.has(k)) return;
+                seen.add(k);
+            }
+            setEvents((prev) => {
+                // 去重：server 的 User 事件与乐观插入的 user 气泡重复（同 message），跳过
+                if (
+                    e.type === "User" &&
+                    prev.length > 0 &&
+                    prev[prev.length - 1].type === "User" &&
+                    prev[prev.length - 1].message === e.message
+                ) {
+                    return prev;
+                }
+                return [
+                    ...prev,
+                    { ...e, id: nextId("live") } as AgentEvent,
+                ];
+            });
+        },
+        []
+    );
+
+    /** 消费一条帧流；返回终态是否到达。seen 传入时做 attach 重放去重。 */
+    const consumeStream = useCallback(
+        async (body: ReadableStream<Uint8Array>, seen?: Set<string>) => {
+            for await (const frame of parseSSE(body)) {
+                lastSeqRef.current = Math.max(lastSeqRef.current, frame.seq);
+                ingest(frame.event, seen);
+                if (TERMINAL.has(frame.event.type)) {
+                    setPending(false);
+                    setPendingInteraction(null);
+                    setPendingPermission(null);
+                    return true;
+                }
+            }
+            return false;
+        },
+        [ingest]
+    );
+
+    /**
+     * 泵一条流 + 断线续传循环：首连失败/流中断 → GET /stream?since=N 重挂，
+     * 指数退避至 MAX_RECONNECT。terminal / abort / 404（run 已结束）退出。
+     */
+    const pump = useCallback(
+        async (sid: string, url: string, init: RequestInit | undefined, ac: AbortController) => {
+            let attempts = 0;
+            let curUrl = url;
+            let curInit = init;
+            while (true) {
+                let ok = false;
+                try {
+                    const res = await fetch(curUrl, { ...curInit, signal: ac.signal });
+                    if (res.ok && res.body) {
+                        ok = true;
+                        const terminal = await consumeStream(res.body);
+                        if (terminal || ac.signal.aborted) return;
+                    }
+                } catch {
+                    if (ac.signal.aborted) return;
+                }
+                // 首连即失败（/run 非 200）不重试；后续为流中断重挂
+                if (!ok && curInit) {
+                    appendLocal("Error", `运行失败，请检查服务端状态`);
+                    setPending(false);
+                    return;
+                }
+                if (attempts >= MAX_RECONNECT) {
+                    appendLocal("System", "连接中断，多次重连失败；任务仍在后台运行，可稍后重进会话查看。");
+                    setPending(false);
+                    return;
+                }
+                await new Promise((r) => setTimeout(r, 500 * 2 ** attempts));
+                attempts++;
+                if (ac.signal.aborted) return;
+                curUrl = `/api/sessions/${sid}/stream?since=${lastSeqRef.current}`;
+                curInit = undefined;
+            }
+        },
+        [consumeStream, appendLocal]
+    );
+
+    // mount 时重挂运行中会话（FR-30 B-009）：/stream?since=-1 重放 + live；404 = 空闲。
+    // seen 快照按挂载时 events 建立——重放中与 /history 重复的 durable 事件被跳过。
+    useEffect(() => {
+        const sid = sessionId;
+        if (!sid) return;
+        const ac = new AbortController();
+        attachRef.current = ac;
+        void (async () => {
+            try {
+                const res = await fetch(`/api/sessions/${sid}/stream?since=-1`, {
+                    signal: ac.signal,
+                });
+                if (!res.ok || !res.body) return; // 空闲会话：无流
+                lastSeqRef.current = -1;
+                const seen = new Set(eventsRef.current.map(eventKey));
+                setPending(true);
+                const terminal = await consumeStream(res.body, seen);
+                if (!terminal && !ac.signal.aborted) {
+                    await pump(sid, `/api/sessions/${sid}/stream?since=${lastSeqRef.current}`, undefined, ac);
+                }
+            } catch {
+                // 网络失败/本地断开：若仍是活动 attach，收尾 pending
+                if (attachRef.current === ac) setPending(false);
+            } finally {
+                if (attachRef.current === ac) attachRef.current = null;
+            }
+        })();
+        return () => {
+            ac.abort(); // 仅断本地订阅；server 端 run 继续跑（FR-30 B-001）
+            attachRef.current = null;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sessionId]);
+
+    // 卸载时断开本地 run 流（同样不中止 server 端任务）
+    useEffect(
+        () => () => {
+            abortRef.current?.abort();
+        },
+        []
+    );
 
     const submit = useCallback(
         async (task: string) => {
@@ -117,105 +287,44 @@ export function useAgent(
 
             const ac = new AbortController();
             abortRef.current = ac;
-            try {
-                const res = await fetch(`/api/sessions/${sid}/run`, {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ task, workspacePath: rootPath }),
-                    signal: ac.signal,
-                });
-                if (!res.ok || !res.body) {
-                    setEvents((prev) => [
-                        ...prev,
-                        {
-                            id: nextId("local"),
-                            timestamp: Date.now(),
-                            type: "Error",
-                            message: `运行失败 (HTTP ${res.status})`,
-                            error: {
-                                message: `HTTP ${res.status}`,
-                                name: "Error",
-                            },
-                        },
-                    ]);
-                    setPending(false);
-                    return;
-                }
-                for await (const e of parseSSE(res.body)) {
-                    if (e.type === "Interaction") {
-                        // ask_question 阻塞中：拦截不入 events，设 pendingInteraction 驱动模态
-                        setPendingInteraction(e.data as InteractionData);
-                    } else if (e.type === "PermissionAsk") {
-                        // 权限裁决请求（live-only，不入盘）：拦截驱动裁决窗；durable 的
-                        // Permission 审计事件照常入 events（回放可见）。
-                        setPendingPermission(e.data as PermissionAskData);
-                    } else {
-                        setEvents((prev) => {
-                            // 去重：server 的 User 事件与乐观插入的 user 气泡重复（同 message），跳过
-                            if (
-                                e.type === "User" &&
-                                prev.length > 0 &&
-                                prev[prev.length - 1].type === "User" &&
-                                prev[prev.length - 1].message === e.message
-                            ) {
-                                return prev;
-                            }
-                            return [
-                                ...prev,
-                                { ...e, id: nextId("live") } as AgentEvent,
-                            ];
-                        });
-                    }
-                    if (TERMINAL.has(e.type)) {
-                        setPending(false);
-                        setPendingInteraction(null);
-                        setPendingPermission(null);
-                    }
-                }
-            } catch (err) {
-                if (ac.signal.aborted) {
-                    // 用户主动停止：abort 关闭 SSE 流时，服务端 STOPPED 事件未必能送达，
-                    // 本地补一条 Stopped 标记，让用户看到"已停止"反馈。
-                    setEvents((prev) => [
-                        ...prev,
-                        {
-                            id: nextId("local"),
-                            timestamp: Date.now(),
-                            type: "Stopped",
-                            message: "已停止任务",
-                        },
-                    ]);
-                } else {
-                    setEvents((prev) => [
-                        ...prev,
-                        {
-                            id: nextId("local"),
-                            timestamp: Date.now(),
-                            type: "Error",
-                            message: `运行失败: ${
-                                err instanceof Error ? err.message : String(err)
-                            }`,
-                            error: {
-                                message:
-                                    err instanceof Error
-                                        ? err.message
-                                        : String(err),
-                                name: err instanceof Error ? err.name : "Error",
-                            },
-                        },
-                    ]);
-                }
-                setPending(false);
-            } finally {
-                abortRef.current = null;
-            }
+            lastSeqRef.current = -1;
+            await pump(sid, `/api/sessions/${sid}/run`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ task, workspacePath: rootPath }),
+            }, ac);
+            abortRef.current = null;
         },
-        [currentSessionId, rootPath, pending]
+        [currentSessionId, rootPath, pending, pump]
     );
 
-    const stop = useCallback(() => {
-        abortRef.current?.abort(); // abort fetch → 服务端 destroy → 真停
-    }, []);
+    const stop = useCallback(async () => {
+        // FR-30 B-003：真停走显式 API（断开连接已不再停止 agent）。
+        const sid = currentSessionId;
+        if (sid) {
+            try {
+                const res = await fetch(`/api/sessions/${sid}/stop`, { method: "POST" });
+                if (res.ok) {
+                    const body = (await res.json()) as { status?: string };
+                    if (body?.status === "cancelled") {
+                        // 排队中取消：不会有终态帧，本地收尾
+                        abortRef.current?.abort();
+                        attachRef.current?.abort();
+                        setPending(false);
+                        appendLocal("Stopped", "已取消排队任务");
+                        return;
+                    }
+                    // "stopping"：等服务端 Stopped 终态帧收尾
+                    return;
+                }
+            } catch {
+                // fallthrough → 本地断流兜底
+            }
+        }
+        abortRef.current?.abort();
+        attachRef.current?.abort();
+        setPending(false);
+    }, [currentSessionId, appendLocal]);
 
     /** 提交 ask_question 答案：POST /interact 解除服务端 handler 阻塞。 */
     const submitInteraction = useCallback(

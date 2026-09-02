@@ -205,6 +205,8 @@ export interface ConfigShape {
     abilities?: Record<string, AbilityConfig>;
     /** 工具权限配置（SPEC-032）：模式 + 用户规则 + 危险命令基线增删。 */
     permissions?: PermissionsConfig;
+    /** server 并发运行上限（FR-30 / SPEC-033 DEC-102）：缺省 3，0 = 不限。 */
+    maxConcurrentRuns?: number;
 }
 
 /** 单个能力配置：enabled 开关 + 能力私有 config（如 web-search 的 provider/apiKey）。 */
@@ -261,6 +263,8 @@ export class Config {
     abilities: Record<string, AbilityConfig>;
     /** 工具权限配置（SPEC-032）：模式 + 全局规则 + 危险基线增删。 */
     permissions: Required<PermissionsConfig>;
+    /** server 并发运行上限（FR-30）：缺省 3，0 = 不限。server 侧消费，domain 仅承载。 */
+    maxConcurrentRuns: number;
 
     private constructor(
         providers: Record<string, LlmProvider>,
@@ -268,7 +272,8 @@ export class Config {
         mcpServers: Record<string, McpServerConfig>,
         gitBashPath: string | undefined,
         abilities: Record<string, AbilityConfig>,
-        permissions: Required<PermissionsConfig>
+        permissions: Required<PermissionsConfig>,
+        maxConcurrentRuns: number
     ) {
         this.providers = providers;
         this.default = def;
@@ -276,6 +281,7 @@ export class Config {
         this.gitBashPath = gitBashPath;
         this.abilities = abilities;
         this.permissions = permissions;
+        this.maxConcurrentRuns = maxConcurrentRuns;
     }
 
     static load(): Config {
@@ -334,7 +340,8 @@ export class Config {
             mcpServers,
             parsed?.gitBashPath,
             parsed?.abilities ?? {},
-            normalizePermissions(parsed?.permissions)
+            normalizePermissions(parsed?.permissions),
+            normalizeMaxConcurrentRuns(parsed?.maxConcurrentRuns)
         );
     }
 
@@ -400,10 +407,20 @@ export class Config {
                 gitBashPath: data.gitBashPath,
                 abilities: data.abilities ?? {},
                 permissions: normalizePermissions(data.permissions),
+                maxConcurrentRuns: normalizeMaxConcurrentRuns(data.maxConcurrentRuns),
             }),
             "utf-8"
         );
     }
+}
+
+/** maxConcurrentRuns 归一化（FR-30 DEC-102）：缺省 3，0 = 不限，负数/非数字回退缺省。 */
+export const DEFAULT_MAX_CONCURRENT_RUNS = 3;
+function normalizeMaxConcurrentRuns(v?: number): number {
+    if (typeof v !== "number" || !Number.isFinite(v) || v < 0) {
+        return DEFAULT_MAX_CONCURRENT_RUNS;
+    }
+    return Math.floor(v);
 }
 
 /** permissions 段归一化：mode 缺省 standard；dangerPatterns 缺省内置集（D-005）。 */

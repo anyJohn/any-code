@@ -5,7 +5,6 @@ import type { ToolContext } from "../context";
 import type { Tool, ToolResult } from "./index";
 import {
     evaluatePermission,
-    PERMISSION_TIMEOUT_MS,
     type PermissionVerdict,
 } from "../permissions";
 import {
@@ -19,8 +18,8 @@ import { runBeforeToolHook, runAfterToolHook } from "../extensions";
  * 防 TOOL 事件 data.args.content（大文件 write）致 SSE 大 payload + 前端 parse 卡。SPEC-022 B-004 / DEC-077。 */
 const ARG_TRUNCATE_LEN = 500;
 
-/** 权限 ask 结果（裁决/超时）。 */
-type PermissionDecision = "allow_once" | "allow_always" | "deny" | "timeout";
+/** 权限 ask 结果（裁决）。 */
+type PermissionDecision = "allow_once" | "allow_always" | "deny";
 
 /**
  * 单个 tool call 的执行计划：解析 + schema 校验 + 权限预判（纯同步）的产物。
@@ -333,7 +332,8 @@ async function permissionGate(plan: ToolPlan, ctx: ToolContext): Promise<string 
     // ask：会话缓存命中（D-007）→ 直通
     if (perm.allowOnce.has(cacheKey)) return null;
 
-    // ask：阻塞等裁决（B-005），120s 超时按拒绝（D-006），abort 干净退出
+    // ask：阻塞等裁决（B-005），挂起等待不超时（SPEC-033 DEC-101，取代 120s 自动拒绝）；
+    // 仅 run abort/stop 才解除。abort 干净退出
     audit(ctx, funcName, args, verdict, "asked");
     const decision = await askUser(verdict, funcName, summary, ctx);
     audit(ctx, funcName, args, verdict, "decided", decision);
@@ -351,11 +351,7 @@ async function permissionGate(plan: ToolPlan, ctx: ToolContext): Promise<string 
         });
         return null;
     }
-    const reason =
-        decision === "timeout"
-            ? `等待用户授权超时（${PERMISSION_TIMEOUT_MS / 1000}s）`
-            : "用户拒绝了本次执行";
-    return `[Permission denied] ${reason}：${funcName}。请改用其他方式完成目标，或先向用户说明操作意图与原因后再请求授权。`;
+    return `[Permission denied] 用户拒绝了本次执行：${funcName}。请改用其他方式完成目标，或先向用户说明操作意图与原因后再请求授权。`;
 }
 
 /** 发权限裁决请求并阻塞等答案（复用 pendingInteractions 通道，与 ask_question 同构）。 */
@@ -373,9 +369,6 @@ async function askUser(
         if (ctx.signal.aborted) return resolve("aborted");
         ctx.signal.addEventListener("abort", () => resolve("aborted"), { once: true });
     });
-    const timeoutPromise = new Promise<"timeout">((resolve) => {
-        setTimeout(() => resolve("timeout"), PERMISSION_TIMEOUT_MS);
-    });
 
     ctx.eventStream.submit({
         type: "PermissionAsk",
@@ -389,14 +382,14 @@ async function askUser(
         },
     });
 
+    // 挂起等待（SPEC-033 DEC-101）：不设超时，只有答案或 abort 能解除。
     const raced = await Promise.race([
         answersPromise.then((answers) => ({ kind: "answered" as const, answers })),
         abortPromise.then(() => ({ kind: "aborted" as const })),
-        timeoutPromise.then(() => ({ kind: "timeout" as const })),
     ]);
     if (raced.kind !== "answered") {
         unregisterInteraction(id);
-        return raced.kind === "timeout" ? "timeout" : "deny";
+        return "deny"; // abort 路径：run 正在终止，拒绝文案不进循环（循环先查 signal）
     }
     const first = raced.answers[0];
     if (first === "allow_once" || first === "allow_always" || first === "deny") {

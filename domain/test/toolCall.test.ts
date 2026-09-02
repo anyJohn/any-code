@@ -243,22 +243,42 @@ describe("toolCall 权限 seam（SPEC-032）", () => {
         expect(ctx.permissions!.allowOnce.size).toBe(0);
     });
 
-    it("AC-006 超时按拒绝（120s），审计记录 timeout", async () => {
+    it("AC-006 ask 挂起等待不超时（SPEC-033 DEC-101）：任意时长推进不自动拒绝，裁决后执行", async () => {
         vi.useFakeTimers();
         try {
-            const handler = vi.fn();
+            const handler = vi.fn().mockResolvedValue("ok");
             const ctx = mkCtx();
             ctx.permissions = mkPermCtx("standard");
             const pending = toolCall([mkCall("bash", "tc1", '{"command":"ls"}')], ctx, [mkTool("bash", handler)]);
-            await vi.advanceTimersByTimeAsync(121_000);
-            const result = await pending;
+            // 远超原 120s 的推进也不解除挂起
+            await vi.advanceTimersByTimeAsync(1_000_000);
             expect(handler).not.toHaveBeenCalled();
-            expect(result[0].content).toContain("超时");
+            const id = submitted(ctx).find((e) => e.type === "PermissionAsk").data.id;
+            resolveInteraction(id, ["allow_once"]);
+            const result = await pending;
+            expect(handler).toHaveBeenCalledOnce();
+            expect(result[0].content).toBe("ok");
             const audits = submitted(ctx).filter((e) => e.type === "Permission");
-            expect(audits[audits.length - 1].data.decision).toBe("timeout");
+            expect(audits[audits.length - 1].data.decision).toBe("allow_once");
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it("AC-006b abort 解除挂起的 ask（stop 路径），handler 不执行", async () => {
+        const ac = new AbortController();
+        const handler = vi.fn();
+        const ctx: ToolContext = {
+            ...mkCtx(),
+            signal: ac.signal,
+        };
+        ctx.permissions = mkPermCtx("standard");
+        const pending = toolCall([mkCall("bash", "tc1", '{"command":"ls"}')], ctx, [mkTool("bash", handler)]);
+        await new Promise((r) => setTimeout(r, 0));
+        ac.abort();
+        const result = await pending;
+        expect(handler).not.toHaveBeenCalled();
+        expect(result[0].content).toContain("Permission denied");
     });
 
     it("AC-007 标准模式只读工具直通：无 Permission 事件，handler 执行", async () => {

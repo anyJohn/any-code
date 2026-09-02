@@ -10,7 +10,6 @@ import {
     createSnapshotService,
     loadProjectPermissions,
     saveProjectPermissions,
-    DURABLE_TYPES,
     createWorkspace,
     maskApiKey,
     getRegisteredAbilities,
@@ -18,6 +17,7 @@ import {
     projectKeyOf,
     resolveContextWindow,
     resolveInteraction,
+    hasInteraction,
     runRipgrep,
     SessionService,
     listModels,
@@ -31,6 +31,7 @@ import {
     workspaceConfigDir,
 } from "@any-code/domain";
 import { runningSessions, runningWorkspaces } from "./singleFlight.js";
+import { getAgentManager, TERMINAL, type StreamFrame } from "./agentManager.js";
 
 /** 解析拉取/测试模型的凭据：表单 apiKey 留空=保留原值 → 用 config.yaml 已存 key（providerName 匹配）。 */
 function resolveModelCreds(
@@ -57,15 +58,12 @@ function resolveModelCreds(
 
 /**
  * AnyCode HTTP server (hono) —— 静态 SPA 的薄 driving adapter。
- * 只依赖 @any-code/domain，无业务逻辑；20 个 API 路由 + 1 个静态 SPA catch-all
- * （Web Request/Response 同构，SSE 用 ReadableStream 原样）。见 DEC-007 / SPEC-028。
+ * 只依赖 @any-code/domain，无业务逻辑；29 个 API 路由 + 1 个静态 SPA catch-all
+ * （Web Request/Response 同构，SSE 用 ReadableStream 原样）。见 DEC-007 / SPEC-028 / SPEC-033。
  */
-const TERMINAL = new Set(["Done", "Error", "Stopped"]);
-
-// durable 事件集由 domain DURABLE_TYPES 定义（SPEC-030 B-004/C-003）；server 仅调用持久化。
-
 // events 已可序列化 by construction（domain serializeError 把 Error 转 plain ErrorPayload），
 // SSE 与持久化均直接 JSON.stringify，无需 replacer（SPEC-030 B-002/B-010/I-001）。
+// TERMINAL / DURABLE_TYPES 持久化与终态判定职责在 agentManager.ts。
 
 const MIME: Record<string, string> = {
     ".html": "text/html; charset=utf-8",
@@ -248,7 +246,23 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
     app.get("/api/workspaces/:projectKey/sessions", async (c) => {
         const projectKey = c.req.param("projectKey");
         const service = new SessionService();
-        return c.json(await service.list(projectKey));
+        const sessions = await service.list(projectKey);
+        // FR-30 B-004：合并运行状态（running/waiting_ask/queued + pending ask 摘要），
+        // 供左侧会话列表徽标与跨会话 ask 提醒。
+        const statusById = new Map(
+            getAgentManager()
+                .statusList()
+                .filter((s) => s.projectKey === projectKey)
+                .map((s) => [s.sessionId, s]),
+        );
+        return c.json(
+            sessions.map((x) => {
+                const st = statusById.get(x.id);
+                return st
+                    ? { ...x, status: st.status, pendingAsk: st.pendingAsk }
+                    : x;
+            }),
+        );
     });
 
     app.delete("/api/workspaces/:projectKey/sessions/:sessionId", async (c) => {
@@ -292,7 +306,8 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         return c.json({ sessionId: session.id, projectKey }, 201);
     });
 
-    // POST /api/sessions/:sessionId/run —— SSE 流式（连接持有：终态/断开=destroy）
+    // POST /api/sessions/:sessionId/run —— SSE 首订（FR-30 / SPEC-033）：
+    // agent 交给 AgentManager 托管，断开连接只退订不中止；停止走 POST /stop 或终态。
     app.post("/api/sessions/:sessionId/run", async (c) => {
         const sessionId = c.req.param("sessionId");
         let body: { task?: string; workspacePath?: string } = {};
@@ -306,28 +321,13 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         if (!task) return c.json({ statusMessage: "task required" }, 400);
         if (!workspacePath) return c.json({ statusMessage: "workspacePath required" }, 400);
 
-        const running = runningSessions();
-        if (running.has(sessionId))
+        const manager = getAgentManager();
+        if (runningSessions().has(sessionId) || manager.isBusy(sessionId))
             return c.json({ statusMessage: "session already running" }, 409);
-        running.add(sessionId);
-
         const wsKey = projectKeyOf(workspacePath);
-        runningWorkspaces().add(wsKey);
-        // 兜底 try/catch：create 失败（坏 config 等）必须清单并返 500 JSON，不能裸抛成 unhandled rejection
-        let agent: AnyAgent;
-        try {
-            agent = await AnyAgent.create({ rootPath: workspacePath, sessionId });
-        } catch (e) {
-            running.delete(sessionId);
-            runningWorkspaces().delete(wsKey);
-            return c.json({ statusMessage: (e as Error).message }, 500);
-        }
-        if (!agent.getSession()) {
-            running.delete(sessionId);
-            runningWorkspaces().delete(wsKey);
-            agent.destroy();
-            return c.json({ statusMessage: "session not found" }, 404);
-        }
+        // create 窗口的单飞预留（与 /compact 共用 runningSessions；finalize/失败路径清除）
+        runningSessions().add(sessionId);
+        runningWorkspaces().add(wsKey); // rollback 竞态守卫同样覆盖 create 窗口
 
         const headers = {
             "Content-Type": "text/event-stream",
@@ -339,26 +339,28 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         const stream = new ReadableStream<Uint8Array>({
             start(controller) {
                 const enc = new TextEncoder();
-                let sub: { unsubscribe: () => void } | null = null;
                 let closed = false;
+                let unsub: (() => void) | null = null;
 
-                const send = (e: unknown) => {
+                const send = (frame: StreamFrame) => {
                     if (closed) return;
                     try {
                         controller.enqueue(
-                            enc.encode(`data: ${JSON.stringify(e)}\n\n`),
+                            enc.encode(`data: ${JSON.stringify(frame)}\n\n`),
                         );
                     } catch {
                         // controller 已关
                     }
                 };
+                const synth = (message: string): StreamFrame => ({
+                    seq: -1,
+                    event: { type: "System", message, timestamp: Date.now() } as AgentEvent,
+                });
                 const finish = () => {
                     if (closed) return;
                     closed = true;
                     clearInterval(keepalive);
-                    sub?.unsubscribe();
-                    running.delete(sessionId);
-                    agent.destroy(); // 关连接=destroy=abort 在途 LLM + 拆订阅
+                    unsub?.();
                     try {
                         controller.close();
                     } catch {
@@ -376,31 +378,171 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
                     }
                 }, 15000);
 
-                for (const e of agent.eventHistory$.value) send(e);
-                sub = agent.eventStream$.subscribe(async (e: AgentEvent) => {
-                    send(e);
-                    // 持久化 durable 事件到 session JSONL：e 已可序列化（domain serializeError），
-                    // 直接写盘，live==persisted shape。仅 live 新事件写，replay 不重复（SPEC-030 B-005）。
-                    if (e?.type && DURABLE_TYPES.has(e.type)) {
-                        const key: SessionKey = {
-                            projectKey: agent.getProjectKey(),
-                            sessionId,
-                        };
-                        try {
-                            await agent.getService().appendEvent(key, e);
-                        } catch {
-                            // 写盘失败不阻断流；live 事件已送达前端
-                        }
+                // 客户端断开（切会话/关标签页/刷新）→ 只退订，agent 继续跑（SPEC-033 B-001）
+                c.req.raw.signal.addEventListener(
+                    "abort",
+                    () => {
+                        manager.cancelQueued(sessionId);
+                        finish();
+                    },
+                    { once: true },
+                );
+
+                void (async () => {
+                    // 并发闸（B-006）：满载排队，提示帧先行
+                    if (!manager.hasFreeSlot()) {
+                        send(synth("已达到并发运行上限，任务进入队列等待空闲槽位…"));
                     }
-                    if (e?.type && TERMINAL.has(e.type)) finish();
-                });
-                // 客户端断开（关页面/abort）→ finish → destroy → 真停
-                c.req.raw.signal.addEventListener("abort", finish, { once: true });
-                agent.submit(task);
+                    const release = await manager.acquire(sessionId, wsKey);
+                    if (closed) {
+                        // 排队期间客户端已断开：放弃启动
+                        release();
+                        runningSessions().delete(sessionId);
+                        runningWorkspaces().delete(wsKey);
+                        return;
+                    }
+                    // 兜底 try/catch：create 失败（坏 config 等）必须释放槽位并返错误帧
+                    let agent: AnyAgent;
+                    try {
+                        agent = await AnyAgent.create({ rootPath: workspacePath, sessionId });
+                    } catch (e) {
+                        release();
+                        runningSessions().delete(sessionId);
+                        runningWorkspaces().delete(wsKey);
+                        send(synth(`agent 启动失败：${(e as Error).message}`));
+                        finish();
+                        return;
+                    }
+                    if (!agent.getSession()) {
+                        release();
+                        runningSessions().delete(sessionId);
+                        runningWorkspaces().delete(wsKey);
+                        agent.destroy();
+                        send(synth("session not found"));
+                        finish();
+                        return;
+                    }
+                    manager.register(agent, sessionId, workspacePath);
+                    // 重放本 run 已有事件（create 阶段的 System/Warning 等），seq 即 history 下标
+                    const history = agent.eventHistory$.value;
+                    for (let i = 0; i < history.length; i++) send({ seq: i, event: history[i] });
+                    unsub = manager.addSubscriber(sessionId, (frame) => {
+                        send(frame);
+                        if (TERMINAL.has(frame.event.type)) finish();
+                    });
+                    agent.submit(task);
+                })();
             },
         });
 
         return new Response(stream, { headers });
+    });
+
+    // GET /api/sessions/:sessionId/stream?since=N —— 重挂续传（FR-30 B-002/B-008）：
+    // 重放 seq > since 的本 run 事件后续订 live 帧；agent 未运行 → 404（客户端回退 /history 全量刷新）。
+    app.get("/api/sessions/:sessionId/stream", (c) => {
+        const sessionId = c.req.param("sessionId");
+        const entry = getAgentManager().get(sessionId);
+        if (!entry) return c.json({ statusMessage: "session not running" }, 404);
+        const sinceRaw = c.req.query("since");
+        const since = sinceRaw === undefined || sinceRaw === "" ? -1 : Number(sinceRaw);
+
+        const headers = {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache, no-transform",
+            Connection: "keep-alive",
+            "X-Accel-Buffering": "no",
+        };
+        const stream = new ReadableStream<Uint8Array>({
+            start(controller) {
+                const enc = new TextEncoder();
+                let closed = false;
+                let unsub: (() => void) | null = null;
+                const send = (frame: StreamFrame) => {
+                    if (closed) return;
+                    try {
+                        controller.enqueue(
+                            enc.encode(`data: ${JSON.stringify(frame)}\n\n`),
+                        );
+                    } catch {
+                        // controller 已关
+                    }
+                };
+                const finish = () => {
+                    if (closed) return;
+                    closed = true;
+                    clearInterval(keepalive);
+                    unsub?.();
+                    try {
+                        controller.close();
+                    } catch {
+                        // 已关
+                    }
+                };
+                const keepalive = setInterval(() => {
+                    if (closed) return;
+                    try {
+                        controller.enqueue(enc.encode(": keepalive\n\n"));
+                    } catch {
+                        // controller 已关
+                    }
+                }, 15000);
+                c.req.raw.signal.addEventListener("abort", finish, { once: true });
+
+                // 同步重放 + 订阅之间无 await，不会漏帧。
+                // 过期 ask 防护：重放中的 PermissionAsk/Interaction 若已裁决/已答，
+                // 不下发（否则重挂时弹已处理过的模态）。仍 pending 的以 server 真值放行。
+                const manager2 = getAgentManager();
+                const entry2 = manager2.get(sessionId);
+                const history = entry2?.agent.eventHistory$.value ?? [];
+                const start = Number.isFinite(since) ? Math.max(0, Math.floor(since) + 1) : 0;
+                for (let i = start; i < history.length; i++) {
+                    const ev = history[i];
+                    if (ev?.type === "PermissionAsk") {
+                        const askId = (ev.data as { id?: string })?.id;
+                        if (entry2?.pendingAsk?.id !== askId) continue;
+                    }
+                    if (ev?.type === "Interaction") {
+                        const iid = (ev.data as { id?: string })?.id;
+                        if (!hasInteraction(iid ?? "")) continue;
+                    }
+                    send({ seq: i, event: ev });
+                }
+                unsub = getAgentManager().addSubscriber(sessionId, (frame) => {
+                    send(frame);
+                    if (TERMINAL.has(frame.event.type)) finish();
+                });
+            },
+        });
+        return new Response(stream, { headers });
+    });
+
+    // POST /api/sessions/:sessionId/stop —— 显式停止（FR-30 B-003）：任意视图可停任意运行中会话
+    app.post("/api/sessions/:sessionId/stop", (c) => {
+        const sessionId = c.req.param("sessionId");
+        const result = getAgentManager().stop(sessionId);
+        if (result === null) return c.json({ statusMessage: "session not running" }, 404);
+        return c.json({ status: result });
+    });
+
+    // GET /api/running —— 全局运行快照（FR-30 B-004）：跨工作区 queued/running/waiting_ask + 标题，
+    // 供 AppShell 的跨会话 pending ask 提醒与侧栏徽标兜底。
+    app.get("/api/running", async (c) => {
+        const service = new SessionService();
+        const list = getAgentManager().statusList();
+        const out = await Promise.all(
+            list.map(async (s) => {
+                let title = "";
+                try {
+                    const found = await service.findSession(s.sessionId);
+                    title = found?.session.title ?? "";
+                } catch {
+                    // 查不到标题不影响状态
+                }
+                return { ...s, title };
+            }),
+        );
+        return c.json(out);
     });
 
     app.post("/api/sessions/:sessionId/compact", async (c) => {
@@ -494,6 +636,7 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
                 mcp: cfg.mcpServers,
                 abilities: { registered, config: cfg.abilities },
                 permissions: cfg.permissions,
+                maxConcurrentRuns: cfg.maxConcurrentRuns,
             });
         } catch {
             return c.json({ providers: {}, default: undefined, mcp: {} });
@@ -530,6 +673,8 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
             gitBashPath: body.gitBashPath ?? existing?.gitBashPath,
             // 表单不含 permissions 段时保留已存值（Settings 权限卡与整表单保存共用此路由）
             permissions: body.permissions ?? existing?.permissions,
+            // 表单不含 maxConcurrentRuns 时保留已存值（FR-30）
+            maxConcurrentRuns: body.maxConcurrentRuns ?? existing?.maxConcurrentRuns,
         };
         try {
             Config.save(merged);
@@ -657,10 +802,11 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
                 providers: cfg.providers,
                 default: cfg.default,
                 mcp: cfg.mcpServers,
-                // PATCH 只改 default/modelId——其余段（gitBashPath/abilities/permissions）原样保留，防误清
+                // PATCH 只改 default/modelId——其余段原样保留，防误清
                 gitBashPath: cfg.gitBashPath,
                 abilities: cfg.abilities,
                 permissions: cfg.permissions,
+                maxConcurrentRuns: cfg.maxConcurrentRuns,
             });
             return c.json({ statusMessage: "switched" });
         } catch (e) {
@@ -920,7 +1066,7 @@ export interface StartResult {
     close: () => void;
 }
 
-/** 起 server。port/hostname/staticDir 可注入；缺省读 env（PORT/HOSTNAME/ANYCODE_WEB_DIST）。 */
+/** 起 server。port/hostname/staticDir 可注入；port 缺省读 env（PORT/ANYCODE_WEB_DIST）。 */
 export async function start(opts: {
     port?: number;
     hostname?: string;
@@ -928,7 +1074,21 @@ export async function start(opts: {
 } = {}): Promise<StartResult> {
     const app = createApp({ staticDir: opts.staticDir ?? process.env.ANYCODE_WEB_DIST });
     const port = Number(opts.port ?? process.env.PORT ?? 3000) || 3000;
-    const hostname = opts.hostname ?? process.env.HOSTNAME ?? "127.0.0.1";
+    // 恒绑回环地址，不读 HOSTNAME env：Windows 下它是计算机名、Linux shell 也常设为机器名，
+    // 当主机名解析会绑到非回环地址，破坏"仅本机监听"立场（desktop 需要时经 opts 显式注入）。
+    const hostname = opts.hostname ?? "127.0.0.1";
     const server = serve({ fetch: app.fetch, port, hostname });
+    // FR-30 B-007：进程退出统一清理运行中 agent（不留孤儿 LLM 流 / bash / MCP 子进程）
+    const shutdown = (signal: string) => {
+        getAgentManager().stopAll();
+        try {
+            server.close();
+        } catch {
+            // 已关
+        }
+        process.exit(0);
+    };
+    process.once("SIGINT", () => shutdown("SIGINT"));
+    process.once("SIGTERM", () => shutdown("SIGTERM"));
     return { port, hostname, close: () => server.close() };
 }

@@ -122,3 +122,34 @@ export interface HistoryMessage {
 
 let idCounter = 0;
 export const nextId = (prefix: string) => `${prefix}-${idCounter++}`;
+
+// ── FR-30 / SPEC-033：流帧与运行状态 ──
+
+/** SSE 帧：server AgentManager 打 per-run 单调序号；seq=-1 为合成帧（排队提示/错误）。 */
+export interface StreamFrame {
+    seq: number;
+    event: AgentEventPayload;
+}
+
+/** 会话运行状态（会话列表徽标 / 全局 ask 提醒）。 */
+export type SessionRunStatus = "queued" | "running" | "waiting_ask";
+
+/** 会话列表项：SessionMeta + server 合并的运行状态（idle 时无 status 字段）。 */
+export interface SessionListItem {
+    id: string;
+    title: string;
+    createdAt: number;
+    updatedAt: number;
+    status?: SessionRunStatus;
+    pendingAsk?: { id: string; tool: string; summary: string } | null;
+}
+
+/** GET /api/running 条目：全局运行快照（跨工作区，含会话标题）。 */
+export interface RunningSessionInfo {
+    sessionId: string;
+    projectKey: string;
+    status: SessionRunStatus;
+    pendingAsk: { id: string; tool: string; summary: string } | null;
+    startedAt: number;
+    title: string;
+}

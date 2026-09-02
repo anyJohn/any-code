@@ -24,6 +24,7 @@
   - 持久化（thinking、tool calling、报错信息、usage、压缩事件等全覆盖）
   - 首条任务用 LLM 自动起简短名（≤12 字、同语言；独立短调用、不进事件流；失败回退任务文本截断）
   - 支持 Session 重命名与删除
+  - 后台运行与多 agent 并行（FR-30 / SPEC-033）：切换会话 / 关闭标签页不中止任务（agent 存活期 = server 进程存活期），关软件才全停；多项目多会话并行互不干扰；侧栏会话名右侧状态徽标（运行中 / 等待确认 / 排队中）；跨会话 pending ask 提醒条；断线自动重挂续传（GET /stream?since=N，不丢不重）；显式停止（POST /stop，任意视图可停）；并发上限 maxConcurrentRuns 可配（缺省 3，0=不限，满载排队）
 - Workspace / Project
   - 添加 / 删除 workspace
   - workspace 持久化（`~/.anycode/projects/<projectKey>/`，按工作区隔离、可 resume）
@@ -59,7 +60,7 @@
   - 执行前判定：用户规则（项目级覆盖全局，后匹配生效）→ 危险命令基线 → 模式默认
   - 规则粒度：工具名 + 参数模式（bash 命令 `*` 通配、文件路径 glob）
   - 预设三档：标准（出厂默认，命令/写入/MCP 询问）/ 编辑放行（写自动过）/ 信任（全直通，基线仍拦）
-  - ask 裁决：PermissionModal 允许一次（会话内按匹配模式缓存）/ 永久允许（默认项目级，可勾全局）/ 拒绝；120s 超时按拒绝
+  - ask 裁决：PermissionModal 允许一次（会话内按匹配模式缓存）/ 永久允许（默认项目级，可勾全局）/ 拒绝；挂起等待不超时（SPEC-033 DEC-101，仅 run abort/stop 解除）
   - 危险命令基线可配置增删（内置 rm -rf / sudo / mkfs 等最小集）
   - 审计：asked/decided durable 事件入会话日志，resume 回放可见
 - 工具系统升级（FR-10 / AR-7 / FR-8）
