@@ -100,6 +100,17 @@ export async function withRetry<T>(
     }
 }
 
+/**
+ * 上下文超限类错误判定（AR-9）：provider 对超长 prompt 的拒绝文案各家不一，
+ * 按主流措辞做宽匹配（不误伤 4xx 鉴权类——那些 message 不含这些词）。
+ */
+export function isContextOverflowError(err: unknown): boolean {
+    const msg = String((err as Error)?.message ?? err);
+    return /context length|prompt is too long|maximum context|context_window|too many tokens|request too large|reduce the length/i.test(
+        msg
+    );
+}
+
 /** 剥离 assistant message 上的非标准 _meta sidecar，避免发给 provider（部分 provider 会 400）。SPEC-017 C-002 */
 function stripMeta(messages: ChatMessage[]): ChatMessage[] {
     return messages.map((m) => {

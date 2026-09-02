@@ -21,8 +21,41 @@ const SUMMARY_MAX_TOKENS = 4096;
 /** 尾部保留的最近消息条数（配对感知：tool 起始会回拉父 assistant）。 */
 const KEEP_RECENT_MESSAGES = 6;
 
-/** 自动压缩阈值：真实 usage.prompt_tokens >= 该比例 * contextWindow 时触发。 */
-export const AUTO_COMPACT_THRESHOLD = 0.75;
+/**
+ * 自动压缩阈值（FR-6）：真实 usage.prompt_tokens >= contextWindow - buffer 时触发
+ * （窗口减固定安全 buffer，替代旧的比例阈值）。
+ */
+export const AUTOCOMPACT_BUFFER = 13_000;
+
+/** 微压缩触发线（FR-6）：>= 窗口的该比例时先做 microcompact（清陈旧 tool result），够则免全量摘要。 */
+export const MICROCOMPACT_RATIO = 0.6;
+
+/**
+ * 微压缩（FR-6 / Claude Code microcompact 同构）：把较旧 tool message 的 result 替换为
+ * 占位符（保留消息本身，tool_use/tool_result 配对不破坏），释放上下文但不动对话内容。
+ * 最近 keepN 条消息（默认 KEEP_RECENT_MESSAGES）原样保留。
+ * 原地修改并返回是否发生了清理。
+ */
+export function microcompactMessages(
+    messages: ChatMessage[],
+    keepN: number = KEEP_RECENT_MESSAGES
+): boolean {
+    let cleaned = false;
+    // 倒数第 keepN 条以内不动；更早的 role:"tool" 结果替换占位
+    const cutoff = Math.max(0, messages.length - keepN);
+    for (let i = 0; i < cutoff; i++) {
+        const m = messages[i];
+        if ((m as { role?: string }).role !== "tool") continue;
+        const rec = m as unknown as Record<string, unknown>;
+        const current = typeof rec.content === "string" ? rec.content : "";
+        if (current.startsWith(TOOL_RESULT_CLEARED)) continue;
+        rec.content = TOOL_RESULT_CLEARED;
+        cleaned = true;
+    }
+    return cleaned;
+}
+
+const TOOL_RESULT_CLEARED = "[tool result cleared to free context]";
 
 export interface CompactOptions {
     focus?: string;

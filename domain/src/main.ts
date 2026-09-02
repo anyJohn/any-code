@@ -41,6 +41,7 @@ import {
     type PermissionRule,
 } from "./permissions";
 import { createSnapshotService } from "./snapshot";
+import { JobRegistry } from "./jobs";
 import {
     BehaviorSubject,
     catchError,
@@ -88,6 +89,8 @@ class AnyAgent {
     private permissionAllowOnce = new Set<string>();
     // 工作区快照服务（AR-4）：per-agent，写类工具执行前自动快照
     private snapshots: ReturnType<typeof createSnapshotService>;
+    // bash 后台任务注册表（FR-13）：per-agent，destroy 时 killAll
+    private jobRegistry = new JobRegistry();
     // 当前生效的 LLM provider 配置（多 provider + 流式开关）；create 时 initConfig 从 config.yaml 加载。
     // per-request 语义下热更 = 下一次 AnyAgent.create 重读磁盘，无需 reload 机制。
     private config!: Config;
@@ -287,6 +290,8 @@ class AnyAgent {
         // MCP 连接清理（per-agent）：kill stdio 子进程 / 关 SSE 连接
         this.mcpCleanup?.().catch(() => {});
         this.mcpCleanup = null;
+        // FR-13：终止全部后台任务（不留孤儿进程）
+        this.jobRegistry.killAll();
     }
 
     submit(task: string) {
@@ -396,6 +401,10 @@ class AnyAgent {
             // 技能目录合并表：use_skill 工具按 name 取全文（SPEC-031 B-005）
             skills: resolveSkills(this.workspace),
             permissions: this.buildPermissionContext(),
+            // FR-11：provider 表供 sub-agent 定义覆盖（def.provider/def.model）
+            providers: this.config.providers,
+            // FR-13：bash 后台任务注册表
+            jobs: this.jobRegistry,
             // AR-4：写类工具执行前自动快照（label 带会话锚点）
             snapshot: {
                 snapshot: (label: string) =>

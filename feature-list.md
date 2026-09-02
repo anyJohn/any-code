@@ -46,6 +46,10 @@
   - 压缩失败发非终态 Warning（不误终止 run）
 - bash 输出治理（AR-2）：双限截断（2000 行/40KB）+ 全量 spill 文件（结果附路径）；timeout_ms 可配（1-600s）
 - LLM 调用重试（AR-1）：429/5xx/网络/空响应指数退避 + 抖动（默认 3 次，provider.retry 可配），Retry-After 优先，重试发 Warning 可见
+- 上下文分级压缩（FR-6）：microcompact 清陈旧 tool result 先于全量摘要；阈值=窗口-13k buffer；超限被拒→被动压缩重试（AR-9）
+- sub-agent 补全（FR-11）：技能/权限/快照透传，def 可指定 provider/model，委托深度限制防递归
+- bash 后台任务（FR-13）：run_in_background 返回 job_id；job_output 查询/job_kill 终止；agent 销毁清理
+- plan 模式（FR-12）：只读规划产出计划（Planning 事件）→ 用户批准 → 按计划执行；拒绝可修订（至多 3 轮）
 - 任务终态枚举（FR-14）：completed / stopped / max_iterations；上限触发 UI 明示 + 建议动作
 - permissions（工具权限，SPEC-032）
   - 执行前判定：用户规则（项目级覆盖全局，后匹配生效）→ 危险命令基线 → 模式默认

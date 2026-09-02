@@ -1,6 +1,13 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ChatCompletionMessageToolCall } from "openai/resources/index";
 import { toolCall } from "../src/tools/toolCall";
+import { callLLM } from "../src/llm";
+
+// FR-11 子 agent loop 会真调 callLLM——桩掉（isContextOverflowError 用真实现）
+vi.mock("../src/llm", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("../src/llm")>()),
+    callLLM: vi.fn(),
+}));
 import { EventType } from "../src/type";
 import type { ToolContext } from "../src/context";
 import type { Tool } from "../src/tools";
@@ -470,5 +477,212 @@ describe("AR-7 工具元数据", () => {
         for (const ro of ["read", "grep", "glob", "explore", "use_skill", "save_memory", "ask_question"]) {
             expect(byName[ro]?.readOnly).toBe(true);
         }
+    });
+});
+
+// ── FR-11 sub-agent 能力补全（agent.ts AgentTool）──
+
+import { AgentTool } from "../src/agent";
+import type { AgentDefinition } from "../src/agent";
+
+const baseDef: AgentDefinition = {
+    name: "sub",
+    description: "test sub-agent",
+    instruction: "You are a test sub-agent.",
+    tools: [],
+};
+import type { LlmProvider } from "../src/config";
+
+const parentProvider: LlmProvider = {
+    apiKey: "k", models: [{ id: "parent-model" }], defaultModel: "parent-model",
+    streaming: false, contextWindow: 128000,
+};
+const altProvider: LlmProvider = {
+    apiKey: "k2", models: [{ id: "alt-model" }], defaultModel: "alt-model",
+    streaming: false, contextWindow: 128000,
+};
+
+function parentCtx(overrides: Partial<ToolContext> = {}): ToolContext {
+    return {
+        ...mkCtx(),
+        llm: parentProvider,
+        providers: { parent: parentProvider, alt: altProvider },
+        subagentDepth: 0,
+        skills: new Map([["my-skill", { name: "my-skill", description: "d", origin: "global" as const, content: "BODY" }]]),
+        ...overrides,
+    } as ToolContext;
+}
+
+/** 探针工具：捕获子 agent 的 ctx 片段 */
+function probeTool(capture: (c: ToolContext) => void): Tool {
+    return {
+        schema: { type: "function", function: { name: "probe", description: "", parameters: { type: "object", properties: {} } } } as never,
+        handler: async (_a, c) => {
+            capture(c);
+            return "probed";
+        },
+        meta: { readOnly: true, concurrencySafe: true },
+    };
+}
+
+describe("AgentTool（FR-11 sub-agent 补全）", () => {
+    beforeEach(() => vi.mocked(callLLM).mockReset());
+
+    it("深度限制：maxDepth 0 时再委托被拒（防递归）", async () => {
+        const def = { ...baseDef, maxDepth: 0 };
+        const tool = AgentTool(def);
+        const ctx = parentCtx({ subagentDepth: 1 });
+        const out = await tool.handler({ task: "x" }, ctx);
+        expect(String(out)).toContain("委托深度超限");
+    });
+
+    it("def.maxDepth 足够时允许嵌套委托（probe 捕获 subCtx）", async () => {
+        let capturedDepth: number | undefined;
+        const def = {
+            ...baseDef,
+            maxDepth: 2,
+            tools: [probeTool((c) => (capturedDepth = c.subagentDepth))],
+        };
+        const tool = AgentTool(def);
+        vi.mocked(callLLM)
+            .mockResolvedValueOnce({ role: "assistant", content: null, tool_calls: [{ id: "p1", type: "function", function: { name: "probe", arguments: "{}" } }] } as never)
+            .mockResolvedValue({ role: "assistant", content: "done" } as never);
+        await tool.handler({ task: "x" }, parentCtx({ subagentDepth: 1 }));
+        expect(capturedDepth).toBe(2); // 父所在层 1 + 1
+    });
+
+    it("def.provider/model 覆盖：子 agent 用指定 provider 的指定模型", async () => {
+        let capturedLlm: LlmProvider | undefined;
+        const def = {
+            ...baseDef,
+            tools: [probeTool((c) => (capturedLlm = c.llm))],
+            provider: "alt",
+            model: "override-model",
+        };
+        const tool = AgentTool(def);
+        vi.mocked(callLLM)
+            .mockResolvedValueOnce({ role: "assistant", content: null, tool_calls: [{ id: "p1", type: "function", function: { name: "probe", arguments: "{}" } }] } as never)
+            .mockResolvedValue({ role: "assistant", content: "done" } as never);
+        await tool.handler({ task: "x" }, parentCtx());
+        expect(capturedLlm?.defaultModel).toBe("override-model");
+        expect(capturedLlm?.apiKey).toBe("k2");
+    });
+
+    it("skills 透传：子 agent 拿到父的技能目录（use_skill 不再空目录）", async () => {
+        let capturedSkills: unknown;
+        const skillsMap = new Map([["my-skill", { name: "my-skill", description: "d", origin: "global" as const, content: "BODY" }]]);
+        const def = {
+            ...baseDef,
+            tools: [probeTool((c) => (capturedSkills = c.skills))],
+        };
+        const tool = AgentTool(def);
+        vi.mocked(callLLM)
+            .mockResolvedValueOnce({ role: "assistant", content: null, tool_calls: [{ id: "p1", type: "function", function: { name: "probe", arguments: "{}" } }] } as never)
+            .mockResolvedValue({ role: "assistant", content: "done" } as never);
+        await tool.handler({ task: "x" }, parentCtx({ skills: skillsMap }));
+        expect(capturedSkills).toBe(skillsMap); // 同一 Map 引用透传
+    });
+});
+
+
+// ── FR-12 plan 模式（规划-审批-执行工作流）──
+
+import { createPlanWorkflowTool } from "../src/agent";
+
+const planContent = (n: number) => `## Plan\n1. step ${n}\n## Files\n- a.ts\n## Risks\n- none`;
+
+function planCtx(): ToolContext {
+    return {
+        ...mkCtx(),
+        llm: parentProvider,
+        providers: { parent: parentProvider },
+        subagentDepth: 0,
+    } as ToolContext;
+}
+
+/** 驱动 plan 工作流：按消息内容区分规划/执行阶段，Interaction 到达即裁决 */
+async function runPlan(answers: string[]) {
+    const ctx = planCtx();
+    const tool = createPlanWorkflowTool();
+    let planRound = 0;
+    let execRound = 0;
+    vi.mocked(callLLM).mockImplementation(async (messages) => {
+        if (messages === undefined) {
+            console.log("DEBUG undefined stack:", new Error().stack?.split("\n").slice(1, 5).join(" | "));
+            return { role: "assistant", content: "" } as never;
+        }
+        const isPlanning = JSON.stringify(messages).includes("produce the plan");
+        if (isPlanning) {
+            planRound += 1;
+            return { role: "assistant", content: planContent(planRound) } as never;
+        }
+        execRound += 1;
+        return { role: "assistant", content: `executed-plan-${execRound}` } as never;
+    });
+    const pending = tool.handler({ task: "复杂任务" }, ctx);
+    // 逐个应答裁决（Interaction 事件携带 id）
+    await new Promise((r) => setTimeout(r, 5));
+    for (const a of answers) {
+        const interactions = submitted(ctx).filter((e) => e.type === "Interaction");
+        const ev = interactions[interactions.length - 1];
+        if (ev) resolveInteraction(ev.data.id, [a]);
+        await new Promise((r) => setTimeout(r, 5));
+    }
+    const out = await pending;
+    return { out, ctx };
+}
+
+describe("createPlanWorkflowTool（FR-12 plan 模式）", () => {
+    beforeEach(() => vi.mocked(callLLM).mockReset());
+
+    it("批准流：Planning 事件（durable data）→ 批准 → 执行返回结果", async () => {
+        const { out, ctx } = await runPlan(["批准执行"]);
+        expect(out).toBe("executed-plan-1");
+        const plannings = submitted(ctx).filter((e) => e.type === "Planning");
+        expect(plannings).toHaveLength(1);
+        expect(plannings[0].data).toMatchObject({ plan: planContent(1), round: 1 });
+    });
+
+    it("修订流：自定义输入 → 重新规划（round 2）→ 批准后执行", async () => {
+        const { out, ctx } = await runPlan(["把步骤 1 改成只读", "批准执行"]);
+                // 修订后执行首轮（exec 计数独立于规划轮次）
+        expect(out).toBe("executed-plan-1");
+        const plannings = submitted(ctx).filter((e) => e.type === "Planning");
+        expect(plannings).toHaveLength(2);
+        expect(plannings[1].data.round).toBe(2);
+        // 修订后执行首轮（exec 计数独立于规划轮次）
+        expect(out).toBe("executed-plan-1");
+    });
+
+    it("取消流：计划未执行", async () => {
+        const { out, ctx } = await runPlan(["取消"]);
+        expect(out).toContain("未执行");
+        expect(submitted(ctx).filter((e) => e.type === "Planning")).toHaveLength(1);
+    });
+
+    it("规划阶段只读工具集（不含 bash/write）", async () => {
+        let planningTools: string[] | undefined;
+        vi.mocked(callLLM).mockImplementation(async (messages, params) => {
+            if (messages === undefined) {
+                return { role: "assistant", content: "" } as never;
+            }
+            if (JSON.stringify(messages).includes("produce the plan")) {
+                planningTools = ((params as { tools?: Array<{ function: { name: string } }> }).tools ?? []).map(
+                    (t) => t.function.name
+                );
+            }
+            return { role: "assistant", content: planContent(1) } as never;
+        });
+        const ctx = planCtx();
+        const tool = createPlanWorkflowTool();
+        const pending = tool.handler({ task: "x" }, ctx);
+        await new Promise((r) => setTimeout(r, 5));
+        const ev = submitted(ctx).filter((e) => e.type === "Interaction")[0];
+        resolveInteraction(ev.data.id, ["取消"]);
+        await pending;
+        expect(planningTools).toBeTruthy();
+        expect(planningTools).not.toContain("bash");
+        expect(planningTools).not.toContain("write");
+        expect(planningTools).toContain("read");
     });
 });

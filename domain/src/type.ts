@@ -37,8 +37,8 @@ export type AgentEvent =
     | (EventBase & { type: "Usage"; data: UsageEventData })
     | (EventBase & { type: "Compact"; data: CompactEventData })
     | (EventBase & { type: "Interaction"; data: InteractionEventData })
-    // Planning：预留事件——web/tui 已支持渲染，domain 暂无 emit 方（plan mode 未来接入点）
-    | (EventBase & { type: "Planning" })
+    // Planning（FR-12）：plan 模式产出的计划文本（durable，回放可见）
+    | (EventBase & { type: "Planning"; data: PlanningEventData })
     | (EventBase & { type: "Permission"; data: PermissionEventData })
     | (EventBase & { type: "PermissionAsk"; data: PermissionAskData })
     | (EventBase & { type: "Error"; error: ErrorPayload })
@@ -75,6 +75,8 @@ export interface CompactEventData {
     beforeTokens: number;
     afterTokens: number;
     auto: boolean;
+    /** FR-6：micro=true 表示微压缩（清陈旧 tool result），非全量摘要 */
+    micro?: boolean;
     focus?: string | null;
 }
 export interface InteractionEventData {
@@ -85,6 +87,12 @@ export interface InteractionEventData {
         options?: string[];
         multiSelect?: boolean;
     }>;
+}
+
+/** plan 模式计划（FR-12）：round=第几版（拒绝修订时递增） */
+export interface PlanningEventData {
+    plan: string;
+    round: number;
 }
 
 /** 权限审计事件（SPEC-032 B-008，durable）：phase=asked 发出询问、decided 记录裁决/拦截结果。 */
@@ -125,6 +133,7 @@ export const DURABLE_TYPES: ReadonlySet<EventType> = new Set<EventType>([
     "Tool",
     "Usage",
     "Compact",
+    "Planning",
     "Permission",
     "Error",
     "Warning",

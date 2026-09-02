@@ -12,6 +12,7 @@ import {
     compactMessages,
     splitForCompact,
     estimateTokens,
+    microcompactMessages,
 } from "../src/compact";
 import { COMPACT_HANDOFF_PREFIX } from "../src/prompt";
 import type { ChatMessage } from "../src/type";
@@ -192,5 +193,41 @@ describe("compact.ts", () => {
             }>)[1].content;
             expect(userPrompt).toContain("Additional focus: 聚焦API设计");
         });
+    });
+});
+
+
+// ── microcompact（FR-6）──
+
+const toolMsg = (id: string, content: string): ChatMessage =>
+    ({ role: "tool", tool_call_id: id, content }) as never;
+
+describe("microcompactMessages（FR-6）", () => {
+    it("旧 tool result 替换占位，最近 keepN 条保留，配对消息不动", () => {
+        const msgs: ChatMessage[] = [
+            { role: "system", content: "sys" } as never,
+            { role: "user", content: "q" } as never,
+            toolMsg("t1", "old result ".repeat(100)),
+            toolMsg("t2", "old result 2"),
+            { role: "user", content: "q2" } as never,
+            toolMsg("t3", "recent"),
+        ];
+        const cleaned = microcompactMessages(msgs, 2);
+        expect(cleaned).toBe(true);
+        const get = (i: number) => (msgs[i] as unknown as { content: string }).content;
+        expect(get(2)).toBe("[tool result cleared to free context]");
+        expect(get(3)).toBe("[tool result cleared to free context]");
+        expect(get(5)).toBe("recent"); // 最近 2 条内不动
+        // 幂等
+        expect(microcompactMessages(msgs, 2)).toBe(false);
+    });
+
+    it("非 tool 消息不受影响", () => {
+        const msgs: ChatMessage[] = [
+            { role: "user", content: "keep me" } as never,
+            { role: "assistant", content: "keep me too" } as never,
+        ];
+        expect(microcompactMessages(msgs, 0)).toBe(false);
+        expect((msgs[0] as unknown as { content: string }).content).toBe("keep me");
     });
 });

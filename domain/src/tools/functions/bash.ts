@@ -11,6 +11,8 @@ interface ExecuteBashArgs {
     command: string;
     /** 超时毫秒（模型可指定）。clamp 到 [1000, 600000]，默认 120000。AR-2 */
     timeout_ms?: number;
+    /** 后台执行（FR-13）：立即返回 job id，输出经 job_output 工具查询、job_kill 终止 */
+    run_in_background?: boolean;
 }
 
 /** 默认超时；模型可用 timeout_ms 覆盖（硬上限 600s）。AR-2 */
@@ -156,13 +158,36 @@ export const executeBashFunc = async (
         let stdout = "";
         let stderr = "";
         let settled = false;
+        // timer 声明前置（后台分支在 timer 赋值前 finish，避免 TDZ）
+        let timer: NodeJS.Timeout | undefined;
 
         const finish = (value: ToolResult) => {
             if (settled) return;
             settled = true;
-            clearTimeout(timer);
+            if (timer) clearTimeout(timer);
             resolve(value);
         };
+
+        // FR-13 后台执行：注册 job 立即返回（不占 120s 超时、不阻塞 loop）
+        if (args.run_in_background) {
+            if (!ctx.jobs) {
+                finish({ content: "Error: 后台任务不可用（当前环境未启用任务注册表）" });
+                return;
+            }
+            try {
+                const { binary, cwd } = resolveShell(workspace.rootPath, ctx.gitBashPath);
+                const id = ctx.jobs.launch(binary, ["-c", args.command], cwd);
+                finish({
+                    content:
+                        `后台任务已启动：job_id=${id}\n` +
+                        `用 job_output 工具查看输出（参数 id="${id}"），完成后用 job_kill 终止（如需）。`,
+                    data: { jobId: id, background: true },
+                });
+            } catch (err) {
+                finish({ content: `Error: ${(err as Error).message}` });
+            }
+            return;
+        }
 
         let child: ReturnType<typeof spawn>;
         try {
@@ -180,7 +205,7 @@ export const executeBashFunc = async (
             return;
         }
 
-        const timer = setTimeout(() => {
+        timer = setTimeout(() => {
             child.kill("SIGTERM");
         }, resolveTimeoutMs(args.timeout_ms));
 

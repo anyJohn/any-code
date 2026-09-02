@@ -23,7 +23,7 @@ describe("DURABLE_TYPES（SPEC-030 B-004/AC-006）", () => {
         "ToolProgress",
         "ToolArgProgress",
         "System",
-        "Planning",
+
         "Interaction",
     ];
 

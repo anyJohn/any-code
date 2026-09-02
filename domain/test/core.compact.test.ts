@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // 桩 mock callLLM 与 compactMessages：测 agentLoop 自动压缩控制流，不调真 LLM/摘要器
-vi.mock("../src/llm", () => ({ callLLM: vi.fn() }));
-vi.mock("../src/compact", () => ({
+vi.mock("../src/llm", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("../src/llm")>()),
+    callLLM: vi.fn(),
+}));
+vi.mock("../src/compact", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("../src/compact")>()),
     compactMessages: vi.fn(),
-    AUTO_COMPACT_THRESHOLD: 0.75,
 }));
 
 import { callLLM } from "../src/llm";
@@ -59,12 +62,14 @@ describe("agentLoop 自动压缩（core.ts + compact.ts）", () => {
         vi.mocked(compactMessages).mockReset();
     });
 
-    it("AC-003 usage>=75% contextWindow → 触发 compactMessages + onCompact + COMPACT 事件 + lastUsage 重置", async () => {
+    it("FR-6 usage ≥ 窗口-13k buffer → 触发 compactMessages + onCompact + COMPACT 事件 + lastUsage 重置", async () => {
         const handler = vi.fn().mockResolvedValue("tool-out");
         const tools = [mkTool("fakeTool", handler)];
-        // contextWindow=128000，75%=96000；首轮 usage=100000 → 越阈值（首轮带 tool_calls 驱动进入第 2 迭代）
+        // contextWindow=128000，全量线=128000-13000=115000；首轮 usage=120000 → 越线
+        // （首轮带 tool_calls 驱动进入第 2 迭代；且需先越过 60% micro 线——120000 也越，
+        //  但 microcompactMessages 真实现对无 tool 消息的历史不产生清理 → cleaned=false → 落到全量）
         vi.mocked(callLLM)
-            .mockResolvedValueOnce(assistantToolWithUsage("fakeTool", 100000) as never)
+            .mockResolvedValueOnce(assistantToolWithUsage("fakeTool", 120000) as never)
             .mockResolvedValueOnce({ role: "assistant", content: "done" } as never);
         const compacted: ChatMessage[] = [
             { role: "system", content: "S" },
@@ -73,7 +78,7 @@ describe("agentLoop 自动压缩（core.ts + compact.ts）", () => {
         vi.mocked(compactMessages).mockResolvedValue({
             messages: compacted,
             summary: "摘要",
-            beforeTokens: 100000,
+            beforeTokens: 120000,
             afterTokens: 500,
             compacted: true,
         } as never);
@@ -107,7 +112,7 @@ describe("agentLoop 自动压缩（core.ts + compact.ts）", () => {
         expect(compactEv).toBeTruthy();
         expect(compactEv![0].data).toMatchObject({
             auto: true,
-            beforeTokens: 100000,
+            beforeTokens: 120000,
             afterTokens: 500,
         });
     });

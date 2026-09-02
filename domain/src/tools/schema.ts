@@ -19,8 +19,41 @@ const executeBashSchema: ChatCompletionTool = {
                     description:
                         "Optional timeout in milliseconds (1000-600000). Default 120000.",
                 },
+                run_in_background: {
+                    type: "boolean",
+                    description:
+                        "Run in background: returns a job_id immediately; poll output with job_output, stop with job_kill. Use for dev servers / long builds.",
+                },
             },
             required: ["command"],
+        },
+    },
+};
+
+const jobOutputSchema: ChatCompletionTool = {
+    type: "function",
+    function: {
+        name: ToolName.JobOutput,
+        description:
+            "List background jobs, or read a job's accumulated output/status by id.",
+        parameters: {
+            type: "object",
+            properties: {
+                id: { type: "string", description: "Job id. Omit to list all jobs." },
+            },
+        },
+    },
+};
+
+const jobKillSchema: ChatCompletionTool = {
+    type: "function",
+    function: {
+        name: ToolName.JobKill,
+        description: "Terminate a background job by id (SIGTERM).",
+        parameters: {
+            type: "object",
+            properties: { id: { type: "string", description: "Job id" } },
+            required: ["id"],
         },
     },
 };
@@ -277,6 +310,8 @@ export {
     editSchema,
     exploreSchema,
     executeBashSchema,
+    jobOutputSchema,
+    jobKillSchema,
     saveMemorySchema,
     askQuestionSchema,
     skillSchema,

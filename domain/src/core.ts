@@ -6,7 +6,14 @@ import { AgentLoopResult, ChatMessage } from "./type";
 import { serializeError } from "./type";
 import type { ToolContext } from "./context";
 import type { Tool } from "./tools";
-import { compactMessages, AUTO_COMPACT_THRESHOLD } from "./compact";
+import {
+    compactMessages,
+    microcompactMessages,
+    estimateTokens,
+    AUTOCOMPACT_BUFFER,
+    MICROCOMPACT_RATIO,
+} from "./compact";
+import { isContextOverflowError } from "./llm";
 
 /**
  * 核心代码，实现AgentLoop，通过循环让大模型持续使用工具。
@@ -34,19 +41,41 @@ export async function agentLoop(
     // 此 server 事件会被 web 去重（同 message），不重复显示。
     ctx.eventStream.submit({ type: "User", message: task });
     let lastUsage: { prompt_tokens: number } | undefined;
+    // AR-9：被动压缩只试一次（压缩后仍超限则原错误上抛，避免循环）
+    let reactiveCompacted = false;
     for (let i = 0; i < maxIter; i++) {
         // 迭代边界先查中断：stop() 已 abort 的话直接返回，不发起 LLM 调用
         if (ctx.signal.aborted) {
             return { result: "[stopped]", messages, stopReason: "stopped" };
         }
-        // 自动压缩：上一轮真实 usage.prompt_tokens >= 75% * contextWindow → 压缩后继续。
-        // 真实 usage 最准（无需 tokenizer）；首迭代无 usage 不会触 75%。
+        // 分级压缩（FR-6）：micro（清陈旧 tool result）先于全量摘要；
+        // 全量阈值 = 窗口 - 固定 buffer（不再用比例）；真实 usage 最准。
         if (
             lastUsage &&
             ctx.llm?.contextWindow &&
-            lastUsage.prompt_tokens >=
-                AUTO_COMPACT_THRESHOLD * ctx.llm.contextWindow
+            lastUsage.prompt_tokens >= MICROCOMPACT_RATIO * ctx.llm.contextWindow
         ) {
+            const window = ctx.llm.contextWindow;
+            const overFull =
+                lastUsage.prompt_tokens >= window - AUTOCOMPACT_BUFFER;
+            // 第一级：microcompact——只清陈旧 tool result，够则免摘要
+            const cleaned = microcompactMessages(messages);
+            if (cleaned) {
+                const before = estimateTokens(messages);
+                lastUsage = undefined; // 下轮真实 usage 重新判定
+                ctx.eventStream.submit({
+                    type: "Compact",
+                    message: `已清理陈旧工具结果，释放上下文`,
+                    data: {
+                        beforeTokens: before,
+                        afterTokens: estimateTokens(messages),
+                        auto: true,
+                        micro: true,
+                    },
+                });
+                // micro 后仍超全量线 → 继续走全量摘要
+            }
+            if (overFull && (!cleaned || estimateTokens(messages) >= window - AUTOCOMPACT_BUFFER)) {
             try {
                 const res = await compactMessages(messages, ctx.llm, undefined, ctx.signal);
                 if (res.compacted) {
@@ -77,6 +106,7 @@ export async function agentLoop(
                     }`,
                     error: serializeError(err),
                 });
+            }
             }
         }
         // 同一回合的 ITERATION/ASSISTANT/TOOL 事件共用 turnId,
@@ -129,6 +159,31 @@ export async function agentLoop(
             // callLLM 流式 abort 时返回截断（不抛），此处只兜底其他异常
             if (ctx.signal.aborted) {
                 return { result: "[stopped]", messages, stopReason: "stopped" };
+            }
+            // AR-9 错误恢复梯度：上下文超限被 provider 拒绝 → 被动压缩后重试同一轮
+            if (ctx.llm && !reactiveCompacted && isContextOverflowError(err)) {
+                reactiveCompacted = true;
+                try {
+                    const res = await compactMessages(messages, ctx.llm, undefined, ctx.signal);
+                    if (res.compacted) {
+                        messages.length = 0;
+                        messages.push(...res.messages);
+                        await onCompact?.(res.messages);
+                        ctx.eventStream.submit({
+                            type: "Compact",
+                            message: `请求超限（${(err as Error).message.slice(0, 80)}），已被动压缩 ${res.beforeTokens}→${res.afterTokens} tokens 后重试`,
+                            data: {
+                                beforeTokens: res.beforeTokens,
+                                afterTokens: res.afterTokens,
+                                auto: true,
+                            },
+                        });
+                        i -= 1; // 重试本轮（continue 会 i++，此处抵消）
+                        continue;
+                    }
+                } catch {
+                    // 压缩失败 → 原错误上抛
+                }
             }
             throw err;
         }

@@ -22,6 +22,11 @@ import { grepFunc } from "./functions/grep";
 import { saveMemoryFunc } from "./functions/saveMemory";
 import { askQuestionFunc } from "./functions/askQuestion";
 import { skillFunc } from "./functions/skill";
+import { jobOutputFunc, jobKillFunc } from "./functions/jobs";
+import {
+    jobOutputSchema,
+    jobKillSchema,
+} from "./schema";
 
 /**
  * 工具元数据（AR-7）：缺省按最保守处理（非只读、非并发安全）——
@@ -99,6 +104,17 @@ const askQuestionTool: Tool = {
     handler: askQuestionFunc,
     meta: { readOnly: true, concurrencySafe: false },
 };
+/** 后台任务工具（FR-13）：job_output 只读可并行；job_kill 杀进程（非只读） */
+const jobOutputTool: Tool = {
+    schema: jobOutputSchema,
+    handler: jobOutputFunc,
+    meta: { readOnly: true, concurrencySafe: true },
+};
+const jobKillTool: Tool = {
+    schema: jobKillSchema,
+    handler: jobKillFunc,
+    meta: { readOnly: false, concurrencySafe: false },
+};
 /** skill 工具：按需读技能全文（SPEC-031 B-005）。只读；模型经 <available_skills> 目录触发。 */
 const skillTool: Tool = {
     schema: skillSchema,
@@ -118,6 +134,8 @@ const builtinTools: Tool[] = [
     saveMemoryTool,
     askQuestionTool,
     skillTool,
+    jobOutputTool,
+    jobKillTool,
 ];
 
 const ToolKit = {

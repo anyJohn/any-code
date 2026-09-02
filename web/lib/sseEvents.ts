@@ -25,7 +25,7 @@ export type AgentEvent =
     | (EventBase & { type: "Usage"; data: UsageData })
     | (EventBase & { type: "Compact"; data: CompactData })
     | (EventBase & { type: "Interaction"; data: InteractionData })
-    | (EventBase & { type: "Planning" })
+    | (EventBase & { type: "Planning"; data: PlanningEventData })
     | (EventBase & { type: "Permission"; data: PermissionEventData })
     | (EventBase & { type: "PermissionAsk"; data: PermissionAskData })
     | (EventBase & { type: "Error"; error: ErrorPayload })
@@ -50,6 +50,8 @@ export interface ToolCallData {
     name: string;
     args: Record<string, unknown>;
     result: string;
+    /** 结构化元数据（FR-10）：exitCode/spillFile/filePath 等，UI/系统消费 */
+    meta?: Record<string, unknown>;
 }
 export interface ToolStartData {
     name: string;
@@ -64,6 +66,11 @@ export interface CompactData {
     afterTokens: number;
     auto: boolean;
     focus?: string | null;
+}
+/** plan 模式计划（FR-12，durable）。镜像 domain PlanningEventData。 */
+export interface PlanningEventData {
+    plan: string;
+    round: number;
 }
 export interface InteractionQuestion {
     question: string;

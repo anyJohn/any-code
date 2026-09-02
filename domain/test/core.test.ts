@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// 固定桩 mock callLLM：测 agentLoop 控制流，不调真 LLM
-vi.mock("../src/llm", () => ({ callLLM: vi.fn() }));
+// 固定桩 mock callLLM：测 agentLoop 控制流，不调真 LLM（isContextOverflowError 用真实现——AR-9 判定）
+vi.mock("../src/llm", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("../src/llm")>()),
+    callLLM: vi.fn(),
+}));
 
 // mock compactMessages：测压缩失败路径（SPEC-030 AC-004/005），保留 AUTO_COMPACT_THRESHOLD 真值
 vi.mock("../src/compact", async (importOriginal) => {
@@ -225,5 +228,79 @@ describe("agentLoop（core.ts）", () => {
             (c) => c[0]?.type === "Iteration"
         );
         expect(thinkingCall![0].turnId).toBe(iterCall![0].turnId);
+    });
+});
+
+
+// ── FR-6 分级压缩 / AR-9 被动压缩 ──
+
+const bigToolResult = (id: string): ChatMessage =>
+    ({ role: "tool", tool_call_id: id, content: "x".repeat(400) }) as never;
+
+describe("agentLoop 分级压缩与错误恢复（FR-6 / AR-9）", () => {
+    beforeEach(() => vi.mocked(callLLM).mockReset());
+
+    it("FR-6：usage ≥60% 窗口 → 先发 micro Compact（清旧 tool result），不触发全量摘要", async () => {
+        // 填满历史：多轮 tool 结果
+        const messages: ChatMessage[] = [];
+        vi.mocked(callLLM).mockResolvedValue(assistantMsg("done") as never);
+        const ctx = mkCtx();
+        (ctx as { llm?: unknown }).llm = {
+            apiKey: "k", models: [{ id: "m" }], defaultModel: "m",
+            streaming: false, contextWindow: 1000,
+        };
+        for (let i = 0; i < 5; i++) {
+            messages.push({ role: "user", content: `q${i}` } as never);
+            messages.push(bigToolResult(`t${i}`));
+        }
+        // 直接调 loop：callLLM 返回 done（无 tool_calls）→ 但 usage 需要 ≥60%……
+        // usage 由 callLLM 返回的 message.usage 决定：mock 一次带 usage 的 assistant
+        vi.mocked(callLLM).mockReset();
+        vi.mocked(callLLM).mockResolvedValueOnce(
+            { role: "assistant", content: "mid", usage: { prompt_tokens: 700, completion_tokens: 5 } } as never
+        );
+        // 后续轮直接完成
+        vi.mocked(callLLM).mockResolvedValue(assistantMsg("done") as never);
+        // 需要 tool_calls 进入第二轮：改为第一轮带 tool_calls + usage
+        vi.mocked(callLLM).mockReset();
+        vi.mocked(callLLM)
+            .mockResolvedValueOnce(
+                { role: "assistant", content: null, tool_calls: [toolCallReq("fakeTool")], usage: { prompt_tokens: 700, completion_tokens: 5 } } as never
+            )
+            .mockResolvedValue(assistantMsg("done") as never);
+        const handler = vi.fn().mockResolvedValue("x".repeat(400));
+        const res = await agentLoop("task", messages, 5, undefined, undefined, ctx, [mkTool("fakeTool", handler)]);
+        expect(res.stopReason).toBe("completed");
+        const compacts = (ctx.eventStream.submit as ReturnType<typeof vi.fn>).mock.calls
+            .map((c) => c[0])
+            .filter((e) => e.type === "Compact");
+        expect(compacts.length).toBeGreaterThanOrEqual(1);
+        expect(compacts[0].data.micro).toBe(true); // 第一级 micro 先行
+    });
+
+    it("AR-9：PTL 错误 → 被动压缩后重试成功（create 侧 mock）", async () => {
+        const ctx = mkCtx();
+        (ctx as { llm?: unknown }).llm = {
+            apiKey: "k", models: [{ id: "m" }], defaultModel: "m",
+            streaming: false, contextWindow: 128000,
+        };
+        // callLLM 第一次抛 PTL，压缩由 mock 的 compactMessages 产出，第二次成功
+        vi.mocked(callLLM)
+            .mockRejectedValueOnce(new Error("This model's maximum context length is 4096 tokens"))
+            .mockResolvedValueOnce(assistantMsg("recovered") as never);
+        vi.mocked(compactMessages).mockResolvedValueOnce({
+            messages: [{ role: "user", content: "summary" } as never],
+            summary: "s",
+            beforeTokens: 100,
+            afterTokens: 50,
+            compacted: true,
+        });
+        const res = await agentLoop("task", [], 5, undefined, undefined, ctx, []);
+        expect(res.stopReason).toBe("completed");
+        expect(res.result).toBe("recovered");
+        const compacts = (ctx.eventStream.submit as ReturnType<typeof vi.fn>).mock.calls
+            .map((c) => c[0])
+            .filter((e) => e.type === "Compact");
+        expect(compacts.some((e) => e.message.includes("被动压缩"))).toBe(true);
     });
 });
