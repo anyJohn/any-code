@@ -32,7 +32,7 @@ import {
     shellNote,
     cleanSessionTitle,
 } from "./prompt";
-import { resolveShellKind } from "./tools/functions/bash";
+import { resolveShellKind } from "./shell";
 import { callLLM } from "./llm";
 import { detectContextWindow, resolveContextWindow } from "./config";
 import {
@@ -41,6 +41,7 @@ import {
     type PermissionRule,
 } from "./permissions";
 import { createSnapshotService } from "./snapshot";
+import { loadWorkspaceExtensions, type ExtensionHooks } from "./extensions";
 import { JobRegistry } from "./jobs";
 import {
     BehaviorSubject,
@@ -91,6 +92,9 @@ class AnyAgent {
     private snapshots: ReturnType<typeof createSnapshotService>;
     // bash 后台任务注册表（FR-13）：per-agent，destroy 时 killAll
     private jobRegistry = new JobRegistry();
+    // 项目扩展（AR-16）：自定义工具 + 生命周期钩子
+    private extensionTools: Tool[] = [];
+    private extensionHooks: ExtensionHooks = {};
     // 当前生效的 LLM provider 配置（多 provider + 流式开关）；create 时 initConfig 从 config.yaml 加载。
     // per-request 语义下热更 = 下一次 AnyAgent.create 重读磁盘，无需 reload 机制。
     private config!: Config;
@@ -139,6 +143,21 @@ class AnyAgent {
             this.workspace.ignoredPatterns,
             this.config.gitBashPath
         );
+        // AR-16：加载项目扩展（自定义工具 + 钩子）；保留名 = 当前工具集 + plan
+        const reserved = new Set(
+            [...this.tools].map(
+                (t) => (t.schema as { function?: { name?: string } }).function?.name ?? ""
+            )
+        );
+        const ext = await loadWorkspaceExtensions(this.workspace, reserved);
+        this.extensionTools = ext.tools;
+        this.extensionHooks = ext.hooks;
+        if (ext.tools.length) {
+            this.tools = [...this.tools, ...ext.tools];
+        }
+        for (const w of ext.warnings) {
+            this.eventStream.submit({ type: "Warning", message: w });
+        }
     }
 
     /** 加载 MCP 工具（真协议连接），追加到工具集，per-agent 生命周期绑定。 */
@@ -416,6 +435,8 @@ class AnyAgent {
             providers: this.config.providers,
             // FR-13：bash 后台任务注册表
             jobs: this.jobRegistry,
+            // AR-16：项目生命周期钩子
+            hooks: this.extensionHooks,
             // AR-4：写类工具执行前自动快照（label 带会话锚点）
             snapshot: {
                 snapshot: async (label: string) =>

@@ -5,6 +5,7 @@ import type { SkillEntry } from "./skill";
 import type { PermissionContext } from "./permissions";
 import type { Snapshot } from "./snapshot";
 import type { JobRegistry } from "./jobs";
+import type { ExtensionHooks } from "./extensions";
 
 /** 最小事件发射接口。EventStream 实现它;AgentTool 的 tagged proxy 也实现它。 */
 export interface EventEmitter {
@@ -46,4 +47,6 @@ export interface ToolContext {
     subagentDepth?: number;
     /** bash 后台任务注册表（FR-13）：undefined = 未启用（bash 后台参数不可用） */
     jobs?: JobRegistry;
+    /** 生命周期钩子（AR-16）：before/afterToolCall；undefined = 未启用 */
+    hooks?: ExtensionHooks;
 }

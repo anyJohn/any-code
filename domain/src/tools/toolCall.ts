@@ -13,6 +13,7 @@ import {
     unregisterInteraction,
 } from "../pendingInteractions";
 import { validateToolArgs } from "./validateArgs";
+import { runBeforeToolHook, runAfterToolHook } from "../extensions";
 
 /** 截断 args 里的长字符串值（>maxLen → 前 maxLen + "[truncated, N total]"）。
  * 防 TOOL 事件 data.args.content（大文件 write）致 SSE 大 payload + 前端 parse 卡。SPEC-022 B-004 / DEC-077。 */
@@ -208,6 +209,14 @@ export async function toolCall(
             result.push(toolRow(p.call, denied));
             continue;
         }
+        // AR-16 钩子：beforeToolCall 可拒绝执行（deny → 结果行，模型自纠）
+        const hookDeny = await runBeforeToolHook(ctx.hooks, p.funcName, p.args);
+        if (hookDeny !== null) {
+            result.push(
+                toolRow(p.call, `[Denied by hook] 工具 ${p.funcName} 被项目钩子拒绝：${hookDeny}`)
+            );
+            continue;
+        }
         // AR-4：写类工具执行前自动快照（best-effort，失败不阻断）；标签含参数摘要（code-review #9）
         if (ctx.snapshot && p.tool.meta?.readOnly !== true) {
             const argSummary =
@@ -221,6 +230,7 @@ export async function toolCall(
         emitToolStart(p, ctx, turnId);
         const out = await runHandler(p, ctx, turnId, true);
         emitTool(p, out, ctx, turnId);
+        runAfterToolHook(ctx.hooks, p.funcName, p.args, out.content);
         result.push(toolRow(p.call, out.content));
     }
     return result;

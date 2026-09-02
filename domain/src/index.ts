@@ -12,4 +12,6 @@ export * from "./abilities";
 export * from "./builtin";
 export * from "./permissions";
 export * from "./snapshot";
+export * from "./extensions";
 export * from "./jobs";
+export * from "./providers/anthropic";

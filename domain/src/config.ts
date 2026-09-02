@@ -38,6 +38,8 @@ export interface LlmProvider {
     maxOutputTokens?: number;
     /** LLM 调用重试（AR-1）：maxRetries 默认 3、baseDelayMs 默认 1000（指数退避+抖动，Retry-After 优先）。 */
     retry?: { maxRetries?: number; baseDelayMs?: number };
+    /** 协议适配（AR-15）：openai（缺省，Chat Completions）/ anthropic（Messages API）。 */
+    protocol?: "openai" | "anthropic";
 }
 
 /**
@@ -234,6 +236,7 @@ function normalize(
             contextWindow: p.contextWindow,
             maxOutputTokens: p.maxOutputTokens,
             retry: p.retry,
+            protocol: p.protocol === "anthropic" ? "anthropic" : "openai",
         };
     }
     return out;

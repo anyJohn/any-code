@@ -1,11 +1,11 @@
 import { spawn } from "node:child_process";
-import { existsSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import type { ToolContext } from "../../context";
 import type { ToolResult } from "../index";
-import { globalConfigDir } from "../../workspace";
+import { bashCandidates } from "../../shell";
 
 interface ExecuteBashArgs {
     command: string;
@@ -80,23 +80,6 @@ function resolveTimeoutMs(timeoutMs?: number): number {
     return Math.min(Math.max(Math.round(timeoutMs), 1000), BASH_MAX_TIMEOUT_MS);
 }
 
-/** Windows 上系统 Git for Windows 的 bash.exe 回退路径。 */
-const SYSTEM_GIT_BASH = "C:\\Program Files\\Git\\bin\\bash.exe";
-
-/**
- * Windows bash 候选序：ANYCODE_BASH_PATH（桌面/launcher 注入，同 ANYCODE_RG_PATH 模式）
- * → config.gitBashPath（install.ps1 写入）→ 安装器下发的 busybox-w32 → 系统 Git for Windows。
- * 存在性过滤后取首个。
- */
-function bashCandidates(gitBashPath?: string): string[] {
-    return [
-        process.env.ANYCODE_BASH_PATH,
-        gitBashPath,
-        join(globalConfigDir(), "runtime", "busybox", "sh.exe"),
-        SYSTEM_GIT_BASH,
-    ].filter((x): x is string => !!x && existsSync(x));
-}
-
 /**
  * 解析执行 shell：unix 用 /bin/sh；Windows 按候选序找 bash.exe（保持 bash 全平台统一，
  * prompt/skills 不分叉）。都没有则抛错（在 config.yaml 配 gitBashPath 或装 Git for Windows）。
@@ -114,33 +97,6 @@ export function resolveShell(
         );
     }
     return { binary, cwd };
-}
-
-/** 当前生效 shell 的种类——用于注入 system prompt 提示 LLM 命令兼容性。 */
-export type ShellKind =
-    | "sh"
-    | "mac-sh"
-    | "git-bash"
-    | "busybox"
-    | "unknown"
-    | "none";
-
-/**
- * 解析 shell 种类（供 prompt 注入；不抛错——Windows 无 bash 时返回 none，prompt 静默跳过）。
- * - macOS：/bin/sh（bash 3.2 POSIX 模式 + BSD 工具集）→ mac-sh
- * - 其它 unix：/bin/sh → sh
- * - Windows：binary 路径含 busybox → busybox；含 git/bash → git-bash；否则 unknown
- */
-export function resolveShellKind(gitBashPath?: string): ShellKind {
-    if (process.platform !== "win32") {
-        return process.platform === "darwin" ? "mac-sh" : "sh";
-    }
-    const binary = bashCandidates(gitBashPath)[0];
-    if (!binary) return "none";
-    const lower = binary.toLowerCase();
-    if (lower.includes("busybox")) return "busybox";
-    if (lower.includes("git") || lower.includes("bash")) return "git-bash";
-    return "unknown";
 }
 
 /**
@@ -245,3 +201,5 @@ export const executeBashFunc = async (
         });
     });
 };
+
+export { resolveShellKind, type ShellKind } from "../../shell";

@@ -61,7 +61,7 @@ You are an execution agent. You are given an APPROVED plan — follow it step by
 
 // ===== system prompt 注入段（getSystemMessage 拼装）=====
 
-import type { ShellKind } from "./tools/functions/bash";
+import type { ShellKind } from "./shell";
 
 /** Workspace 上下文注入：告知 LLM 工作根目录，使其能把工具输出里的绝对路径对应到根。 */
 export function workspaceNote(rootPath: string): string {

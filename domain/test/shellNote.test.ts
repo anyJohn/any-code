@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { shellNote, cleanSessionTitle } from "../src/prompt";
-import { resolveShellKind } from "../src/tools/functions/bash";
+import { resolveShellKind } from "../src/shell";
 
 describe("shellNote（只报环境，不指导）", () => {
     it("busybox：只报环境名 + POSIX subset", () => {

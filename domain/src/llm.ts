@@ -5,6 +5,7 @@ import {
 import { ChatMessage, type LlmUsage, type MessageMeta } from "./type";
 import type { LlmProvider } from "./config";
 import OpenAI from "openai";
+import { anthropicCall } from "./providers/anthropic";
 
 type LlmResult = ChatCompletionMessage & { usage?: LlmUsage; _meta?: MessageMeta };
 
@@ -167,6 +168,19 @@ export async function callLLM(
     const maxRetries = provider.retry?.maxRetries ?? DEFAULT_MAX_RETRIES;
     const baseDelayMs = provider.retry?.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
     // signal 透传：stop() abort 时流式生成抛 AbortError（withRetry 内兜底）/ 非流式 fetch 取消。
+    // AR-15：按 provider.protocol 分派协议适配器（anthropic 适配器内部自带流式/非流式与归一化）。
+    if (provider.protocol === "anthropic") {
+        // AnthropicResult 与 LlmResult 结构兼容（role/content/tool_calls/usage/_meta）
+        return withRetry(
+            () =>
+                anthropicCall(messages, params as never, signal, provider, {
+                    onDelta,
+                    onThinkingDelta,
+                    onToolArgProgress,
+                }) as Promise<LlmResult>,
+            { maxRetries, baseDelayMs, signal, onRetry }
+        );
+    }
     return withRetry(
         () =>
             provider.streaming

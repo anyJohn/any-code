@@ -50,6 +50,10 @@
 - sub-agent 补全（FR-11）：技能/权限/快照透传，def 可指定 provider/model，委托深度限制防递归
 - bash 后台任务（FR-13）：run_in_background 返回 job_id；job_output 查询/job_kill 终止；agent 销毁清理
 - plan 模式（FR-12）：只读规划产出计划（Planning 事件）→ 用户批准 → 按计划执行；拒绝可修订（至多 3 轮）
+- MCP 升级（FR-17 / AR-18）：工具名命名空间（mcp__server__tool，防多 server 同名遮蔽）；resources/prompts 工具；callTool 失败自动重连一次；连接池跨 run 复用（引用计数 + 5 分钟空闲回收 + 失活重建，首 token 提速）
+- 项目扩展点（AR-16）：.anycode/tools/*.mjs 自定义工具（声明式 schema+execute，重名跳过）；.anycode/hooks.mjs 生命周期钩子（beforeToolCall 可拒绝 / afterToolCall）；失败不阻断
+- 多协议 provider（AR-15）：provider.protocol = openai（缺省）/ anthropic（Messages API，流式 SSE 归一化 + 工具双向映射 + withRetry 复用）
+- 分层守卫（AR-19）：domain 内部分层（L1 provider/L2 基础设施/L3 运行时/L4 装配）依赖方向由守卫测试约束
 - 任务终态枚举（FR-14）：completed / stopped / max_iterations；上限触发 UI 明示 + 建议动作
 - permissions（工具权限，SPEC-032）
   - 执行前判定：用户规则（项目级覆盖全局，后匹配生效）→ 危险命令基线 → 模式默认

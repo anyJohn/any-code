@@ -245,6 +245,7 @@ anycode 守"最小可读内核"定位：**小而全 + 真协议接入生态 + �
 | 上下文压缩 | `/compact [focus]` 指令 + agentLoop 75% 自动压缩（旧消息→摘要 + 保留尾部 + tool 配对保护）|
 | 端到端安装（v1） | Linux/Windows 一行安装脚本 + `anycode web`（非技术用户开箱即用）|
 | 安装生命周期 | `anycode update`（复用安装器重拉重建）/ `uninstall`（删 ~/.anycode）/ `help` |
+| P2 扩展性（FR-17/AR-18/AR-16/AR-15/AR-19） | MCP 命名空间+连接池+resources/prompts+重连；项目扩展点（tools/*.mjs + hooks.mjs）；Anthropic 协议适配；domain 分层守卫测试 |
 | 内核可靠性（FR-6/AR-9/FR-11/FR-13/FR-12） | 分级压缩（microcompact+buffer 阈值+被动压缩）、sub-agent 能力补全、bash 后台任务、plan 模式（规划-审批） |
 | 工具系统升级（FR-10/AR-7/FR-8） | 参数 schema 校验 + 结构化 ToolResult + 工具元数据（readOnly/concurrencySafe）+ 并行执行 |
 | 快照与回滚（AR-4） | 写类工具前自动 shadow-git 快照（~/.anycode/snapshots/）+ /rewind 二次确认回滚 |
