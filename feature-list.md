@@ -54,6 +54,12 @@
   - ask 裁决：PermissionModal 允许一次（会话内按匹配模式缓存）/ 永久允许（默认项目级，可勾全局）/ 拒绝；120s 超时按拒绝
   - 危险命令基线可配置增删（内置 rm -rf / sudo / mkfs 等最小集）
   - 审计：asked/decided durable 事件入会话日志，resume 回放可见
+- 工具系统升级（FR-10 / AR-7 / FR-8）
+  - 参数 schema 校验：执行前按工具 JSON Schema 校验，非法拒绝并回传模型自纠
+  - 结构化 ToolResult：handler 可返回 content + meta（exitCode/spillFile/filePath），模型拿文本、UI/系统拿结构
+  - 工具元数据：readOnly / concurrencySafe 声明（缺省保守），权限默认策略与并行调度由元数据推导
+  - 并行工具执行：批内全部并发安全且权限预判放行 → Promise.all，结果按调用序落盘
+- 快照与回滚（AR-4）：写类工具执行前自动 shadow-git 快照（~/.anycode/snapshots/，项目目录零污染）；/rewind 列快照、二次确认回滚；git 缺失降级跳过
 - subagents
   - Plan agent，复杂任务委托 plan sub-agent 拆解（预置，声明式 `AgentTool(AgentDefinition)`）
   - task agent，并行执行任务（todo）

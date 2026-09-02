@@ -245,6 +245,8 @@ anycode 守"最小可读内核"定位：**小而全 + 真协议接入生态 + �
 | 上下文压缩 | `/compact [focus]` 指令 + agentLoop 75% 自动压缩（旧消息→摘要 + 保留尾部 + tool 配对保护）|
 | 端到端安装（v1） | Linux/Windows 一行安装脚本 + `anycode web`（非技术用户开箱即用）|
 | 安装生命周期 | `anycode update`（复用安装器重拉重建）/ `uninstall`（删 ~/.anycode）/ `help` |
+| 工具系统升级（FR-10/AR-7/FR-8） | 参数 schema 校验 + 结构化 ToolResult + 工具元数据（readOnly/concurrencySafe）+ 并行执行 |
+| 快照与回滚（AR-4） | 写类工具前自动 shadow-git 快照（~/.anycode/snapshots/）+ /rewind 二次确认回滚 |
 | 可靠性（AR-1/AR-2/FR-14） | LLM 调用重试退避（Retry-After 优先）+ bash 输出双限截断与 spill + timeout_ms 可配 + 任务终态枚举（上限明示） |
 | 核心路径单测 | domain + web + server vitest 全绿 |
 | Electron 桌面客户端 | frameless 窗口 + 内置窗口控件 + 内嵌 hono sidecar；打包 AppImage / NSIS / mac zip（代码签名与自动更新待做） |
