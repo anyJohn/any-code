@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
     Collapsible,
     CollapsibleContent,
@@ -11,50 +11,42 @@ import { useT } from "@/i18n";
 
 /**
  * ThinkingBlock —— 模型的思考过程展示。
- * 浅色小字体，可折叠，默认折叠。带计时器：从首段思考内容到达开始计时，
- * 到 thinking 结束（content 开始输出）或 30s 后停止（防泄漏）。
+ * 浅色小字体，可折叠，默认折叠。
+ * 计时：从事件时间戳推导（startedAt = 首个 Thinking 事件，endedAt = thinking 后首个
+ * 实质事件）——与组件挂载时刻无关。中途退出再进入（重放/历史恢复）显示的是真实
+ * 时长；已结束的思考纯静态渲染，不装任何定时器。
  */
 export function ThinkingBlock({
     content,
     finished,
+    startedAt,
+    endedAt,
 }: {
     content: string;
     /** 思考已结束：模型已输出正式内容（assistant text）或本回合结束 */
     finished?: boolean;
+    /** 思考开始时刻（首个 Thinking 事件 timestamp） */
+    startedAt?: number;
+    /** 思考结束时刻（thinking 后首个实质事件 timestamp）；finished 时应有值 */
+    endedAt?: number;
 }) {
     const { t } = useT();
     const [open, setOpen] = useState(false);
-    const [elapsed, setElapsed] = useState(0);
-    const startRef = useRef<number | null>(null);
-    const rafRef = useRef<number | null>(null);
-    const stoppedRef = useRef(false);
+    // 活跃思考的"现在"；finished 后不更新（纯静态，无定时器）
+    const [now, setNow] = useState(() => Date.now());
 
-    // 首段内容到达时记录开始时间
-    if (content && startRef.current === null) {
-        startRef.current = Date.now();
-    }
-
-    // 计时器：每 100ms 更新显示时长；finished 或超 30s 停止
     useEffect(() => {
-        if (!content) return;
-        const tick = () => {
-            if (startRef.current === null || stoppedRef.current) return;
-            const e = (Date.now() - startRef.current) / 1000;
-            if (finished || e >= 30) {
-                stoppedRef.current = true;
-                setElapsed(finished ? Math.min(e, 30) : 30);
-                return;
-            }
-            setElapsed(e);
-            rafRef.current = requestAnimationFrame(tick);
-        };
-        rafRef.current = requestAnimationFrame(tick);
-        return () => {
-            if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-        };
+        if (!content || finished) return;
+        const id = setInterval(() => setNow(Date.now()), 100);
+        return () => clearInterval(id);
     }, [content, finished]);
 
     if (!content) return null;
+
+    // 时长推导：结束戳优先（精确且静态）；进行中用 now。缺时间戳（理论不可达）显示 0.0s
+    const end = endedAt ?? (finished ? undefined : now);
+    const elapsed =
+        startedAt && end ? Math.max(0, (end - startedAt) / 1000) : 0;
 
     return (
         <Collapsible open={open} onOpenChange={setOpen}>

@@ -28,4 +28,27 @@ describe("ThinkingBlock（SPEC-015）", () => {
         render(<ThinkingBlock content="think-x" />);
         expect(screen.getByText("0.0s")).toBeTruthy();
     });
+
+    // bugfix：时长从事件时间戳推导——中途退出再进入（重放/历史恢复）显示真实时长，
+    // 且已结束的思考纯静态渲染，不再从挂载时刻重跑计时窗口。
+    it("finished + 起止时间戳 → 静态显示真实时长（不随挂载时刻漂移）", () => {
+        const start = Date.now() - 60_000;
+        render(
+            <ThinkingBlock
+                content="think-x"
+                finished
+                startedAt={start}
+                endedAt={start + 4200}
+            />
+        );
+        expect(screen.getByText("4.2s")).toBeTruthy();
+    });
+
+    it("进行中（未 finished）→ 从 startedAt 实时计时", () => {
+        const start = Date.now() - 3000;
+        render(<ThinkingBlock content="think-x" startedAt={start} />);
+        const el = screen.getByText(/s$/);
+        const v = parseFloat(el.textContent ?? "0");
+        expect(v).toBeGreaterThanOrEqual(3);
+    });
 });

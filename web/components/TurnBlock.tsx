@@ -28,6 +28,8 @@ export function TurnBlock({
                 <ThinkingBlock
                     content={item.thinking}
                     finished={item.thinkingFinished}
+                    startedAt={item.thinkingStartedAt}
+                    endedAt={item.thinkingEndedAt}
                 />
             )}
             {item.assistant && (
