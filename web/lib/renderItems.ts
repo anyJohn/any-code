@@ -33,8 +33,15 @@ export type RenderItem = TurnItem | SubagentItem | SingleItem;
  * 把一段事件流按回合分组：ITERATION 开新回合，ASSISTANT/TOOL 入当前回合，
  * System/User/Done/Error 单条。sub-agent（带 runId）事件不在此处理——
  * 调用方先按 runId 切出 sub-agent 段，再对主流 / sub-agent 内部各自调本函数。
+ *
+ * opts.closeThinkingAt：流以终态（Done/Stopped/Error）收尾且最后开着的思考没有
+ * 后续实质事件时，以终态时间戳闭合该思考——否则 thinkingFinished 永不置位，
+ * ThinkingBlock 会把"已停止/已出错回合"的思考当进行中无限计时（bugfix）。
  */
-export function groupByTurn(events: AgentEvent[]): TurnItem[] {
+export function groupByTurn(
+    events: AgentEvent[],
+    opts?: { closeThinkingAt?: number }
+): TurnItem[] {
     const items: TurnItem[] = [];
     let cur: TurnItem | null = null;
     const flush = () => {
@@ -113,8 +120,28 @@ export function groupByTurn(events: AgentEvent[]): TurnItem[] {
             markThinkingDone(cur, e);
             cur.tools.push(e);
         } else {
+            // 终态（Done/Stopped/Error）闭合开着的思考：以 Thinking 收尾的回合
+            // （停止/出错/无正文完成）若不闭合，ThinkingBlock 会无限计时
+            if (
+                (e.type === "Done" || e.type === "Stopped" || e.type === "Error") &&
+                cur &&
+                cur.thinking &&
+                !cur.thinkingFinished
+            ) {
+                cur.thinkingFinished = true;
+                cur.thinkingEndedAt = e.timestamp;
+            }
             flush();
         }
+    }
+    if (
+        opts?.closeThinkingAt !== undefined &&
+        cur &&
+        cur.thinking &&
+        !cur.thinkingFinished
+    ) {
+        cur.thinkingFinished = true;
+        cur.thinkingEndedAt = opts.closeThinkingAt;
     }
     flush();
     return items;
@@ -130,8 +157,9 @@ export function toRenderItems(events: AgentEvent[]): RenderItem[] {
     let mainBuf: AgentEvent[] = [];
     let sub: { runId: string; author: string; events: AgentEvent[] } | null =
         null;
-    const flushMain = () => {
-        for (const t of groupByTurn(mainBuf)) items.push(t);
+    const flushMain = (closeThinkingAt?: number) => {
+        for (const t of groupByTurn(mainBuf, { closeThinkingAt }))
+            items.push(t);
         mainBuf = [];
     };
     const flushSub = () => {
@@ -168,7 +196,9 @@ export function toRenderItems(events: AgentEvent[]): RenderItem[] {
             e.type === "Warning" ||
             e.type === "Permission"
         ) {
-            flushMain();
+            // single 事件会切分回合：以自身时间戳闭合主流开着的思考
+            //（Warning/User/Compact 等切断思考流 → 思考到此为止；终态同样闭合）
+            flushMain(e.timestamp);
             flushSub();
             items.push({ kind: "single", event: e });
         } else {

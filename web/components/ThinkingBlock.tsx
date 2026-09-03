@@ -21,6 +21,7 @@ export function ThinkingBlock({
     finished,
     startedAt,
     endedAt,
+    live,
 }: {
     content: string;
     /** 思考已结束：模型已输出正式内容（assistant text）或本回合结束 */
@@ -29,22 +30,25 @@ export function ThinkingBlock({
     startedAt?: number;
     /** 思考结束时刻（thinking 后首个实质事件 timestamp）；finished 时应有值 */
     endedAt?: number;
+    /** 会话运行中：false 时绝不跳表（终态缺失的思考按静态处理） */
+    live?: boolean;
 }) {
     const { t } = useT();
     const [open, setOpen] = useState(false);
-    // 活跃思考的"现在"；finished 后不更新（纯静态，无定时器）
+    // 活跃思考的"现在"；finished 或非 live 时不更新（纯静态，无定时器）
     const [now, setNow] = useState(() => Date.now());
 
     useEffect(() => {
-        if (!content || finished) return;
+        if (!content || finished || !live) return;
         const id = setInterval(() => setNow(Date.now()), 100);
         return () => clearInterval(id);
-    }, [content, finished]);
+    }, [content, finished, live]);
 
     if (!content) return null;
 
-    // 时长推导：结束戳优先（精确且静态）；进行中用 now。缺时间戳（理论不可达）显示 0.0s
-    const end = endedAt ?? (finished ? undefined : now);
+    // 时长推导：结束戳优先（精确且静态）；进行中用 now；
+    // 孤儿开思考（非 live 且无结束戳——理论上已被终态闭合，兜底）显示 0.0s
+    const end = endedAt ?? (finished ? undefined : live ? now : undefined);
     const elapsed =
         startedAt && end ? Math.max(0, (end - startedAt) / 1000) : 0;
 

@@ -10,10 +10,13 @@ import type { RenderItem } from "@/lib/renderItems";
  */
 export function TurnBlock({
     item,
+    live,
     openTools,
     toggleTool,
 }: {
     item: Extract<RenderItem, { kind: "turn" }>;
+    /** 会话运行中（透传 ThinkingBlock：非运行态不跳表） */
+    live?: boolean;
     openTools: Record<string, boolean>;
     toggleTool: (id: string) => void;
 }) {
@@ -30,6 +33,7 @@ export function TurnBlock({
                     finished={item.thinkingFinished}
                     startedAt={item.thinkingStartedAt}
                     endedAt={item.thinkingEndedAt}
+                    live={live}
                 />
             )}
             {item.assistant && (

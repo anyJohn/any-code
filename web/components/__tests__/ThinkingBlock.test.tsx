@@ -44,11 +44,17 @@ describe("ThinkingBlock（SPEC-015）", () => {
         expect(screen.getByText("4.2s")).toBeTruthy();
     });
 
-    it("进行中（未 finished）→ 从 startedAt 实时计时", () => {
+    it("进行中（未 finished，live）→ 从 startedAt 实时计时", () => {
         const start = Date.now() - 3000;
-        render(<ThinkingBlock content="think-x" startedAt={start} />);
+        render(<ThinkingBlock content="think-x" startedAt={start} live />);
         const el = screen.getByText(/s$/);
         const v = parseFloat(el.textContent ?? "0");
         expect(v).toBeGreaterThanOrEqual(3);
+    });
+
+    it("孤儿开思考（非 live 且无结束戳）→ 静态 0.0s，不跳表", () => {
+        const start = Date.now() - 60_000;
+        render(<ThinkingBlock content="think-x" startedAt={start} />);
+        expect(screen.getByText("0.0s")).toBeTruthy();
     });
 });

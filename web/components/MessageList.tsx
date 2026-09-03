@@ -120,6 +120,7 @@ export function MessageList({
                             <TurnBlock
                                 key={`turn-${item.turnId}`}
                                 item={item}
+                                live={pending}
                                 openTools={openTools}
                                 toggleTool={toggleTool}
                             />
