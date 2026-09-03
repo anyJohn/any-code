@@ -220,6 +220,7 @@ export async function agentLoop(
                     prompt_tokens: msg.usage.prompt_tokens,
                     completion_tokens: msg.usage.completion_tokens,
                     contextWindow: ctx.llm?.contextWindow ?? 128000,
+                    model: ctx.llm?.defaultModel, // FR-22：模型戳，费用按模型单价换算
                 },
                 turnId,
             });

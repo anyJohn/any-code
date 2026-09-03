@@ -70,6 +70,8 @@ export interface UsageEventData {
     prompt_tokens: number;
     completion_tokens: number;
     contextWindow: number;
+    /** FR-22：产生该用量的模型 id（费用按模型单价换算；老事件无此戳） */
+    model?: string;
 }
 export interface CompactEventData {
     beforeTokens: number;

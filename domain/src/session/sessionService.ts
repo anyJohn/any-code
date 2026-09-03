@@ -3,6 +3,7 @@ import {
     Session,
     SessionKey,
     SessionMeta,
+    UsageDelta,
     createSession,
     entriesToSession,
     eventToEntry,
@@ -10,6 +11,7 @@ import {
     messageToEntry,
     titleMetaEntry,
     touchMetaEntry,
+    usageMetaEntry,
 } from "./session";
 import { LocalSessionStore, SessionStore } from "./sessionStore";
 
@@ -65,6 +67,16 @@ export class SessionService {
      *  data 应已是可序列化结构（Error 由 adapter 边界提取，不在 domain 内处理）。 */
     async appendEvent(key: SessionKey, event: AgentEvent): Promise<void> {
         await this.store.append(key, [eventToEntry(event), touchMetaEntry()]);
+    }
+
+    /** FR-22：追加 Usage 事件 + 用量增量 meta（同批一次写盘，原子）。
+     *  meta 增量经 entriesToSession/metaOf 折叠求和 → 会话累计（list 免读全量事件）。 */
+    async appendUsage(
+        key: SessionKey,
+        event: AgentEvent,
+        usage: UsageDelta
+    ): Promise<void> {
+        await this.store.append(key, [eventToEntry(event), usageMetaEntry(usage)]);
     }
 
     /** 更新标题：追加一条新 meta（entriesToSession 取末条 meta 为准） */

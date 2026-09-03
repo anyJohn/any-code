@@ -7,6 +7,7 @@
   - 桌面打包分发：Windows、Linux、macOS（mac 出 arm64 zip / 解包 .app，未签名；dmg + 签名需在 macOS 上构建）
   - Web 与 TUI 共用一套前端代码（React + Vite + hono server），"一次编译，到处运行"
 - i18n 中英文切换（FR-29）：顶栏一键切换（全量 UI 文案，web 优先）；轻量自研（扁平字典 + useT，无 i18n 框架依赖）；语言偏好持久化 `config.yaml ui.language`（跨端同一偏好，TUI 将来同源），localStorage 首屏缓存防闪烁；缺省跟随系统语言；en 缺 key 回退 zh
+- 会话级用量与成本统计（FR-22）：会话累计 prompt/completion tokens（StatusBar + 侧栏/Home 会话列表，多轮累计=各轮之和、重进会话仍在）；Usage 事件带模型戳入盘可回放；`config.yaml pricing` 段配模型单价（$/1M tokens）即显示费用（按模型逐条换算，缺省只显 tokens）
 - 流式 / 非流式响应
   - 通过 config 配置 `streaming`，支持流式与非流式模型
 - Skill

@@ -45,6 +45,8 @@ export interface UsageData {
     prompt_tokens: number;
     completion_tokens: number;
     contextWindow: number;
+    /** FR-22：产生该用量的模型 id（费用按模型单价换算；老事件缺省） */
+    model?: string;
 }
 export interface ToolCallData {
     name: string;
@@ -134,6 +136,13 @@ export interface StreamFrame {
 /** 会话运行状态（会话列表徽标 / 全局 ask 提醒）。 */
 export type SessionRunStatus = "queued" | "running" | "waiting_ask";
 
+/** FR-22：会话累计用量（镜像 domain SessionUsage）。 */
+export interface SessionUsageInfo {
+    promptTokens: number;
+    completionTokens: number;
+    byModel?: Record<string, { promptTokens: number; completionTokens: number }>;
+}
+
 /** 会话列表项：SessionMeta + server 合并的运行状态（idle 时无 status 字段）。 */
 export interface SessionListItem {
     id: string;
@@ -142,6 +151,8 @@ export interface SessionListItem {
     updatedAt: number;
     status?: SessionRunStatus;
     pendingAsk?: { id: string; tool: string; summary: string } | null;
+    /** FR-22：会话累计用量（无 Usage 记录则缺省） */
+    usage?: SessionUsageInfo;
 }
 
 /** GET /api/running 条目：全局运行快照（跨工作区，含会话标题）。 */

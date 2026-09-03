@@ -638,6 +638,7 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
                 permissions: cfg.permissions,
                 maxConcurrentRuns: cfg.maxConcurrentRuns,
                 ui: cfg.ui,
+                pricing: cfg.pricing,
             });
         } catch {
             return c.json({ providers: {}, default: undefined, mcp: {} });
@@ -678,6 +679,8 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
             maxConcurrentRuns: body.maxConcurrentRuns ?? existing?.maxConcurrentRuns,
             // 表单不含 ui 段时保留已存值（FR-29 语言偏好）
             ui: body.ui ?? existing?.ui,
+            // 表单不含 pricing 段时保留已存值（FR-22 模型单价）
+            pricing: body.pricing ?? existing?.pricing,
         };
         try {
             Config.save(merged);
@@ -822,6 +825,7 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
                 permissions: cfg.permissions,
                 maxConcurrentRuns: cfg.maxConcurrentRuns,
                 ui: cfg.ui,
+                pricing: cfg.pricing,
             });
             return c.json({ statusMessage: "switched" });
         } catch (e) {

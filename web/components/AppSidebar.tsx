@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiJson } from "@/lib/api";
+import { fmtTokens } from "@/lib/format";
 import { useT } from "@/i18n";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { Logo } from "./Logo";
@@ -643,6 +644,18 @@ export function AppSidebar({
                                                         >
                                                             {s.title || t("sidebar.untitled")}
                                                         </button>
+                                                    )}
+                                                    {/* FR-22：会话累计 tokens（title 挂精确值） */}
+                                                    {!rt && s.usage && (
+                                                        <span
+                                                            className="shrink-0 tabular-nums text-[10px] text-muted-foreground/60"
+                                                            title={`${s.usage.promptTokens} + ${s.usage.completionTokens} tokens`}
+                                                        >
+                                                            {fmtTokens(
+                                                                s.usage.promptTokens +
+                                                                    s.usage.completionTokens
+                                                            )}
+                                                        </span>
                                                     )}
                                                     {/* FR-30 B-004：运行状态徽标（名称右侧） */}
                                                     {!rt && s.status === "running" && (

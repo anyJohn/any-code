@@ -209,6 +209,14 @@ export interface ConfigShape {
     maxConcurrentRuns?: number;
     /** 界面偏好（FR-29）：language = 界面语言（缺省跟随系统语言）。 */
     ui?: { language?: "zh" | "en" };
+    /** 模型单价（FR-22）：美元 / 每 1M tokens。缺省不配 → 界面只显 tokens 不显费用。 */
+    pricing?: Record<string, ModelPricing>;
+}
+
+/** 模型单价（FR-22）：input/output = 每百万 tokens 的美元单价。 */
+export interface ModelPricing {
+    input: number;
+    output: number;
 }
 
 /** 单个能力配置：enabled 开关 + 能力私有 config（如 web-search 的 provider/apiKey）。 */
@@ -269,6 +277,8 @@ export class Config {
     maxConcurrentRuns: number;
     /** 界面偏好（FR-29）：language 缺省 undefined = 跟随系统语言。 */
     ui: { language?: "zh" | "en" };
+    /** 模型单价（FR-22）：缺省空表 → 界面只显 tokens。 */
+    pricing: Record<string, ModelPricing>;
 
     private constructor(
         providers: Record<string, LlmProvider>,
@@ -278,7 +288,8 @@ export class Config {
         abilities: Record<string, AbilityConfig>,
         permissions: Required<PermissionsConfig>,
         maxConcurrentRuns: number,
-        ui: { language?: "zh" | "en" }
+        ui: { language?: "zh" | "en" },
+        pricing: Record<string, ModelPricing>
     ) {
         this.providers = providers;
         this.default = def;
@@ -288,6 +299,7 @@ export class Config {
         this.permissions = permissions;
         this.maxConcurrentRuns = maxConcurrentRuns;
         this.ui = ui;
+        this.pricing = pricing;
     }
 
     static load(): Config {
@@ -348,7 +360,8 @@ export class Config {
             parsed?.abilities ?? {},
             normalizePermissions(parsed?.permissions),
             normalizeMaxConcurrentRuns(parsed?.maxConcurrentRuns),
-            normalizeUi(parsed?.ui)
+            normalizeUi(parsed?.ui),
+            normalizePricing(parsed?.pricing)
         );
     }
 
@@ -416,6 +429,7 @@ export class Config {
                 permissions: normalizePermissions(data.permissions),
                 maxConcurrentRuns: normalizeMaxConcurrentRuns(data.maxConcurrentRuns),
                 ui: normalizeUi(data.ui),
+                pricing: normalizePricing(data.pricing),
             }),
             "utf-8"
         );
@@ -435,6 +449,27 @@ function normalizeMaxConcurrentRuns(v?: number): number {
 function normalizeUi(v?: { language?: "zh" | "en" }): { language?: "zh" | "en" } {
     const language = v?.language === "zh" || v?.language === "en" ? v.language : undefined;
     return language ? { language } : {};
+}
+
+/** pricing 段归一化（FR-22）：仅保留 input/output 均为正数的条目。 */
+function normalizePricing(
+    v?: Record<string, ModelPricing>
+): Record<string, ModelPricing> {
+    const out: Record<string, ModelPricing> = {};
+    for (const [model, p] of Object.entries(v ?? {})) {
+        if (
+            p &&
+            typeof p.input === "number" &&
+            Number.isFinite(p.input) &&
+            p.input > 0 &&
+            typeof p.output === "number" &&
+            Number.isFinite(p.output) &&
+            p.output > 0
+        ) {
+            out[model] = { input: p.input, output: p.output };
+        }
+    }
+    return out;
 }
 
 /** permissions 段归一化：mode 缺省 standard；dangerPatterns 缺省内置集（D-005）。 */

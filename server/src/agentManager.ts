@@ -170,11 +170,25 @@ export class AgentManager {
         const sub = agent.eventStream$.subscribe(async (e: AgentEvent) => {
             const frame: StreamFrame = { seq: seq++, event: e };
             for (const s of entry.subscribers) s(frame);
-            // durable 事件落盘（原 /run 职责迁入：任何订阅者断开都不影响持久化）
+            // durable 事件落盘（原 /run 职责迁入：任何订阅者断开都不影响持久化）。
+            // FR-22：Usage 事件同批写用量增量 meta（模型戳入 meta → 会话累计可按模型计费）。
             if (e?.type && DURABLE_TYPES.has(e.type)) {
                 const key: SessionKey = { projectKey, sessionId };
                 try {
-                    await agent.getService().appendEvent(key, e);
+                    if (e.type === "Usage") {
+                        const d = e.data as {
+                            prompt_tokens?: number;
+                            completion_tokens?: number;
+                            model?: string;
+                        };
+                        await agent.getService().appendUsage(key, e, {
+                            promptTokens: d?.prompt_tokens ?? 0,
+                            completionTokens: d?.completion_tokens ?? 0,
+                            ...(d?.model ? { model: d.model } : {}),
+                        });
+                    } else {
+                        await agent.getService().appendEvent(key, e);
+                    }
                 } catch {
                     // 写盘失败不阻断流
                 }

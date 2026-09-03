@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Logo } from "@/components/Logo";
 import { FolderOpen } from "lucide-react";
 import { apiJson } from "@/lib/api";
+import { fmtTokens } from "@/lib/format";
 import { useT } from "@/i18n";
 
 type SessionsStatus = "loading" | "ready" | "error";
@@ -134,8 +135,21 @@ export default function Page() {
                                         <span className="text-sm text-accent-foreground truncate">
                                             {s.title || t("home.untitled")}
                                         </span>
-                                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                                            {new Date(s.updatedAt).toLocaleString()}
+                                        <span className="flex items-center gap-3 shrink-0">
+                                            {s.usage && (
+                                                <span
+                                                    className="text-xs text-muted-foreground/70 tabular-nums"
+                                                    title={`${s.usage.promptTokens} + ${s.usage.completionTokens} tokens`}
+                                                >
+                                                    {fmtTokens(
+                                                        s.usage.promptTokens +
+                                                            s.usage.completionTokens
+                                                    )}
+                                                </span>
+                                            )}
+                                            <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                                {new Date(s.updatedAt).toLocaleString()}
+                                            </span>
                                         </span>
                                     </button>
                                 ))}

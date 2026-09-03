@@ -13,6 +13,8 @@ export interface Session {
     events: AgentEvent[];
     createdAt: number;
     updatedAt: number;
+    /** FR-22：会话累计用量（meta 折叠；无 Usage 事件则缺省） */
+    usage?: SessionUsage;
 }
 
 export interface SessionKey {
@@ -20,11 +22,31 @@ export interface SessionKey {
     sessionId: string;
 }
 
-/** JSONL 的一行：meta 记录标题/时间，message 记录一条对话消息，event 记录非消息事件（如 Error） */
+/** JSONL 的一行：meta 记录标题/时间/用量增量，message 记录一条对话消息，event 记录非消息事件（如 Error） */
 export type SessionEntry =
-    | { kind: "meta"; title?: string; updatedAt: number }
+    | {
+          kind: "meta";
+          title?: string;
+          updatedAt: number;
+          /** FR-22：用量增量（Usage 事件落盘时同批写入，fold 求和得会话累计） */
+          usage?: UsageDelta;
+      }
     | { kind: "message"; message: ChatMessage }
     | { kind: "event"; event: AgentEvent };
+
+/** FR-22：一次 LLM 调用的用量增量（model = 产生该用量的模型 id） */
+export interface UsageDelta {
+    promptTokens: number;
+    completionTokens: number;
+    model?: string;
+}
+
+/** FR-22：会话累计用量（byModel 供费用按模型单价换算） */
+export interface SessionUsage {
+    promptTokens: number;
+    completionTokens: number;
+    byModel?: Record<string, { promptTokens: number; completionTokens: number }>;
+}
 
 /** list() 返回的轻量元数据，不含 messages 数组 */
 export interface SessionMeta {
@@ -32,6 +54,8 @@ export interface SessionMeta {
     title: string;
     createdAt: number;
     updatedAt: number;
+    /** FR-22：会话累计用量（无 Usage 事件则缺省） */
+    usage?: SessionUsage;
 }
 
 export const DEFAULT_TITLE = "New Session";
@@ -74,6 +98,11 @@ export function touchMetaEntry(): SessionEntry {
     return { kind: "meta", updatedAt: Date.now() };
 }
 
+/** FR-22：用量增量 meta（与 Usage 事件同批落盘；updatedAt 顺带刷新） */
+export function usageMetaEntry(delta: UsageDelta): SessionEntry {
+    return { kind: "meta", updatedAt: Date.now(), usage: delta };
+}
+
 export function messageToEntry(msg: ChatMessage): SessionEntry {
     return { kind: "message", message: msg };
 }
@@ -88,6 +117,28 @@ function isMessage(e: SessionEntry): e is MessageEntry {
 
 function isEvent(e: SessionEntry): e is EventEntry {
     return e.kind === "event";
+}
+
+/** FR-22：折叠 meta 里的用量增量为会话累计（byModel 按模型归并）。无用量记录返回 undefined。 */
+function foldUsage(metas: MetaEntry[]): SessionUsage | undefined {
+    let promptTokens = 0;
+    let completionTokens = 0;
+    let any = false;
+    let byModel: Record<string, { promptTokens: number; completionTokens: number }> | undefined;
+    for (const m of metas) {
+        if (!m.usage) continue;
+        any = true;
+        promptTokens += m.usage.promptTokens;
+        completionTokens += m.usage.completionTokens;
+        if (m.usage.model) {
+            byModel ??= {};
+            const slot = (byModel[m.usage.model] ??= { promptTokens: 0, completionTokens: 0 });
+            slot.promptTokens += m.usage.promptTokens;
+            slot.completionTokens += m.usage.completionTokens;
+        }
+    }
+    if (!any) return undefined;
+    return byModel ? { promptTokens, completionTokens, byModel } : { promptTokens, completionTokens };
 }
 
 /**
@@ -123,7 +174,15 @@ export function entriesToSession(id: string, entries: SessionEntry[]): Session {
     const messages = entries.filter(isMessage).map((e) => e.message);
     const events = entries.filter(isEvent).map((e) => e.event);
     const { title, createdAt, updatedAt } = summarizeMetas(metas);
-    return { id, title, messages, events, createdAt, updatedAt };
+    return {
+        id,
+        title,
+        messages,
+        events,
+        createdAt,
+        updatedAt,
+        usage: foldUsage(metas), // FR-22
+    };
 }
 
 /** 从条目提取轻量元数据（list 用，只需 meta 行） */
@@ -134,5 +193,5 @@ export function metaOf(
     const metas = entries.filter(isMeta);
     if (metas.length === 0) return null;
     const { title, createdAt, updatedAt } = summarizeMetas(metas);
-    return { id, title, createdAt, updatedAt };
+    return { id, title, createdAt, updatedAt, usage: foldUsage(metas) }; // FR-22
 }

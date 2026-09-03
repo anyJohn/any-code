@@ -211,6 +211,7 @@ export const en: Record<string, string> = {
     "snapshots.rollbackHint": "Rolling back restores tracked files as of that moment; new untracked files created after the snapshot are kept. Save your work before rolling back.",
     "snapshots.rolling": "Rolling back…",
     "snapshots.title": "Roll workspace back to a snapshot",
+    "statusBar.total": "Total {tokens}",
     "thinkingBlock.label": "Thinking",
     "titleBar.maximize": "Maximize",
     "titleBar.minimize": "Minimize",

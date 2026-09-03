@@ -212,6 +212,7 @@ export const zh: Record<string, string> = {
     "snapshots.rollbackHint": "回滚恢复该时点已跟踪的文件；快照之后新建且未被跟踪的文件会保留。回滚前请确认已保存手头工作。",
     "snapshots.rolling": "回滚中…",
     "snapshots.title": "回滚工作区到快照",
+    "statusBar.total": "累计 {tokens}",
     "thinkingBlock.label": "思考",
     "titleBar.maximize": "最大化",
     "titleBar.minimize": "最小化",
