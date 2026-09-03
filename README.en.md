@@ -86,7 +86,7 @@ Staying true to the "minimal readable kernel" positioning: **small but complete 
 
 ## Contributing
 
-Issues and PRs welcome. Before submitting: `pnpm build` passes, `tsc --noEmit` clean, consistent style (prettier defaults); no external product names in this public repo.
+Issues and PRs welcome. Before submitting: `pnpm build` passes, `tsc --noEmit` clean, consistent style (prettier defaults).
 
 ## License
 

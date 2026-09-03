@@ -86,7 +86,7 @@ monorepo（pnpm workspace）：`domain`（agent 内核，纯 ESM）· `server`�
 
 ## 贡献
 
-欢迎 Issue 与 PR。提交前：`pnpm build` 通过、`tsc --noEmit` 干净、风格一致（prettier 默认配置）；公开仓库不写外部产品名。
+欢迎 Issue 与 PR。提交前：`pnpm build` 通过、`tsc --noEmit` 干净、风格一致（prettier 默认配置）。
 
 ## License
 
