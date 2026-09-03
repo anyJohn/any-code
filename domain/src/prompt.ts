@@ -2,6 +2,17 @@
 // 主 agent / plan sub-agent 的 system prompt、system prompt 注入段（workspace/memory）、
 // 上下文压缩（compact）的摘要器 prompt 均在此导出。
 
+import { createHash } from "node:crypto";
+
+/**
+ * AR-23：system prompt 指纹——sha256 前 16 hex。
+ * 动态装配内容（instruction/workspace note/memory/skills/rules）不入盘，
+ * 在会话日志留哈希作审计锚点：同 hash = 同装配结果，可严格比对崩溃前后上下文。
+ */
+export function systemFingerprint(systemContent: string): string {
+    return createHash("sha256").update(systemContent).digest("hex").slice(0, 16);
+}
+
 // ===== 主 agent / plan sub-agent system prompt =====
 
 export const systemPrompt = `

@@ -249,6 +249,7 @@ anycode 守"最小可读内核"定位：**小而全 + 真协议接入生态 + �
 | 后台运行与多 agent 并行（FR-30/SPEC-033） | 切换会话/关标签页不中止任务（关软件才停）；多项目多会话并行；侧栏状态徽标 + 跨会话 ask 提醒；断线自动重挂续传；任意视图显式 `/stop`；并发上限可配（满载排队） |
 | i18n 中英文切换（FR-29） | 顶栏一键切换全量 UI 文案；偏好持久化 config.yaml（跨端同源）、缺省跟随系统语言；轻量自研无框架依赖 |
 | 会话级用量统计（FR-22） | StatusBar + 会话列表显示累计 tokens；Usage 事件带模型戳入盘可回放；config pricing 配单价即显费用（缺省只显 tokens） |
+| 会话日志不变式（AR-23） | 非 system 消息必可从日志重建（三条压缩路径同步落盘 + 运行时断言告警）；system prompt 留 sha256 指纹（sysfp meta）；杀进程重启重建一致上下文，为 fork/审计打底 |
 | 内核可靠性（FR-6/AR-9/FR-11/FR-13/FR-12） | 分级压缩（microcompact+buffer 阈值+被动压缩）、sub-agent 能力补全、bash 后台任务、plan 模式（规划-审批） |
 | 工具系统升级（FR-10/AR-7/FR-8） | 参数 schema 校验 + 结构化 ToolResult + 工具元数据（readOnly/concurrencySafe）+ 并行执行 |
 | 快照与回滚（AR-4） | 写类工具前自动 shadow-git 快照（~/.anycode/snapshots/）+ /rewind 二次确认回滚 |

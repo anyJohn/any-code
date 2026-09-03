@@ -3,12 +3,14 @@ import {
     Session,
     SessionKey,
     SessionMeta,
+    SystemFingerprint,
     UsageDelta,
     createSession,
     entriesToSession,
     eventToEntry,
     metaEntry,
     messageToEntry,
+    sysFpMetaEntry,
     titleMetaEntry,
     touchMetaEntry,
     usageMetaEntry,
@@ -77,6 +79,15 @@ export class SessionService {
         usage: UsageDelta
     ): Promise<void> {
         await this.store.append(key, [eventToEntry(event), usageMetaEntry(usage)]);
+    }
+
+    /** AR-23：记录 system prompt 指纹（动态装配内容不入盘，哈希作审计锚点）。
+     *  每 run 装配结果变化时写一条；metaOf/entriesToSession 末条为准。 */
+    async appendSysFp(
+        key: SessionKey,
+        fp: SystemFingerprint
+    ): Promise<void> {
+        await this.store.append(key, [sysFpMetaEntry(fp)]);
     }
 
     /** 更新标题：追加一条新 meta（entriesToSession 取末条 meta 为准） */

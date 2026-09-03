@@ -15,6 +15,8 @@ export interface Session {
     updatedAt: number;
     /** FR-22：会话累计用量（meta 折叠；无 Usage 事件则缺省） */
     usage?: SessionUsage;
+    /** AR-23：最近一次请求的 system prompt 指纹 */
+    sysfp?: SystemFingerprint;
 }
 
 export interface SessionKey {
@@ -22,7 +24,7 @@ export interface SessionKey {
     sessionId: string;
 }
 
-/** JSONL 的一行：meta 记录标题/时间/用量增量，message 记录一条对话消息，event 记录非消息事件（如 Error） */
+/** JSONL 的一行：meta 记录标题/时间/用量增量/系统提示指纹，message 记录一条对话消息，event 记录非消息事件（如 Error） */
 export type SessionEntry =
     | {
           kind: "meta";
@@ -30,6 +32,8 @@ export type SessionEntry =
           updatedAt: number;
           /** FR-22：用量增量（Usage 事件落盘时同批写入，fold 求和得会话累计） */
           usage?: UsageDelta;
+          /** AR-23：system prompt 指纹（动态装配内容不入盘，留哈希作审计锚点；末条为准） */
+          sysfp?: SystemFingerprint;
       }
     | { kind: "message"; message: ChatMessage }
     | { kind: "event"; event: AgentEvent };
@@ -38,6 +42,13 @@ export type SessionEntry =
 export interface UsageDelta {
     promptTokens: number;
     completionTokens: number;
+    model?: string;
+}
+
+/** AR-23：system prompt 指纹（sha256 前 16 hex；hash 相同 = 装配结果一致） */
+export interface SystemFingerprint {
+    hash: string;
+    /** 产生该请求的模型 id（同模型同指纹才可严格比对） */
     model?: string;
 }
 
@@ -56,6 +67,8 @@ export interface SessionMeta {
     updatedAt: number;
     /** FR-22：会话累计用量（无 Usage 事件则缺省） */
     usage?: SessionUsage;
+    /** AR-23：最近一次请求的 system prompt 指纹（无记录则缺省） */
+    sysfp?: SystemFingerprint;
 }
 
 export const DEFAULT_TITLE = "New Session";
@@ -101,6 +114,11 @@ export function touchMetaEntry(): SessionEntry {
 /** FR-22：用量增量 meta（与 Usage 事件同批落盘；updatedAt 顺带刷新） */
 export function usageMetaEntry(delta: UsageDelta): SessionEntry {
     return { kind: "meta", updatedAt: Date.now(), usage: delta };
+}
+
+/** AR-23：system prompt 指纹 meta（每 run 装配结果变化时写一条；updatedAt 顺带刷新） */
+export function sysFpMetaEntry(fp: SystemFingerprint): SessionEntry {
+    return { kind: "meta", updatedAt: Date.now(), sysfp: fp };
 }
 
 export function messageToEntry(msg: ChatMessage): SessionEntry {
@@ -168,6 +186,14 @@ function summarizeMetas(metas: MetaEntry[]): {
     return { title: title ?? DEFAULT_TITLE, createdAt, updatedAt };
 }
 
+/** AR-23：取最近一次 system prompt 指纹（末条为准）。无记录返回 undefined。 */
+function lastSysFp(metas: MetaEntry[]): SystemFingerprint | undefined {
+    for (let i = metas.length - 1; i >= 0; i--) {
+        if (metas[i].sysfp) return metas[i].sysfp;
+    }
+    return undefined;
+}
+
 /** 从落盘条目重建 Session */
 export function entriesToSession(id: string, entries: SessionEntry[]): Session {
     const metas = entries.filter(isMeta);
@@ -182,6 +208,7 @@ export function entriesToSession(id: string, entries: SessionEntry[]): Session {
         createdAt,
         updatedAt,
         usage: foldUsage(metas), // FR-22
+        sysfp: lastSysFp(metas), // AR-23
     };
 }
 
@@ -193,5 +220,12 @@ export function metaOf(
     const metas = entries.filter(isMeta);
     if (metas.length === 0) return null;
     const { title, createdAt, updatedAt } = summarizeMetas(metas);
-    return { id, title, createdAt, updatedAt, usage: foldUsage(metas) }; // FR-22
+    return {
+        id,
+        title,
+        createdAt,
+        updatedAt,
+        usage: foldUsage(metas), // FR-22
+        sysfp: lastSysFp(metas), // AR-23
+    };
 }

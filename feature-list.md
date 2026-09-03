@@ -27,6 +27,8 @@
   - 首条任务用 LLM 自动起简短名（≤12 字、同语言；独立短调用、不进事件流；失败回退任务文本截断）
   - 支持 Session 重命名与删除
   - 后台运行与多 agent 并行（FR-30 / SPEC-033）：切换会话 / 关闭标签页不中止任务（agent 存活期 = server 进程存活期），关软件才全停；多项目多会话并行互不干扰；侧栏会话名右侧状态徽标（运行中 / 等待确认 / 排队中）；跨会话 pending ask 提醒条；断线自动重挂续传（GET /stream?since=N，不丢不重）；显式停止（POST /stop，任意视图可停）；并发上限 maxConcurrentRuns 可配（缺省 3，0=不限，满载排队）
+  - 会话级用量与成本统计（FR-22）：会话累计 prompt/completion tokens（StatusBar + 侧栏/Home 会话列表，多轮累计=各轮之和、重进会话仍在）；Usage 事件带模型戳入盘可回放；`config.yaml pricing` 段配模型单价（$/1M tokens）即显示费用（按模型逐条换算，缺省只显 tokens）
+  - 会话日志不变式（AR-23）：喂给模型的非 system 消息必可从日志重建（micro/全量/被动三条压缩路径全部同步落盘 + 运行时断言，破坏发 Warning）；system prompt 动态装配不入盘但留 sha256 指纹（sysfp meta，审计锚点）；任意时刻杀进程重启可重建一致上下文；为 fork / 分支 / 审计打底
 - Workspace / Project
   - 添加 / 删除 workspace
   - workspace 持久化（`~/.anycode/projects/<projectKey>/`，按工作区隔离、可 resume）

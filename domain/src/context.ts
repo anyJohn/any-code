@@ -49,4 +49,8 @@ export interface ToolContext {
     jobs?: JobRegistry;
     /** 生命周期钩子（AR-16）：before/afterToolCall；undefined = 未启用 */
     hooks?: ExtensionHooks;
+    /** AR-23 日志不变式：undefined = 不检查（sub-agent 隔离上下文不传）。
+     *  seen = 已确认落盘的消息身份集（main.ts 经 onMessage/compact 标记）；
+     *  agentLoop 每次 LLM 调用前断言请求内非 system 消息全部已落盘，破坏发 Warning。 */
+    logInvariant?: { seen: WeakSet<object>; warned?: boolean };
 }

@@ -592,6 +592,8 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
             messages: found.session.messages,
             events: found.session.events ?? [],
             projectKey: found.key.projectKey,
+            // AR-23：system prompt 指纹（动态装配内容不入盘，哈希作审计锚点）
+            sysfp: found.session.sysfp,
         });
     });
 

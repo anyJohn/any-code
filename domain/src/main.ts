@@ -31,6 +31,7 @@ import {
     memoryNote,
     shellNote,
     cleanSessionTitle,
+    systemFingerprint,
 } from "./prompt";
 import { resolveShellKind } from "./shell";
 import { callLLM } from "./llm";
@@ -95,6 +96,11 @@ class AnyAgent {
     // 项目扩展（AR-16）：自定义工具 + 生命周期钩子
     private extensionTools: Tool[] = [];
     private extensionHooks: ExtensionHooks = {};
+
+    /** AR-23：已确认落盘的消息身份集（onMessage / 压缩回调 / resume 标记；不变式断言用） */
+    private loggedMessages = new WeakSet<object>();
+    /** AR-23：上次写入日志的 system prompt 指纹（装配结果变化才写新条目） */
+    private lastSysFp: string | undefined;
     // 当前生效的 LLM provider 配置（多 provider + 流式开关）；create 时 initConfig 从 config.yaml 加载。
     // per-request 语义下热更 = 下一次 AnyAgent.create 重读磁盘，无需 reload 机制。
     private config!: Config;
@@ -210,6 +216,10 @@ class AnyAgent {
                 projectKey: this.projectKey,
                 sessionId: session.id,
             };
+            // AR-23：resume 出来的消息全部视为已落盘（日志即真值）
+            for (const m of session.messages) {
+                this.loggedMessages.add(m as unknown as object);
+            }
         } else {
             this.eventStream.submit({
                 type: "System",
@@ -354,6 +364,8 @@ class AnyAgent {
             session.messages.length = 0;
             session.messages.push(...res.messages);
             await this.service.replaceMessages(sessionKey, res.messages);
+            // AR-23：压缩产物（摘要消息等）视为已落盘
+            for (const m of res.messages) this.loggedMessages.add(m as unknown as object);
             this.eventStream.submit({
                 type: "Compact",
                 message: `已压缩上下文 ${res.beforeTokens}→${res.afterTokens} tokens`,
@@ -413,9 +425,29 @@ class AnyAgent {
 
         // 重建 system prompt 放 messages[0]（不入盘，每次保持最新）
         this.ensureSystemHead(session.messages);
+        // AR-23：system prompt 指纹——动态装配内容不入盘，哈希留日志作审计锚点
+        const sysFp = systemFingerprint(
+            (session.messages[0]?.content as string) ?? ""
+        );
+        if (sysFp !== this.lastSysFp) {
+            this.lastSysFp = sysFp;
+            try {
+                await this.service.appendSysFp(sessionKey, {
+                    hash: sysFp,
+                    model: this.config.getCurrentProvider().defaultModel,
+                });
+            } catch {
+                // 指纹写入失败不阻断任务
+            }
+        }
 
-        const onMessage = (msg: ChatMessage) =>
-            this.service.appendMessage(sessionKey, msg);
+        // AR-23：onMessage 标记"已落盘"身份（断言用）；onMessage 失败仍标记？
+        // 标记语义 = "已确认落盘"——appendMessage 抛错时不应标记，让断言能捕获。
+        const seen = this.loggedMessages;
+        const onMessage = async (msg: ChatMessage) => {
+            await this.service.appendMessage(sessionKey, msg);
+            seen.add(msg as unknown as object);
+        };
         // 每个任务一个独立的 AbortController，stop() abort 它
         const abortController = new AbortController();
         this.abortController = abortController;
@@ -437,6 +469,8 @@ class AnyAgent {
             jobs: this.jobRegistry,
             // AR-16：项目生命周期钩子
             hooks: this.extensionHooks,
+            // AR-23：日志不变式断言（seen 由 onMessage/压缩/resume 标记）
+            logInvariant: { seen: this.loggedMessages },
             // AR-4：写类工具执行前自动快照（label 带会话锚点）
             snapshot: {
                 snapshot: async (label: string) =>
@@ -453,8 +487,13 @@ class AnyAgent {
             onMessage,
             ctx,
             this.tools,
-            // 自动压缩落盘：agentLoop 原地替换 messages 后回调重写 session.jsonl
-            async (msgs) => this.service.replaceMessages(sessionKey, msgs)
+            // 自动压缩落盘：agentLoop 原地替换 messages 后回调重写 session.jsonl（AR-23：并标记已落盘）
+            async (msgs) => {
+                await this.service.replaceMessages(sessionKey, msgs);
+                for (const m of msgs) {
+                    this.loggedMessages.add(m as unknown as object);
+                }
+            }
         );
         this.abortController = null;
         // 终态信号：被 stop 中断 → STOPPED（前端显示"已停止任务"）；否则 DONE。

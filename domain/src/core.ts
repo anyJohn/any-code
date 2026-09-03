@@ -16,6 +16,24 @@ import {
 import { isContextOverflowError } from "./llm";
 
 /**
+ * AR-23 日志不变式：统计"未确认落盘却进入了模型请求"的非 system 消息数。
+ * seen 由 driving adapter（main.ts）经 onMessage / 压缩回调标记；>0 = 不变式破坏。
+ * system head（messages[0]）动态装配不入盘，不在检查范围。
+ */
+export function countUnloggedMessages(
+    messages: ChatMessage[],
+    seen: WeakSet<object>
+): number {
+    let n = 0;
+    for (let k = 1; k < messages.length; k++) {
+        const m = messages[k] as unknown as { role?: string };
+        if (m?.role === "system") continue;
+        if (!seen.has(messages[k] as unknown as object)) n++;
+    }
+    return n;
+}
+
+/**
  * 核心代码，实现AgentLoop，通过循环让大模型持续使用工具。
  * ctx 贯穿（eventStream + workspace）；tools 是该 agent 的工具集（schema + handler）。
  * onCompact：自动压缩替换 messages 后回调持久化（主 agent 落盘；sub-agent 传 undefined）。
@@ -63,6 +81,9 @@ export async function agentLoop(
             if (cleaned) {
                 const before = estimateTokens(messages);
                 lastUsage = undefined; // 下轮真实 usage 重新判定
+                // AR-23：micro 原地清了 tool result 内容——必须同步落盘，
+                // 否则内存与日志漂移，"喂给模型的必能从日志重建"被破坏。
+                await onCompact?.(messages);
                 ctx.eventStream.submit({
                     type: "Compact",
                     message: `已清理陈旧工具结果，释放上下文`,
@@ -117,6 +138,18 @@ export async function agentLoop(
             message: `Iteration ${i + 1}/${maxIter}`,
             turnId,
         });
+        // AR-23：运行时断言——进入请求的非 system 消息必须已确认落盘。
+        // 破坏只告警不阻断（审计信号，非安全闸）；每 run 至多一次防刷屏。
+        if (ctx.logInvariant && !ctx.logInvariant.warned) {
+            const unlogged = countUnloggedMessages(messages, ctx.logInvariant.seen);
+            if (unlogged > 0) {
+                ctx.logInvariant.warned = true;
+                ctx.eventStream.submit({
+                    type: "Warning",
+                    message: `日志不变式告警：${unlogged} 条消息未落盘即进入模型请求（AR-23）`,
+                });
+            }
+        }
         let msg;
         try {
             msg = await callLLM(

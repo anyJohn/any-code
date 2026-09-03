@@ -88,6 +88,10 @@ export class LocalSessionStore implements SessionStore {
             { kind: "meta", updatedAt: createdAt },
             { kind: "meta", title, updatedAt: now },
         ];
+        // FR-22/AR-23：保留原 usage 增量与 sysfp 指纹 meta——重写消息不重置累计/审计锚点
+        for (const m of metas) {
+            if (m.kind === "meta" && (m.usage || m.sysfp)) entries.push(m);
+        }
         for (const m of messages) {
             // system 不入盘（与 appendMessage 一致：system 每任务重建，不持久化）
             if ((m as unknown as Record<string, unknown>).role === "system") continue;
