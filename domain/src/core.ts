@@ -48,7 +48,8 @@ export async function agentLoop(
     tools: Tool[],
     onCompact?: (messages: ChatMessage[]) => void | Promise<void>
 ): Promise<AgentLoopResult> {
-    const maxIter = maxIterations ?? 30;
+    // 迭代上限缺省 150（用户决策 2026-09-03：30 对长任务太小；AgentDefinition.maxIterations 可覆盖）
+    const maxIter = maxIterations ?? 150;
     const userMsg: ChatMessage = {
         role: "user",
         content: task,
