@@ -12,8 +12,7 @@ import {
     saveProjectPermissions,
     createWorkspace,
     maskApiKey,
-    getRegisteredAbilities,
-    isAbilityEnabled,
+    toolCatalog,
     projectKeyOf,
     resolveContextWindow,
     resolveInteraction,
@@ -625,22 +624,24 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
             for (const [name, p] of Object.entries(cfg.providers)) {
                 providers[name] = { ...p, apiKey: maskApiKey(p.apiKey) };
             }
-            // 内置能力可枚举列表（注册器）+ 当前开关态（SPEC-031 B-012）
-            const registered = getRegisteredAbilities().map((a) => ({
-                name: a.name,
-                kind: a.kind,
-                description: a.description,
-                enabled: isAbilityEnabled(cfg, a.name),
+            // 通用工具目录（用户决策 2026-09-03）：全量工具 + config.tools 开关态
+            const catalog = toolCatalog().map((t) => ({
+                name: t.name,
+                description: t.description,
+                readOnly: t.readOnly,
+                enabled: cfg.tools[t.name]?.enabled !== false,
             }));
             return c.json({
                 providers,
                 default: cfg.default,
                 mcp: cfg.mcpServers,
-                abilities: { registered, config: cfg.abilities },
+                tools: { catalog, config: cfg.tools },
                 permissions: cfg.permissions,
                 maxConcurrentRuns: cfg.maxConcurrentRuns,
                 ui: cfg.ui,
                 pricing: cfg.pricing,
+                proxy: cfg.proxy,
+                noProxy: cfg.noProxy,
             });
         } catch {
             return c.json({ providers: {}, default: undefined, mcp: {} });
@@ -671,8 +672,6 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
             ),
             default: body.default,
             mcp: body.mcp,
-            // 表单未含的段（abilities）保留已存值，防部分提交误清
-            abilities: body.abilities ?? existing?.abilities,
             // 表单不含 gitBashPath（Windows 专用，install.ps1/launcher 维护）——保留已存值
             gitBashPath: body.gitBashPath ?? existing?.gitBashPath,
             // 表单不含 permissions 段时保留已存值（Settings 权限卡与整表单保存共用此路由）
@@ -683,6 +682,11 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
             ui: body.ui ?? existing?.ui,
             // 表单不含 pricing 段时保留已存值（FR-22 模型单价）
             pricing: body.pricing ?? existing?.pricing,
+            // 表单不含 tools 段时保留已存值（通用工具开关；abilities 旧段已由 Config 迁移）
+            tools: body.tools ?? existing?.tools,
+            // 表单不含 proxy 时保留已存值（全局出网代理）
+            proxy: body.proxy ?? existing?.proxy,
+            noProxy: body.noProxy ?? existing?.noProxy,
         };
         try {
             Config.save(merged);
@@ -823,11 +827,13 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
                 mcp: cfg.mcpServers,
                 // PATCH 只改 default/modelId/language——其余段原样保留，防误清
                 gitBashPath: cfg.gitBashPath,
-                abilities: cfg.abilities,
                 permissions: cfg.permissions,
                 maxConcurrentRuns: cfg.maxConcurrentRuns,
                 ui: cfg.ui,
                 pricing: cfg.pricing,
+                tools: cfg.tools,
+                proxy: cfg.proxy,
+                noProxy: cfg.noProxy,
             });
             return c.json({ statusMessage: "switched" });
         } catch (e) {
@@ -869,7 +875,7 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
                     default: cfg.default,
                     mcp: cfg.mcpServers,
                     gitBashPath: cfg.gitBashPath,
-                    abilities: cfg.abilities,
+                    tools: cfg.tools,
                     permissions: cfg.permissions,
                 });
             } else {

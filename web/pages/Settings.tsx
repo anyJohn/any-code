@@ -9,7 +9,7 @@ import {
     type ConfigResponse,
     type ProviderForm,
     type McpForm,
-    type RegisteredAbility,
+    type ToolCatalogItem,
     type PermissionRuleForm,
     emptyProvider,
     emptyMcp,
@@ -18,7 +18,7 @@ import {
 } from "./settings/model";
 import { DefaultProviderCard } from "./settings/DefaultProviderCard";
 import { ProvidersCard } from "./settings/ProvidersCard";
-import { AbilitiesCard } from "./settings/AbilitiesCard";
+import { ToolsCard } from "./settings/ToolsCard";
 import { McpCard } from "./settings/McpCard";
 import { PermissionsCard } from "./settings/PermissionsCard";
 
@@ -47,12 +47,10 @@ export default function SettingsPage() {
     );
     // name 必填校验：空（或全空白）→ 红框 + 提示，且不提交
     const [nameError, setNameError] = useState<Record<number, boolean>>({});
-    // 内置能力（SPEC-031 B-012）：注册器列表 + 开关态 + 原始 config（保存时保留 provider/apiKey 等）
-    const [abilities, setAbilities] = useState<RegisteredAbility[]>([]);
-    const [abilityOn, setAbilityOn] = useState<Record<string, boolean>>({});
-    const [abilityCfg, setAbilityCfg] = useState<
-        Record<string, Record<string, unknown>>
-    >({});
+    // 通用工具目录（用户决策 2026-09-03）：全量工具 + 开关态 + 原始 config（保存时保留 provider/apiKey/cdpUrl 等）
+    const [tools, setTools] = useState<ToolCatalogItem[]>([]);
+    const [toolOn, setToolOn] = useState<Record<string, boolean>>({});
+    const [toolCfg, setToolCfg] = useState<Record<string, Record<string, unknown>>>({});
     // 工具权限（SPEC-032）：模式 + 全局规则 + 危险命令基线
     const [permMode, setPermMode] = useState<"standard" | "accept_edits" | "trusted">("standard");
     const [permRules, setPermRules] = useState<PermissionRuleForm[]>([]);
@@ -67,16 +65,12 @@ export default function SettingsPage() {
             }
             const { providers: ps, default: d, mcp: ms } = fromResponse(res);
             setProviders(ps);
-            // 内置能力：注册器列表 + 开关初始化（config 显式 enabled 为准，缺省关）
-            const reg = res.abilities?.registered ?? [];
-            const cfgMap = res.abilities?.config ?? {};
-            setAbilities(reg);
-            setAbilityCfg(cfgMap);
-            setAbilityOn(
-                Object.fromEntries(
-                    reg.map((a) => [a.name, cfgMap[a.name]?.enabled === true])
-                )
-            );
+            // 通用工具：目录 + 开关初始化（enabled=false 才关；未配置 = 启用）
+            const reg = res.tools?.catalog ?? [];
+            const cfgMap = res.tools?.config ?? {};
+            setTools(reg);
+            setToolCfg(cfgMap);
+            setToolOn(Object.fromEntries(reg.map((x) => [x.name, x.enabled])));
             setNameCommitted(
                 Object.fromEntries(ps.map((p, i) => [i, p.name.trim()]))
             );
@@ -128,17 +122,17 @@ export default function SettingsPage() {
     const removeMcp = (i: number) =>
         setMcp((p) => p.filter((_, idx) => idx !== i));
 
-    const patchAbilityCfg = (name: string, patch: Record<string, unknown>) =>
-        setAbilityCfg((cfg) => ({
+    const patchToolCfg = (name: string, patch: Record<string, unknown>) =>
+        setToolCfg((cfg) => ({
             ...cfg,
             [name]: { ...(cfg[name] ?? {}), ...patch },
         }));
-    const toggleAbility = (name: string, v: boolean) =>
-        setAbilityOn((on) => ({ ...on, [name]: v }));
+    const toggleTool = (name: string, v: boolean) =>
+        setToolOn((on) => ({ ...on, [name]: v }));
 
     const save = async () => {
         setSaving(true);
-        const body = toConfigShape(providers, def, mcp, abilityCfg, abilityOn, {
+        const body = toConfigShape(providers, def, mcp, toolCfg, toolOn, {
             mode: permMode,
             rules: permRules,
             dangerPatterns: permDanger,
@@ -221,12 +215,12 @@ export default function SettingsPage() {
                             addProvider={addProvider}
                             removeProvider={removeProvider}
                         />
-                        <AbilitiesCard
-                            abilities={abilities}
-                            abilityOn={abilityOn}
-                            onToggle={toggleAbility}
-                            abilityCfg={abilityCfg}
-                            patchCfg={patchAbilityCfg}
+                        <ToolsCard
+                            tools={tools}
+                            toolOn={toolOn}
+                            onToggle={toggleTool}
+                            toolCfg={toolCfg}
+                            patchCfg={patchToolCfg}
                         />
                         <McpCard
                             mcp={mcp}

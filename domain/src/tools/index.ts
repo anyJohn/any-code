@@ -27,6 +27,13 @@ import {
     jobOutputSchema,
     jobKillSchema,
 } from "./schema";
+import { webFetchTool } from "./functions/webFetchTool";
+import { webSearchTool } from "./functions/webSearchTool";
+import {
+    browserNavigateTool,
+    browserContentTool,
+    browserEvalTool,
+} from "./functions/browserUseTool";
 
 /**
  * 工具元数据（AR-7）：缺省按最保守处理（非只读、非并发安全）——
@@ -136,6 +143,12 @@ const builtinTools: Tool[] = [
     skillTool,
     jobOutputTool,
     jobKillTool,
+    // web 原生工具（用户决策 2026-09-03：取代内置 MCP 连接器；代理走全局 dispatcher）
+    webFetchTool,
+    webSearchTool,
+    browserNavigateTool,
+    browserContentTool,
+    browserEvalTool,
 ];
 
 const ToolKit = {
@@ -144,3 +157,36 @@ const ToolKit = {
 };
 
 export { ToolKit };
+
+/** 工具目录条目：Settings 面板 / config.tools 键位展示用。 */
+export interface ToolCatalogEntry {
+    name: string;
+    description: string;
+    readOnly: boolean;
+}
+
+/** 全部内置工具目录（注册序）。 */
+export function toolCatalog(): ToolCatalogEntry[] {
+    return builtinTools.map((t) => ({
+        name: (t.schema as { function?: { name?: string } }).function?.name ?? "?",
+        description:
+            (t.schema as { function?: { description?: string } }).function
+                ?.description ?? "",
+        readOnly: t.meta?.readOnly === true,
+    }));
+}
+
+/**
+ * 按通用工具开关过滤（用户决策 2026-09-03）：config.tools.<名>.enabled === false
+ * → 剔除（LLM 不可见、不可调用）；未配置 = 启用。对全部工具生效（含扩展/MCP 注入的）。
+ */
+export function filterEnabledTools(
+    tools: Tool[],
+    toolsConfig: Record<string, import("../config").ToolConfigEntry> | undefined
+): Tool[] {
+    return tools.filter((t) => {
+        const n = (t.schema as { function?: { name?: string } }).function?.name;
+        if (!n) return true; // 无名工具（防御）保留
+        return toolsConfig?.[n]?.enabled !== false;
+    });
+}

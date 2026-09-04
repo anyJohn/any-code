@@ -8,7 +8,7 @@
  *
  * 自包含：web/dist + rg + (win) busybox 全 bundle 进 resources/，双击即用、不依赖 prior install。
  */
-import { app, BrowserWindow, ipcMain, Menu } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, session } from "electron";
 import { createServer } from "node:net";
 import path from "node:path";
 import { start } from "@any-code/server";
@@ -63,10 +63,41 @@ function freePort(startPort: number): Promise<number> {
     });
 }
 
+/** 系统代理探测（用户决策 2026-09-03）：GUI 启动读不到 shell 环境变量，
+ *  经 Chromium 代理解析（Windows WinINET / macOS 系统代理 / Linux gsettings——
+ *  即 clash/v2rayN"设为系统代理"写入的位置）注入标准 https_proxy env，
+ *  domain netProxy 的 EnvHttpProxyAgent 会拾取。仅进程 env 未设时注入。 */
+async function detectSystemProxy(): Promise<void> {
+    if (
+        process.env.https_proxy ||
+        process.env.HTTPS_PROXY ||
+        process.env.http_proxy
+    ) {
+        return;
+    }
+    try {
+        const info = await session.defaultSession.resolveProxy(
+            "https://example.com"
+        );
+        const proxy = /\bPROXY\s+([^\s;]+)/i.exec(info);
+        if (proxy) {
+            process.env.https_proxy = `http://${proxy[1]}`;
+            console.log(">> anycode desktop: system proxy detected:", proxy[1]);
+        } else if (/\bSOCKS/i.test(info)) {
+            console.log(
+                ">> anycode desktop: 系统代理为 SOCKS，自动探测暂不支持——请在 ~/.anycode/config.yaml 配置 proxy（HTTP 端口）"
+            );
+        }
+    } catch {
+        // 探测失败静默直连
+    }
+}
+
 async function boot() {
     // 防双启动：mac 关窗后 app 驻 Dock，activate 重触发 boot 时 server/窗口还在就直接返回。
     if (serverHandle || mainWindow) return;
 
+    await detectSystemProxy();
     const port = await freePort(3000);
     try {
         serverHandle = await start({

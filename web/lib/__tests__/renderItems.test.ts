@@ -328,7 +328,7 @@ describe("groupByTurn 终态闭合思考（bugfix）", () => {
             ev("Done", "done", { timestamp: 3000 }),
         ]);
         const turn = items.find((i) => i.kind === "turn");
-        if (turn.kind === "turn") {
+        if (turn && turn.kind === "turn") {
             expect(turn.thinkingFinished).toBe(true);
             expect(turn.thinkingEndedAt).toBe(1500);
         }

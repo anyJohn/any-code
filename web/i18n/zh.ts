@@ -1,16 +1,12 @@
 // 中文文案源（FR-29）。key 约定：<component>.<descriptor>，camelCase 扁平。
 // en 缺 key 时回退本表；本表也缺则显示 key 本身。
 export const zh: Record<string, string> = {
-    "abilitiesCard.apiKeyFree": "（ddg 免 key）",
-    "abilitiesCard.apiKeyPlaceholder": "ddg 可留空",
-    "abilitiesCard.apiKeyRequired": "（必填）",
-    "abilitiesCard.cdpUrlHint": "启动 chrome --remote-debugging-port=9222 后填 {url}（连接器自动发现 page）",
-    "abilitiesCard.cdpUrlLabel": "浏览器调试地址（cdpUrl）",
-    "abilitiesCard.connector": "连接器",
-    "abilitiesCard.empty": "（无内置能力）",
-    "abilitiesCard.enable": "启用 {name}",
-    "abilitiesCard.searchProvider": "搜索服务",
-    "abilitiesCard.title": "内置能力",
+    "toolsCard.apiKeyFree": "（ddg 免 key）",
+    "toolsCard.apiKeyPlaceholder": "ddg 可留空",
+    "toolsCard.apiKeyRequired": "（必填）",
+    "toolsCard.cdpUrlHint": "启动 chrome --remote-debugging-port=9222 后填 {url}（连接器自动发现 page）",
+    "toolsCard.cdpUrlLabel": "浏览器调试地址（cdpUrl）",
+    "toolsCard.searchProvider": "搜索服务",
     "agent.connectionLost": "连接中断，多次重连失败；任务仍在后台运行，可稍后重进会话查看。",
     "agent.queuedTaskCancelled": "已取消排队任务",
     "agent.runFailed": "运行失败，请检查服务端状态",

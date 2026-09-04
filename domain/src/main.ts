@@ -8,8 +8,6 @@ import { agentLoop } from "./core";
 import { compactMessages } from "./compact";
 import { loadRule } from "./rule";
 import { resolveSkills, renderSkillCatalog } from "./skill";
-// 注册内置连接器能力（FE-022）：import 副作用——registry 常驻，Settings/initMcp 可枚举
-import "./builtin";
 import { seedBuiltinSkills } from "./seed";
 import { EventStream } from "./eventStream";
 import {
@@ -22,10 +20,10 @@ import {
 import { createWorkspace, Workspace } from "./workspace";
 import { mainAgent } from "./agent";
 import type { AgentDefinition } from "./agent";
-import type { Tool } from "./tools";
+import { Tool, filterEnabledTools } from "./tools";
 import { loadMcpTools, loadProjectMcp, type McpServerConfig } from "./mcp";
-import { getRegisteredAbilities, isAbilityEnabled } from "./abilities";
 import { Config } from "./config";
+import { applyProxyConfig } from "./netProxy";
 import {
     workspaceNote,
     memoryNote,
@@ -140,6 +138,8 @@ class AnyAgent {
      *  callLLM 直接用（配则传 max_tokens，不配则不传，provider 默认）。SPEC-019 B-004 / SPEC-023。 */
     private async initConfig(): Promise<void> {
         this.config = Config.load();
+        // 全局出网代理（用户决策 2026-09-03）：config.proxy > 环境变量；幂等（key 不变不重建）
+        applyProxyConfig(this.config.proxy, this.config.noProxy);
         const provider = this.config.getCurrentProvider();
         const ctx = await detectContextWindow(provider);
         provider.contextWindow = resolveContextWindow(provider, ctx);
@@ -164,36 +164,15 @@ class AnyAgent {
         for (const w of ext.warnings) {
             this.eventStream.submit({ type: "Warning", message: w });
         }
+        // 通用工具开关（用户决策 2026-09-03）：enabled=false 的工具从注册表剔除；
+        // toolsConfig 注入 ctx 供 handler 读取私有配置。ext.tools 在过滤前并入，同样受开关约束。
+        this.tools = filterEnabledTools(this.tools, this.config.tools);
     }
 
     /** 加载 MCP 工具（真协议连接），追加到工具集，per-agent 生命周期绑定。 */
     private async initMcp(): Promise<void> {
         try {
-            // 三层合并（SPEC-031 B-007，整条覆盖：后层整条替换低层同名）：
-            //   内置连接器（启用的 kind:mcp abilities，最低） < 全局 config.mcpServers < 项目 mcp.yaml
-            const builtinMcp: Record<string, McpServerConfig> = {};
-            for (const a of getRegisteredAbilities()) {
-                if (
-                    a.kind !== "mcp" ||
-                    !isAbilityEnabled(this.config, a.name)
-                ) {
-                    continue;
-                }
-                // 能力私有 config（provider/apiKey 等）以 ABILITY_CONFIG JSON 注入 server env
-                const extra = this.config.abilities[a.name]?.config ?? {};
-                builtinMcp[a.name] =
-                    a.server.type === "stdio" && Object.keys(extra).length
-                        ? {
-                              ...a.server,
-                              env: {
-                                  ...a.server.env,
-                                  ABILITY_CONFIG: JSON.stringify(extra),
-                              },
-                          }
-                        : a.server;
-            }
             const merged = {
-                ...builtinMcp,
                 ...this.config.mcpServers,
                 ...loadProjectMcp(this.workspace),
             };
@@ -469,6 +448,14 @@ class AnyAgent {
             jobs: this.jobRegistry,
             // AR-16：项目生命周期钩子
             hooks: this.extensionHooks,
+            // 通用工具私有配置（用户决策 2026-09-03）：web_search provider/apiKey、browser_* cdpUrl 等
+            toolsConfig: this.config.tools
+                ? Object.fromEntries(
+                      Object.entries(this.config.tools)
+                          .filter(([, e]) => e.config && typeof e.config === "object")
+                          .map(([k, e]) => [k, e.config as Record<string, unknown>])
+                  )
+                : undefined,
             // AR-23：日志不变式断言（seen 由 onMessage/压缩/resume 标记）
             logInvariant: { seen: this.loggedMessages },
             // AR-4：写类工具执行前自动快照（label 带会话锚点）

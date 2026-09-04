@@ -201,8 +201,6 @@ export interface ConfigShape {
     mcp?: Record<string, McpServerConfig>;
     /** Windows 上 agent bash 工具用的 shell 路径（config.yaml 配，非 env）。install.ps1 写入 busybox sh.exe 路径。 */
     gitBashPath?: string;
-    /** 内置能力开关（SPEC-031）：未配置 = 不启用；随包默认 config 预置三能力开。条目可带 config（provider/连接器参数）。 */
-    abilities?: Record<string, AbilityConfig>;
     /** 工具权限配置（SPEC-032）：模式 + 用户规则 + 危险命令基线增删。 */
     permissions?: PermissionsConfig;
     /** server 并发运行上限（FR-30 / SPEC-033 DEC-102）：缺省 3，0 = 不限。 */
@@ -211,12 +209,28 @@ export interface ConfigShape {
     ui?: { language?: "zh" | "en" };
     /** 模型单价（FR-22）：美元 / 每 1M tokens。缺省不配 → 界面只显 tokens 不显费用。 */
     pricing?: Record<string, ModelPricing>;
+    /** 全局出网代理（用户决策 2026-09-03）：所有联网操作（LLM / web 工具 / MCP SSE）统一走此代理。 */
+    proxy?: string;
+    /** 代理豁免清单（逗号分隔，支持后缀匹配）；本地回环始终直连。 */
+    noProxy?: string;
+    /** 通用工具开关与配置（用户决策 2026-09-03）：key = 工具名；enabled=false 剔除该工具（未配置 = 启用）。 */
+    tools?: Record<string, ToolConfigEntry>;
+    /** @deprecated 旧内置能力段（SPEC-031）——load 时迁移到 tools 段，保存不再写出。 */
+    abilities?: Record<string, AbilityConfig>;
 }
 
 /** 模型单价（FR-22）：input/output = 每百万 tokens 的美元单价。 */
 export interface ModelPricing {
     input: number;
     output: number;
+}
+
+/** 通用工具条目（用户决策 2026-09-03）：每个工具可开关 + 私有配置。 */
+export interface ToolConfigEntry {
+    /** 显式 false = 从工具集剔除；未配置 / true = 启用 */
+    enabled?: boolean;
+    /** 工具私有配置（web_search: provider/apiKey；browser_*: cdpUrl…），经 ctx.toolsConfig 注入 */
+    config?: Record<string, unknown>;
 }
 
 /** 单个能力配置：enabled 开关 + 能力私有 config（如 web-search 的 provider/apiKey）。 */
@@ -269,8 +283,12 @@ export class Config {
     mcpServers: Record<string, McpServerConfig>;
     /** Windows agent bash 用的 Git Bash 路径（~/.anycode/config.yaml 顶层 gitBashPath）。 */
     gitBashPath?: string;
-    /** 内置能力开关（SPEC-031 B-002）：未配置 = 不启用。 */
-    abilities: Record<string, AbilityConfig>;
+    /** 全局出网代理（用户决策 2026-09-03）：undefined = 不走代理（环境变量仍生效，经 netProxy）。 */
+    proxy?: string;
+    /** 代理豁免清单（逗号分隔）；本地回环始终直连。 */
+    noProxy?: string;
+    /** 通用工具开关与配置（用户决策 2026-09-03）：enabled=false 的工具从注册表剔除。 */
+    tools: Record<string, ToolConfigEntry>;
     /** 工具权限配置（SPEC-032）：模式 + 全局规则 + 危险基线增删。 */
     permissions: Required<PermissionsConfig>;
     /** server 并发运行上限（FR-30）：缺省 3，0 = 不限。server 侧消费，domain 仅承载。 */
@@ -285,7 +303,9 @@ export class Config {
         def: string,
         mcpServers: Record<string, McpServerConfig>,
         gitBashPath: string | undefined,
-        abilities: Record<string, AbilityConfig>,
+        proxy: string | undefined,
+        noProxy: string | undefined,
+        tools: Record<string, ToolConfigEntry>,
         permissions: Required<PermissionsConfig>,
         maxConcurrentRuns: number,
         ui: { language?: "zh" | "en" },
@@ -295,7 +315,9 @@ export class Config {
         this.default = def;
         this.mcpServers = mcpServers;
         this.gitBashPath = gitBashPath;
-        this.abilities = abilities;
+        this.proxy = proxy;
+        this.noProxy = noProxy;
+        this.tools = tools;
         this.permissions = permissions;
         this.maxConcurrentRuns = maxConcurrentRuns;
         this.ui = ui;
@@ -306,8 +328,7 @@ export class Config {
         const file = globalConfigFile();
         if (!existsSync(file)) {
             // 首次启动：自动创建默认配置模板（用户经 /settings 填 apiKey）。
-            // abilities：随包默认 config 预置 web-fetch/web-search 开启（SPEC-031 B-002 / AC-003）；
-            // browser-use（CDP）需 cdpUrl 默认关，用户配了再开。
+            // tools：web_fetch / web_search 缺省开；browser_*（CDP）需浏览器调试端口，缺省关。
             Config.save({
                 providers: {
                     default: {
@@ -319,13 +340,13 @@ export class Config {
                     },
                 },
                 default: "default",
-                abilities: {
-                    "web-fetch": { enabled: true },
-                    "web-search": {
+                tools: {
+                    web_fetch: { enabled: true },
+                    web_search: {
                         enabled: true,
                         config: { provider: "ddg", apiKey: "" },
                     },
-                    "browser-use": {
+                    browser_navigate: {
                         enabled: false,
                         config: { cdpUrl: "http://127.0.0.1:9222" },
                     },
@@ -357,7 +378,9 @@ export class Config {
             resolvedDef,
             mcpServers,
             parsed?.gitBashPath,
-            parsed?.abilities ?? {},
+            normalizeProxy(parsed?.proxy),
+            normalizeNoProxy(parsed?.noProxy),
+            normalizeTools(parsed?.tools, parsed?.abilities),
             normalizePermissions(parsed?.permissions),
             normalizeMaxConcurrentRuns(parsed?.maxConcurrentRuns),
             normalizeUi(parsed?.ui),
@@ -425,11 +448,14 @@ export class Config {
                 default: def,
                 mcp: data.mcp ?? {},
                 gitBashPath: data.gitBashPath,
-                abilities: data.abilities ?? {},
+                // abilities 段已废弃（迁移到 tools），保存不再写出
                 permissions: normalizePermissions(data.permissions),
                 maxConcurrentRuns: normalizeMaxConcurrentRuns(data.maxConcurrentRuns),
                 ui: normalizeUi(data.ui),
                 pricing: normalizePricing(data.pricing),
+                proxy: normalizeProxy(data.proxy),
+                noProxy: normalizeNoProxy(data.noProxy),
+                tools: normalizeTools(data.tools),
             }),
             "utf-8"
         );
@@ -467,6 +493,61 @@ function normalizePricing(
             p.output > 0
         ) {
             out[model] = { input: p.input, output: p.output };
+        }
+    }
+    return out;
+}
+
+/** proxy 归一化（用户决策 2026-09-03）：仅接受 http(s):// URL，其余视为未设置。 */
+function normalizeProxy(v?: string): string | undefined {
+    if (typeof v !== "string" || !v.trim()) return undefined;
+    try {
+        const u = new URL(v.trim());
+        return u.protocol === "http:" || u.protocol === "https:" ? u.origin : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+/** noProxy 归一化：字符串原样（逗号分隔，EnvHttpProxyAgent 解析），仅 trim。 */
+function normalizeNoProxy(v?: string): string | undefined {
+    const s = typeof v === "string" ? v.trim() : "";
+    return s || undefined;
+}
+
+/** 旧 abilities 段 → tools 段的 key 映射（用户决策 2026-09-03）。 */
+const ABILITY_TOOL_MAP: Record<string, string[]> = {
+    "web-fetch": ["web_fetch"],
+    "web-search": ["web_search"],
+    "browser-use": ["browser_navigate", "browser_content", "browser_eval"],
+};
+
+/** tools 段归一化：enabled 仅认 boolean；config 仅收对象。旧 abilities 段迁移（tools 显式条目优先）。 */
+function normalizeTools(
+    v?: Record<string, ToolConfigEntry>,
+    legacyAbilities?: Record<string, AbilityConfig>
+): Record<string, ToolConfigEntry> {
+    const out: Record<string, ToolConfigEntry> = {};
+    for (const [name, e] of Object.entries(v ?? {})) {
+        if (!e || typeof e !== "object") continue;
+        const entry: ToolConfigEntry = {};
+        if (typeof e.enabled === "boolean") entry.enabled = e.enabled;
+        if (e.config && typeof e.config === "object" && !Array.isArray(e.config)) {
+            entry.config = e.config;
+        }
+        out[name] = entry;
+    }
+    for (const [abilityName, e] of Object.entries(legacyAbilities ?? {})) {
+        const toolNames = ABILITY_TOOL_MAP[abilityName];
+        if (!toolNames || !e || typeof e !== "object") continue;
+        for (const toolName of toolNames) {
+            if (out[toolName]) continue; // tools 段显式条目优先
+            const entry: ToolConfigEntry = {};
+            if (typeof e.enabled === "boolean") entry.enabled = e.enabled;
+            if (e.config && typeof e.config === "object" && !Array.isArray(e.config)) {
+                entry.config = e.config;
+            }
+            out[toolName] = entry;
         }
     }
     return out;

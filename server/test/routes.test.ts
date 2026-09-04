@@ -76,7 +76,7 @@ describe("@any-code/server routes", () => {
     });
 });
 
-// 配置抹除回归：POST/PATCH /api/config 不得丢掉表单之外的段（gitBashPath/abilities）。
+// 配置抹除回归：POST/PATCH /api/config 不得丢掉表单之外的段（gitBashPath/tools）。
 // 用临时 HOME 隔离（globalConfigDir 每次 call 读 os.homedir() → HOME env），不动真实 ~/.anycode。
 describe("POST/PATCH /api/config 保留非表单段", () => {
     const app = createApp();
@@ -97,8 +97,8 @@ describe("POST/PATCH /api/config 保留非表单段", () => {
                 "    defaultModel: m1",
                 "default: openai",
                 "gitBashPath: C:\\Git\\bin\\bash.exe",
-                "abilities:",
-                "  web-fetch:",
+                "tools:",
+                "  web_fetch:",
                 "    enabled: true",
             ].join("\n"),
             "utf-8"
@@ -113,7 +113,7 @@ describe("POST/PATCH /api/config 保留非表单段", () => {
     const readCfg = (): string =>
         readFileSync(join(home, ".anycode", "config.yaml"), "utf-8");
 
-    it("POST 保存表单后 gitBashPath / abilities 保留", async () => {
+    it("POST 保存表单后 gitBashPath / tools 保留", async () => {
         const res = await app.request("/api/config", {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -133,11 +133,11 @@ describe("POST/PATCH /api/config 保留非表单段", () => {
         expect(res.status).toBe(200);
         const cfg = readCfg();
         expect(cfg).toContain("gitBashPath: C:\\Git\\bin\\bash.exe");
-        expect(cfg).toContain("web-fetch:");
+        expect(cfg).toContain("web_fetch:");
         expect(cfg).toContain("enabled: true");
     });
 
-    it("PATCH 切默认模型后 gitBashPath / abilities 保留", async () => {
+    it("PATCH 切默认模型后 gitBashPath / tools 保留", async () => {
         const res = await app.request("/api/config", {
             method: "PATCH",
             headers: { "content-type": "application/json" },
@@ -146,7 +146,7 @@ describe("POST/PATCH /api/config 保留非表单段", () => {
         expect(res.status).toBe(200);
         const cfg = readCfg();
         expect(cfg).toContain("gitBashPath: C:\\Git\\bin\\bash.exe");
-        expect(cfg).toContain("web-fetch:");
+        expect(cfg).toContain("web_fetch:");
     });
 
     it("PATCH language → 写入 ui.language；maxConcurrentRuns 等其余段保留（FR-29）", async () => {

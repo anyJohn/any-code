@@ -1,10 +1,10 @@
 import type { ConfigShape } from "@any-code/domain";
 
 /** GET 响应形状（apiKey 已脱敏）。 */
-export interface RegisteredAbility {
+export interface ToolCatalogItem {
     name: string;
-    kind: "mcp";
     description: string;
+    readOnly: boolean;
     enabled: boolean;
 }
 
@@ -23,9 +23,9 @@ export interface ConfigResponse {
     >;
     default?: string;
     mcp: Record<string, Record<string, unknown>>;
-    /** 内置能力（注册器可枚举 + 当前开关态）。SPEC-031 B-012 */
-    abilities?: {
-        registered: RegisteredAbility[];
+    /** 通用工具目录（用户决策 2026-09-03：全量工具 + config.tools 开关态）。 */
+    tools?: {
+        catalog: ToolCatalogItem[];
         config: Record<string, Record<string, unknown>>;
     };
     /** 工具权限（SPEC-032）：模式 + 全局规则 + 危险命令基线。 */
@@ -185,8 +185,8 @@ export function toConfigShape(
     providers: ProviderForm[],
     def: string,
     mcp: McpForm[],
-    abilityCfg?: Record<string, Record<string, unknown>>,
-    abilityOn?: Record<string, boolean>,
+    toolCfg?: Record<string, Record<string, unknown>>,
+    toolOn?: Record<string, boolean>,
     permissions?: {
         mode: "standard" | "accept_edits" | "trusted";
         rules: PermissionRuleForm[];
@@ -253,11 +253,11 @@ export function toConfigShape(
         providers: pOut,
         default: def,
         mcp: mOut,
-        // 内置能力：只写开关过的条目（保留原始 config 字段：provider/apiKey 等）
-        abilities: Object.fromEntries(
-            Object.entries(abilityOn ?? {}).map(([name, on]) => [
+        // 通用工具开关：只写开关过的条目（保留原始 config 字段：provider/apiKey/cdpUrl 等）
+        tools: Object.fromEntries(
+            Object.entries(toolOn ?? {}).map(([name, on]) => [
                 name,
-                { ...(abilityCfg?.[name] ?? {}), enabled: on },
+                { ...(toolCfg?.[name] ?? {}), enabled: on },
             ])
         ),
         // 权限：undefined = 表单未含该卡（保留已存值，server 端 merge）

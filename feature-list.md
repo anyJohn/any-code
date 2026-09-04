@@ -15,9 +15,9 @@
   - Global 级别 Skill（`~/.anycode/skills/`）
   - 兼容 `~/.agents/skills/` 目录下 Skill（已实现，最低用户层）
   - 技能即文件：目录制 `<name>/SKILL.md`（可带 `references/scripts/assets` 子目录，agent 可读）或平铺 `<name>.md`；内置技能 = seed 机制（首启把随包技能拷进 `~/.anycode/skills/`，幂等不覆盖用户修改，落地即普通全局技能，FE-022）
-  - 已内置 anycode-docs 技能（AnyCode 自身配置与管理手册：改 config/mcp/abilities/skills/rules/memory + 生效时机，让 agent 能自我管理配置）
+  - 已内置 anycode-docs 技能（AnyCode 自身配置与管理手册：改 config/mcp/tools/skills/rules/memory + 生效时机，让 agent 能自我管理配置）
   - 已内置 office-mcp 技能（Office 39 工具：Word/Excel/PPT/PDF/OCR，MIT + 三审；未发 npm，需首次 clone+build 配 MCP）
-  - 内置连接器（abilities 注册器——仅 mcp：web-fetch / web-search / browser-use 真浏览器 CDP，可开关不可删，FE-022）
+  - 原生 web 工具（用户决策 2026-09-03，取代内置 MCP 连接器）：`web_fetch`（网页→Markdown）/ `web_search`（ddg 免 key，可换 tavily/bing）/ `browser_navigate·content·eval`（真浏览器 CDP：导航/读页/点击填表）
 - Memory
   - 原文层：Session History（durable 事件日志，含 thinking / tool call / 报错 / usage 等，reload 重放）
   - 摘要层：Global + Workspace/project 的跨 Session 摘要，经 `save_memory` agent tool 主动写入（LLM 决定记什么）
@@ -43,7 +43,7 @@
   - `save_memory`，写入项目级与用户级记忆
   - `ask_question`，向 human 提问 / 让 human 选择（经 InteractionModal）
   - `use_skill`，按名读技能全文（目录注入 <available_skills>，正文按需取）
-  - 内置连接器工具：`web_search` / `web_fetch`（联网，回显只显搜索词与 URL）、browser-use（`browser_navigate/content/eval` 真 CDP）
+  - 原生 web 工具（用户决策 2026-09-03）：`web_search` / `web_fetch`（联网）、`browser_navigate/content/eval` 真 CDP——不再有 MCP 间接层
 - compact（上下文压缩）
   - 单 session 真实 usage ≥ 75% 自动压缩
   - 手动指令 `/compact [聚焦]` 压缩
@@ -52,6 +52,8 @@
 - bash 输出治理（AR-2）：双限截断（2000 行/40KB）+ 全量 spill 文件（结果附路径）；timeout_ms 可配（1-600s）
 - LLM 调用重试（AR-1）：429/5xx/网络/空响应指数退避 + 抖动（默认 3 次，provider.retry 可配），Retry-After 优先，重试发 Warning 可见
 - 上下文分级压缩（FR-6）：microcompact 清陈旧 tool result 先于全量摘要；阈值=窗口-13k buffer；超限被拒→被动压缩重试（AR-9）
+- 全局出网代理（用户决策 2026-09-03）：config.yaml 顶层 `proxy` 单一来源——LLM 调用 / web 工具 / MCP SSE 全部经此（undici 全局 dispatcher，流式无损）；`no_proxy` 豁免 + 本地回环直连；桌面端自动探测系统代理（Electron resolveProxy）；环境变量兜底
+- 通用工具开关（用户决策 2026-09-03）：config.yaml `tools` 段每个工具可 enabled 开关 + 私有配置（web_search 的 provider/apiKey、browser_* 的 cdpUrl），扩展/MCP 工具同样生效；旧 abilities 段自动迁移
 - sub-agent 补全（FR-11）：技能/权限/快照透传，def 可指定 provider/model，委托深度限制防递归
 - bash 后台任务（FR-13）：run_in_background 返回 job_id；job_output 查询/job_kill 终止；agent 销毁清理
 - plan 模式（FR-12）：只读规划产出计划（Planning 事件）→ 用户批准 → 按计划执行；拒绝可修订（至多 3 轮）
@@ -123,7 +125,7 @@
 - 权限裁决 PermissionModal：危险操作执行前弹窗（允许一次 / 永久允许含范围勾选 / 拒绝）；Settings 工具权限卡（模式三档 + 全局/项目规则增删 + 危险基线增删）
 - 输入 InputBox：slash 命令补全、`@` 文件引用、上下文压缩 indeterminate 进度条、停止 / 发送
 - 状态栏 StatusBar：模型 / Provider、上下文用量进度、Skill 数、MCP 数
-- 设置 Settings：`config.yaml` 图形化编辑，卡片可折叠（默认提供方 → 模型提供方 → 内置能力 → MCP 服务，FE-022）；内置能力开关用 Switch、web-search 行内 provider（ddg/tavily/bing）+ API Key 配置；Provider 支持**拉取模型**（GET /models 填充列表）/ **测试模型**（ping 测可用性 + 首字延迟，✓/✗ 徽标）/ **选择模型**（可用者设默认），参考 LLM_Proxy；热生效
+- 设置 Settings：`config.yaml` 图形化编辑，卡片可折叠（默认提供方 → 模型提供方 → 工具 → MCP 服务）；工具开关卡用 Switch（全量工具目录）、web_search 行内 provider（ddg/tavily/bing）+ API Key、browser_navigate 行内 cdpUrl；Provider 支持**拉取模型**（GET /models 填充列表）/ **测试模型**（ping 测可用性 + 首字延迟，✓/✗ 徽标）/ **选择模型**（可用者设默认），参考 LLM_Proxy；热生效
 - 品牌识别：Logo（badge / glyph 双变体）+ 品牌靛蓝主题（`--primary`）+ favicon；选中色 / 细滚动条
 - Markdown 渲染（prose）+ 代码块
 - 历史持久化重放：durable 事件日志作 reload 真值，退役反推重建（SPEC-030）
