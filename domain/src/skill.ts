@@ -5,7 +5,7 @@ import { workspaceConfigDir, globalConfigDir } from "./workspace";
 
 /**
  * 技能系统（RR-025 / SPEC-031 B-003~B-005）——整体替换旧"两层全量注入"。
- * 三层来源（优先级 高→低）：项目 .anycode/skills > 全局 ~/.anycode/skills > .agents ~/.agents/skills。
+ * 四层来源（优先级 高→低）：项目 .anycode/skills > 全局 ~/.anycode/skills > .agents ~/.agents/skills > .claude ~/.claude/skills。
  * 技能是文件（目录制 <name>/SKILL.md，可带 references/scripts/assets 子目录；或平铺 <name>.md），
  * 无"内置技能"特殊层——随包自带技能由安装/首次启动 seed 进 ~/.anycode/skills/ 即复用同一机制。
  * 同名后层覆盖 + warning；prompt 只注入目录（name+description），正文经 use_skill 工具按需取（I-004）。
@@ -17,7 +17,7 @@ export interface SkillEntry {
     name: string;
     description: string;
     content: string;
-    origin: "agents" | "global" | "project";
+    origin: "claude" | "agents" | "global" | "project";
     dir?: string;
 }
 
@@ -98,7 +98,9 @@ function loadDirSkills(
 }
 
 /**
- * 三层技能合并（SPEC-031 B-003 / I-002）：确定性函数（项目 > 全局 > .agents）。
+ * 多层技能合并（SPEC-031 B-003 / I-002）：确定性函数（项目 > 全局 > .agents > .claude）。
+ * .claude 层（bugfix，2026-09-04）：兼容 Claude Code 的 ~/.claude/skills/——
+ * 用户技能常装在那里（如 xmind），不扫会导致 use_skill "技能不存在"。
  * 同名后层覆盖 + warning（不静默，抄 opencode duplicate warning）。
  */
 export function resolveSkills(workspace: Workspace): Map<string, SkillEntry> {
@@ -112,8 +114,9 @@ export function resolveSkills(workspace: Workspace): Map<string, SkillEntry> {
         }
         merged.set(e.name, e);
     };
-    // ~/.agents/skills → ~/.anycode/skills → <ws>/.anycode/skills（优先级升序）
+    // ~/.claude/skills → ~/.agents/skills → ~/.anycode/skills → <ws>/.anycode/skills（优先级升序）
     const layers: Array<[string, SkillEntry["origin"]]> = [
+        [join(globalConfigDir(), "..", ".claude", "skills"), "claude"],
         [join(globalConfigDir(), "..", ".agents", "skills"), "agents"],
         [join(globalConfigDir(), "skills"), "global"],
         [join(workspaceConfigDir(workspace), "skills"), "project"],

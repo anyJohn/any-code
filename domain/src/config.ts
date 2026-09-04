@@ -346,7 +346,7 @@ export class Config {
                         enabled: true,
                         config: { provider: "ddg", apiKey: "" },
                     },
-                    browser_navigate: {
+                    browser_use: {
                         enabled: false,
                         config: { cdpUrl: "http://127.0.0.1:9222" },
                     },
@@ -519,7 +519,7 @@ function normalizeNoProxy(v?: string): string | undefined {
 const ABILITY_TOOL_MAP: Record<string, string[]> = {
     "web-fetch": ["web_fetch"],
     "web-search": ["web_search"],
-    "browser-use": ["browser_navigate", "browser_content", "browser_eval"],
+    "browser-use": ["browser_use"],
 };
 
 /** tools 段归一化：enabled 仅认 boolean；config 仅收对象。旧 abilities 段迁移（tools 显式条目优先）。 */

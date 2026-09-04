@@ -9,7 +9,7 @@ import type { ToolCatalogItem } from "./model";
 /** web_search 的 provider 选项（与原生工具 webSearchTool 支持集一致）。 */
 const SEARCH_PROVIDERS = ["ddg", "tavily", "bing"] as const;
 
-/** browser_* 的 cdpUrl 默认值：browser 级 http 端点，工具内部 /json/list 自动发现 page。 */
+/** browser_use 的 cdpUrl 默认值：browser 级 http 端点，工具内部 /json/list 自动发现 page。 */
 const DEFAULT_CDPURL = "http://127.0.0.1:9222";
 
 function webConfig(cfg: Record<string, Record<string, unknown>>, name: string) {
@@ -17,7 +17,7 @@ function webConfig(cfg: Record<string, Record<string, unknown>>, name: string) {
 }
 
 /** 通用工具开关卡（用户决策 2026-09-03，取代内置能力卡）：目录驱动，开关用 Switch。
- *  web_search 行内 provider 下拉 + apiKey；browser_navigate 行内 cdpUrl
+ *  web_search 行内 provider 下拉 + apiKey；browser_use 行内 cdpUrl
  *  （写入 tools.<name>.config，出网代理走全局 config.proxy，不在工具层配）。 */
 export function ToolsCard({
     tools,
@@ -43,7 +43,7 @@ export function ToolsCard({
             {tools.map((a) => {
                 const cfg = webConfig(toolCfg, a.name);
                 const isSearch = a.name === "web_search";
-                const isBrowser = a.name === "browser_navigate";
+                const isBrowser = a.name === "browser_use";
                 // 用户侧描述走 i18n（按工具名 key）；未覆盖的工具（扩展/MCP）兜底 LLM description
                 const descKey = `toolsCard.desc.${a.name}`;
                 const desc = t(descKey) === descKey ? a.description : t(descKey);

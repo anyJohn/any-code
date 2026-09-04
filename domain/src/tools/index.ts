@@ -29,11 +29,8 @@ import {
 } from "./schema";
 import { webFetchTool } from "./functions/webFetchTool";
 import { webSearchTool } from "./functions/webSearchTool";
-import {
-    browserNavigateTool,
-    browserContentTool,
-    browserEvalTool,
-} from "./functions/browserUseTool";
+import { browserUseTool } from "./functions/browserUseTool";
+import { createSkillTool } from "./functions/createSkillTool";
 
 /**
  * 工具元数据（AR-7）：缺省按最保守处理（非只读、非并发安全）——
@@ -101,10 +98,11 @@ const grepTool: Tool = {
     handler: grepFunc,
     meta: { readOnly: true, concurrencySafe: true },
 };
+// save_memory 写技能/记忆文件（用户指正 2026-09-04：会操控本地文件，非只读）
 const saveMemoryTool: Tool = {
     schema: saveMemorySchema,
     handler: saveMemoryFunc,
-    meta: { readOnly: true, concurrencySafe: false },
+    meta: { readOnly: false, concurrencySafe: false },
 };
 const askQuestionTool: Tool = {
     schema: askQuestionSchema,
@@ -141,14 +139,13 @@ const builtinTools: Tool[] = [
     saveMemoryTool,
     askQuestionTool,
     skillTool,
+    createSkillTool,
     jobOutputTool,
     jobKillTool,
     // web 原生工具（用户决策 2026-09-03：取代内置 MCP 连接器；代理走全局 dispatcher）
     webFetchTool,
     webSearchTool,
-    browserNavigateTool,
-    browserContentTool,
-    browserEvalTool,
+    browserUseTool,
 ];
 
 const ToolKit = {

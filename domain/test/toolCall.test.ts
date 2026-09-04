@@ -187,7 +187,7 @@ import type { PermissionContext } from "../src/permissions";
 function mkPermCtx(
     mode: PermissionContext["mode"],
     rules: PermissionContext["rules"] = [],
-    readOnly: string[] = ["read", "grep", "glob", "explore", "use_skill", "ask_question", "save_memory"]
+    readOnly: string[] = ["read", "grep", "glob", "explore", "use_skill", "ask_question"]
 ): PermissionContext {
     return {
         mode,
@@ -492,9 +492,13 @@ describe("AR-7 工具元数据", () => {
             ToolKit.allTools.map((t) => [t.schema.function.name ?? "", t.meta ?? {}])
         );
         expect(byName["bash"]).toEqual({ readOnly: false, concurrencySafe: false });
+        // save_memory 写技能/记忆文件（用户指正 2026-09-04）：非只读
+        expect(byName["save_memory"]).toEqual({ readOnly: false, concurrencySafe: false });
+        expect(byName["browser_use"]).toEqual({ readOnly: false, concurrencySafe: false });
+        expect(byName["create_skill"]).toEqual({ readOnly: false, concurrencySafe: false });
         expect(byName["write"]?.readOnly).toBe(false);
         expect(byName["edit"]?.concurrencySafe).toBe(false);
-        for (const ro of ["read", "grep", "glob", "explore", "use_skill", "save_memory", "ask_question"]) {
+        for (const ro of ["read", "grep", "glob", "explore", "use_skill", "ask_question"]) {
             expect(byName[ro]?.readOnly).toBe(true);
         }
     });

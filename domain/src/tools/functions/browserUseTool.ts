@@ -3,10 +3,11 @@ import { errResult, toolConfig } from "./webHttp";
 import type { Tool } from "../index";
 
 /**
- * browser_* —— 真实浏览器（CDP）三件套（原生工具，用户决策 2026-09-03 取代内置 MCP 连接器）：
- * browser_navigate（导航+等加载）/ browser_content（URL/标题/正文）/ browser_eval（任意 JS）。
+ * browser_use —— 真实浏览器（CDP）原生工具（用户决策 2026-09-03 取代内置 MCP 连接器；
+ * 2026-09-04 三合一为单工具，action 分派）：
+ * navigate（导航+等加载）/ content（URL/标题/正文）/ eval（任意 JS）。
  * 接 browser 级 http 端点（chrome/edge `--remote-debugging-port=9222`），GET /json/list
- * 自动发现 page ws——无需手取动态 page id。cdpUrl 来自 tools.browser_* 的 config。
+ * 自动发现 page ws——无需手取动态 page id。cdpUrl 来自 tools.browser_use.config。
  * 全局 WebSocket（Node ≥21）；连接与页面级客户端为本模块单例，跨调用复用。
  */
 
@@ -26,7 +27,7 @@ interface WsLike {
 const WS = (globalThis as { WebSocket?: new (url: string) => WsLike }).WebSocket;
 
 function cdpUrlOf(ctx: ToolContext): string {
-    const cfg = toolConfig(ctx, "browser_navigate", "browser_content", "browser_eval");
+    const cfg = toolConfig(ctx, "browser_use");
     return typeof cfg.cdpUrl === "string" ? cfg.cdpUrl : "";
 }
 
@@ -34,7 +35,7 @@ function cdpUrlOf(ctx: ToolContext): string {
 async function resolvePageWs(raw: string): Promise<string> {
     if (!raw)
         throw new Error(
-            "未配置 cdpUrl（tools.browser_navigate.config.cdpUrl）。需先启动浏览器：chrome --remote-debugging-port=9222"
+            "未配置 cdpUrl（tools.browser_use.config.cdpUrl）。需先启动浏览器：chrome --remote-debugging-port=9222"
         );
     let origin: URL;
     try {
@@ -173,7 +174,7 @@ async function contentOf(): Promise<PageInfo> {
     return v ?? { url: "", title: "", text: "" };
 }
 
-// ———— 工具 ————
+// ———— 工具（用户决策 2026-09-04：三合一为单个 browser_use，action 分派） ————
 
 async function navigate(args: { url?: string }, ctx: ToolContext): Promise<string> {
     const url = typeof args?.url === "string" ? args.url.trim() : "";
@@ -220,51 +221,41 @@ async function evalJs(args: { js?: string }, ctx: ToolContext): Promise<string> 
     }
 }
 
-// ———— Tool 装配（非只读：驱动真实浏览器；标准模式经权限 ask） ————
-
-export const browserNavigateTool: Tool = {
+export const browserUseTool: Tool = {
     schema: {
         type: "function",
         function: {
-            name: "browser_navigate",
+            name: "browser_use",
             description:
-                "Navigate the real browser to a URL and wait for page load, returning the title. Then use browser_content to read it. http(s) only.",
+                "Drive the real browser via CDP. Actions: navigate (open a URL and wait for load), content (read current page URL/title/body), eval (run JS in the page for clicking, form filling, reading elements).",
             parameters: {
                 type: "object",
-                properties: { url: { type: "string" } },
-                required: ["url"],
+                properties: {
+                    action: {
+                        type: "string",
+                        enum: ["navigate", "content", "eval"],
+                        description:
+                            "navigate=打开网页并等待加载；content=读当前页 URL/标题/正文；eval=在页面执行 JavaScript",
+                    },
+                    url: {
+                        type: "string",
+                        description: "action=navigate 时必填：目标 URL（http/https）",
+                    },
+                    js: {
+                        type: "string",
+                        description: "action=eval 时必填：要执行的 JavaScript 表达式/语句",
+                    },
+                },
+                required: ["action"],
             },
         },
     },
-    handler: async (args, ctx) => navigate(args as { url?: string }, ctx),
-};
-
-export const browserContentTool: Tool = {
-    schema: {
-        type: "function",
-        function: {
-            name: "browser_content",
-            description:
-                "Read the current page URL, title and body text (capped at 20000 chars) from the real browser.",
-            parameters: { type: "object", properties: {} },
-        },
+    handler: async (rawArgs, ctx: ToolContext) => {
+        const args = rawArgs as { action?: string; url?: string; js?: string };
+        if (args?.action === "navigate") return navigate(args, ctx);
+        if (args?.action === "content") return content(args, ctx);
+        if (args?.action === "eval") return evalJs(args, ctx);
+        return "Error: action 必须是 navigate / content / eval 之一";
     },
-    handler: async (_args, ctx) => content(_args, ctx),
-};
-
-export const browserEvalTool: Tool = {
-    schema: {
-        type: "function",
-        function: {
-            name: "browser_eval",
-            description:
-                "Evaluate arbitrary JS in the real browser page. For clicking (el.click()), filling forms, reading specific elements. Returns by-value result or the exception.",
-            parameters: {
-                type: "object",
-                properties: { js: { type: "string", description: "JavaScript expression/statements" } },
-                required: ["js"],
-            },
-        },
-    },
-    handler: async (args, ctx) => evalJs(args as { js?: string }, ctx),
+    meta: { readOnly: false, concurrencySafe: false },
 };

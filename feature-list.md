@@ -13,11 +13,11 @@
 - Skill
   - Project 级别 Skill（`<root>/.anycode/skills/`）
   - Global 级别 Skill（`~/.anycode/skills/`）
-  - 兼容 `~/.agents/skills/` 目录下 Skill（已实现，最低用户层）
+  - 兼容 `~/.agents/skills/` 与 `~/.claude/skills/`（Claude Code）目录下 Skill（已实现，最低用户层；2026-09-04 补 claude 层——用户技能常装在那里）
   - 技能即文件：目录制 `<name>/SKILL.md`（可带 `references/scripts/assets` 子目录，agent 可读）或平铺 `<name>.md`；内置技能 = seed 机制（首启把随包技能拷进 `~/.anycode/skills/`，幂等不覆盖用户修改，落地即普通全局技能，FE-022）
   - 已内置 anycode-docs 技能（AnyCode 自身配置与管理手册：改 config/mcp/tools/skills/rules/memory + 生效时机，让 agent 能自我管理配置）
   - 已内置 office-mcp 技能（Office 39 工具：Word/Excel/PPT/PDF/OCR，MIT + 三审；未发 npm，需首次 clone+build 配 MCP）
-  - 原生 web 工具（用户决策 2026-09-03，取代内置 MCP 连接器）：`web_fetch`（网页→Markdown）/ `web_search`（ddg 免 key，可换 tavily/bing）/ `browser_navigate·content·eval`（真浏览器 CDP：导航/读页/点击填表）
+  - 原生 web 工具（用户决策 2026-09-03，取代内置 MCP 连接器）：`web_fetch`（网页→Markdown）/ `web_search`（ddg 免 key，可换 tavily/bing）/ `browser_use`（真浏览器 CDP 单工具：action=navigate/content/eval——导航/读页/点击填表）
 - Memory
   - 原文层：Session History（durable 事件日志，含 thinking / tool call / 报错 / usage 等，reload 重放）
   - 摘要层：Global + Workspace/project 的跨 Session 摘要，经 `save_memory` agent tool 主动写入（LLM 决定记什么）
@@ -40,7 +40,8 @@
   - `grep`，内容正则搜索（ripgrep，性能强，尊重 .gitignore）
   - `read`，支持长文件切片读取（offset / limit，记 mtime）
   - `write`，原子写 + staleness 检测
-  - `save_memory`，写入项目级与用户级记忆
+  - `save_memory`，写入项目级与用户级记忆（写本地文件，非只读——标准模式经权限 ask，2026-09-04 修正）
+  - `create_skill`，agent 把可复用经验固化为技能（正规安装通道：落点/命名校验/拒覆盖，杜绝 skills/skills 双层嵌套误装；写入即热生效，2026-09-04）
   - `ask_question`，向 human 提问 / 让 human 选择（经 InteractionModal）
   - `use_skill`，按名读技能全文（目录注入 <available_skills>，正文按需取）
   - 原生 web 工具（用户决策 2026-09-03）：`web_search` / `web_fetch`（联网）、`browser_navigate/content/eval` 真 CDP——不再有 MCP 间接层
