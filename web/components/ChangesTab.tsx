@@ -5,7 +5,7 @@ import { apiJson } from "@/lib/api";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import hljs from "highlight.js/lib/common";
-import { ChevronDown, ChevronLeft } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 interface SnapshotInfo {
     id: string;
@@ -267,7 +267,7 @@ export function ChangesTab({ projectKey }: { projectKey: string }) {
                                         {open ? (
                                             <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
                                         ) : (
-                                            <ChevronLeft className="size-3.5 shrink-0 text-muted-foreground" />
+                                            <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
                                         )}
                                         <span
                                             className={cn(
