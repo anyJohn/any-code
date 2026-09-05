@@ -26,7 +26,7 @@ import { Config } from "./config";
 import { applyProxyConfig } from "./netProxy";
 import {
     workspaceNote,
-    memoryNote,
+    toolNotes,
     shellNote,
     cleanSessionTitle,
     systemFingerprint,
@@ -551,7 +551,16 @@ class AnyAgent {
         if (memory) {
             sysPrompt += memory;
         }
-        sysPrompt += memoryNote;
+        // 工具门控注入（用户需求 2026-09-04）：工具关闭时其引导段不进 prompt
+        sysPrompt += toolNotes(
+            new Set(
+                this.tools.map(
+                    (t) =>
+                        (t.schema as { function?: { name?: string } }).function
+                            ?.name ?? ""
+                )
+            )
+        );
         // shell 兼容性提示（Windows busybox/git-bash 告知 LLM 命令边界；unix 静默）
         sysPrompt += shellNote(resolveShellKind(this.config.gitBashPath));
         if (skills) {

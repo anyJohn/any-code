@@ -104,13 +104,45 @@ export function shellNote(kind: ShellKind): string {
     return "";
 }
 
-/** save_memory 工具引导注入：引导 LLM 在确有必要时主动记值得跨会话记住的信息。 */
+/** save_memory 引导段：由 toolNotes 按开关注入（save_memory 关闭时不进 prompt）。 */
 export const memoryNote =
     "\n\n# Memory\n" +
     "You have a `save_memory` tool to persist information worth remembering across sessions " +
     "(user preferences, key decisions, project conventions, durable facts). " +
     "Use scope=project for workspace-specific notes, scope=global for cross-project preferences. " +
     "Only call it when genuinely necessary; do not record trivial or transient task state.";
+
+/**
+ * 工具门控注入（用户需求 2026-09-04）：只在对应工具启用时注入引导段——
+ * 工具关闭后其 system prompt 段落不进 LLM 上下文（避免教模型用不存在的工具）。
+ * save_memory 虽非只读，写操作由权限层管，这里只负责引导。
+ */
+export function toolNotes(enabled: ReadonlySet<string>): string {
+    let s = "";
+    if (enabled.has("save_memory")) s += memoryNote;
+    const web: string[] = [];
+    if (enabled.has("web_search")) {
+        web.push("`web_search` searches the web (ddg by default, provider configurable)");
+    }
+    if (enabled.has("web_fetch")) {
+        web.push("`web_fetch` retrieves a page as markdown (https only, 15s timeout)");
+    }
+    if (web.length) {
+        s +=
+            "\n\n# Web\nYou have live web access. " +
+            web.join("; ") +
+            ". Search to discover URLs, then fetch to read. " +
+            "Tool config in ~/.anycode/config.yaml is read live at call time — edits take effect immediately.";
+    }
+    if (enabled.has("browser_use")) {
+        s +=
+            "\n\n# Browser\nYou have a `browser_use` tool driving a real browser (CDP): " +
+            "action=navigate opens a URL and waits for load; action=content reads the current page " +
+            "(URL/title/body); action=eval runs JS in the page (click, fill forms, read elements). " +
+            "Prefer it over web_fetch for JS-rendered pages. Its config is also read live at call time.";
+    }
+    return s;
+}
 
 /** 清洗 LLM 生成的会话标题：去首尾引号/书名号/句号/空白，截断 40。空串交调用方回退。 */
 export function cleanSessionTitle(raw: string): string {

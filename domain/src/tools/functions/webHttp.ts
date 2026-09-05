@@ -1,4 +1,5 @@
 import type { ToolResult } from "../index";
+import { Config } from "../../config";
 
 /**
  * web 类原生工具共享助手（web_fetch / web_search，用户决策 2026-09-03）。
@@ -60,11 +61,30 @@ export function errResult(message: string): ToolResult {
     return { content: `[Error] ${message}` };
 }
 
-/** 从 ctx.toolsConfig 读工具私有配置（main.ts 注入；undefined = 未配置）。 */
+/**
+ * 工具私有配置（方案 A，用户决策 2026-09-04）：**每次调用现读** config.yaml 的
+ * tools 段——run 内改配置立即生效；坏配置回退 ctx 注入值（create 时快照）。
+ * names 按序取第一个有 config 的条目（browser_use 等单配置名直接传一个）。
+ */
 export function toolConfig(
     ctx: { toolsConfig?: Record<string, Record<string, unknown>> },
     ...names: string[]
 ): Record<string, unknown> {
+    try {
+        const c = Config.load();
+        for (const n of names) {
+            const e = c.tools?.[n];
+            if (
+                e?.config &&
+                typeof e.config === "object" &&
+                !Array.isArray(e.config)
+            ) {
+                return e.config as Record<string, unknown>;
+            }
+        }
+    } catch {
+        // 坏配置：回退 create 时的快照
+    }
     for (const n of names) {
         const c = ctx.toolsConfig?.[n];
         if (c && typeof c === "object") return c;

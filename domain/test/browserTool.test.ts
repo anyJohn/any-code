@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { browserUseTool } from "../src/tools/functions/browserUseTool";
@@ -9,15 +9,19 @@ import type { ToolContext } from "../src/context";
 // browser_* 原生工具（用户决策 2026-09-03）：真 headless chromium --remote-debugging-port 直连。
 // chromium 不存在时整组 skip（CI/无 playwright 缓存环境）。
 // 注意：CDP 客户端为模块级单例——"无 cdpUrl"用例必须先于建连用例（文件内顺序执行）。
-const home = process.env.HOME ?? "";
 const chromeBin = [
-    `${home}/.cache/ms-playwright/chromium-1237/chrome-linux64/chrome`,
-    `${home}/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome`,
+    `${process.env.HOME ?? ""}/.cache/ms-playwright/chromium-1237/chrome-linux64/chrome`,
+    `${process.env.HOME ?? ""}/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome`,
 ].find(existsSync);
 
 const port = 9700 + Math.floor(Math.random() * 200);
 let chrome: ChildProcess | null = null;
 let ready = false;
+
+// HOME 隔离：toolConfig 现读 config.yaml（方案 A）——不隔离会读到真实
+// browser_use 配置，压过测试注入的 cdpUrl。最小 config（无 tools 段）→ 回退 ctx 值。
+let home = "";
+const ORIG_HOME = process.env.HOME;
 
 const ctx = (cdpUrl: string): ToolContext =>
     ({
@@ -28,6 +32,21 @@ const ctx = (cdpUrl: string): ToolContext =>
     }) as ToolContext;
 
 beforeAll(async () => {
+    home = mkdtempSync(join(tmpdir(), "anycode-bt-"));
+    process.env.HOME = home;
+    mkdirSync(join(home, ".anycode"), { recursive: true });
+    writeFileSync(
+        join(home, ".anycode", "config.yaml"),
+        [
+            "providers:",
+            "  openai:",
+            "    apiKey: sk-test",
+            "    models: [{ id: m }]",
+            "    defaultModel: m",
+            "default: openai",
+        ].join("\n"),
+        "utf-8"
+    );
     if (!chromeBin) return;
     chrome = spawn(
         chromeBin,
@@ -53,6 +72,9 @@ beforeAll(async () => {
 
 afterAll(() => {
     chrome?.kill("SIGKILL");
+    rmSync(home, { recursive: true, force: true });
+    if (ORIG_HOME === undefined) delete process.env.HOME;
+    else process.env.HOME = ORIG_HOME;
 });
 
 describe("browser_* 原生工具（CDP，真 chromium）", () => {
