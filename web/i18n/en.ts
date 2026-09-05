@@ -231,8 +231,8 @@ export const en: Record<string, string> = {
     "titleBar.restore": "Restore",
     "topbar.addWorkspace": "Add workspace",
     "topbar.addWorkspaceFailed": "Failed to add workspace. Please retry.",
-    "topbar.noWorkspaces": "No workspaces added yet",
-    "topbar.recentWorkspaces": "Recent workspaces",
     "topbar.selectWorkspace": "Select workspace",
+    "topbar.noSessions": "No sessions",
+    "topbar.recentSessions": "Recent sessions",
     "topbar.switchLanguage": "切换语言 / Switch language",
 };

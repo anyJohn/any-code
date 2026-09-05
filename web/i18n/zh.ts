@@ -232,8 +232,8 @@ export const zh: Record<string, string> = {
     "titleBar.restore": "还原",
     "topbar.addWorkspace": "添加工作区",
     "topbar.addWorkspaceFailed": "添加工作区失败，请重试",
-    "topbar.noWorkspaces": "尚未添加任何工作区",
-    "topbar.recentWorkspaces": "最近工作区",
     "topbar.selectWorkspace": "选择工作区",
+    "topbar.noSessions": "暂无会话",
+    "topbar.recentSessions": "最近会话",
     "topbar.switchLanguage": "切换语言",
 };

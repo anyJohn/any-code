@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "@/hooks/useRedux";
 import {
     selectWorkspace,
     setSelected,
+    setActiveSession,
     refreshWorkspaces,
 } from "@/store/workspaceSlice";
 import type { WorkspaceMeta } from "@any-code/domain";
@@ -17,21 +19,34 @@ import {
     DropdownMenuSeparator,
     DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { ChevronsUpDown, Plus, FolderOpen, Languages } from "lucide-react";
+import { ChevronsUpDown, Plus, FolderOpen, Languages, MessageSquare } from "lucide-react";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { Logo } from "./Logo";
 import { apiJson } from "@/lib/api";
+import type { WorkspaceWithSessions } from "@/lib/sseEvents";
 import { useT, type Language } from "@/i18n";
 
+interface RecentSession {
+    projectKey: string;
+    workspaceName: string;
+    sessionId: string;
+    title: string;
+    updatedAt: number;
+}
+
 /**
- * AppTopbar —— 当前工作区名 + 下拉（切换最近 / 添加工作区）。
+ * AppTopbar —— 当前工作区名 + 下拉（最近会话，取代原"最近工作区"——用户需求 2026-09-05）。
+ * 数据复用 GET /api/workspaces（内联 sessions），按 updatedAt 倒序取前 12；点击跳会话。
  */
 export function AppTopbar() {
     const { selected, workspaces } = useAppSelector(selectWorkspace);
     const dispatch = useAppDispatch();
+    const navigate = useNavigate();
     const { language, setLanguage, t } = useT();
     const [pickerOpen, setPickerOpen] = useState(false);
     const [addError, setAddError] = useState("");
+    const [recent, setRecent] = useState<RecentSession[]>([]);
+    const [menuOpen, setMenuOpen] = useState(false);
 
     // 一键切换（FR-29）：本地即时生效 + localStorage + PATCH config 持久化（Provider 内处理）
     const toggleLanguage = () =>
@@ -40,6 +55,38 @@ export function AppTopbar() {
     useEffect(() => {
         dispatch(refreshWorkspaces());
     }, [dispatch]);
+
+    // 菜单打开时拉取最近会话（复用 /api/workspaces 内联 sessions，零新端点）
+    useEffect(() => {
+        if (!menuOpen) return;
+        let cancelled = false;
+        void (async () => {
+            const list =
+                (await apiJson<WorkspaceWithSessions[]>("/api/workspaces")) ?? [];
+            if (cancelled) return;
+            const flat: RecentSession[] = list.flatMap((w) =>
+                (w.sessions ?? []).map((s) => ({
+                    projectKey: w.projectKey,
+                    workspaceName: w.name,
+                    sessionId: s.id,
+                    title: s.title,
+                    updatedAt: s.updatedAt,
+                }))
+            );
+            flat.sort((a, b) => b.updatedAt - a.updatedAt);
+            setRecent(flat.slice(0, 12));
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [menuOpen]);
+
+    const openSession = (r: RecentSession) => {
+        const meta = workspaces.find((w) => w.projectKey === r.projectKey);
+        if (meta) dispatch(setSelected(meta));
+        dispatch(setActiveSession(r.sessionId));
+        navigate(`/chat/${r.sessionId}`);
+    };
 
     const onPicked = async (path: string) => {
         setAddError("");
@@ -56,12 +103,10 @@ export function AppTopbar() {
         dispatch(setSelected(meta));
     };
 
-    const switchTo = (meta: WorkspaceMeta) => dispatch(setSelected(meta));
-
     return (
         <div className="flex items-center gap-3 px-4 h-12">
             <Logo size={20} className="shrink-0" />
-            <DropdownMenu>
+            <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
                 <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="sm" className="gap-2">
                         <FolderOpen className="size-4" />
@@ -71,23 +116,28 @@ export function AppTopbar() {
                         <ChevronsUpDown className="size-3 text-muted-foreground" />
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-64">
-                    <DropdownMenuLabel>{t("topbar.recentWorkspaces")}</DropdownMenuLabel>
+                <DropdownMenuContent align="start" className="w-80">
+                    <DropdownMenuLabel>{t("topbar.recentSessions")}</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    {workspaces.length === 0 && (
+                    {recent.length === 0 && (
                         <div className="px-2 py-3 text-xs text-muted-foreground">
-                            {t("topbar.noWorkspaces")}
+                            {t("topbar.noSessions")}
                         </div>
                     )}
-                    {workspaces.map((w) => (
+                    {recent.map((r) => (
                         <DropdownMenuItem
-                            key={w.projectKey}
+                            key={r.sessionId}
                             className="flex flex-col items-start gap-0.5"
-                            onClick={() => switchTo(w)}
+                            onClick={() => openSession(r)}
                         >
-                            <span className="text-sm">{w.name}</span>
-                            <span className="text-[11px] text-muted-foreground font-mono truncate w-full">
-                                {w.rootPath}
+                            <span className="flex items-center gap-1.5 w-full min-w-0">
+                                <MessageSquare className="size-3 shrink-0 text-muted-foreground" />
+                                <span className="text-sm truncate">
+                                    {r.title || t("home.untitled")}
+                                </span>
+                            </span>
+                            <span className="text-[11px] text-muted-foreground truncate w-full">
+                                {r.workspaceName} · {new Date(r.updatedAt).toLocaleString()}
                             </span>
                         </DropdownMenuItem>
                     ))}
