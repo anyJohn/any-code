@@ -95,6 +95,12 @@ export class SessionService {
         await this.store.append(key, [titleMetaEntry(title)]);
     }
 
+    /** 截断到前 keep 条 user 消息（B-013 编辑重发）：其后消息/事件删除，
+     *  meta（title/usage/sysfp）保留。返回实际保留的 user 消息数。 */
+    async truncateToUserMessages(key: SessionKey, keep: number): Promise<number> {
+        return this.store.truncateToUserMessages(key, Math.max(0, keep));
+    }
+
     /** 原子重写整个 session 的消息（压缩后整体替换）。保留原 title/createdAt。 */
     async replaceMessages(key: SessionKey, messages: ChatMessage[]): Promise<void> {
         await this.store.replaceMessages(key, messages);

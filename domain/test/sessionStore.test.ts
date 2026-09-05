@@ -156,3 +156,69 @@ describe("appendEvent（Error 等非消息事件持久化 + 恢复）", () => {
         expect((tool.data as { result: string }).result).toBe(big);
     });
 });
+
+// SPEC-036 B-013：截断到前 keep 条 user 消息（编辑重发）
+describe("truncateToUserMessages（SPEC-036 B-013）", () => {
+    const origHome = process.env.HOME;
+    it("保留前 keep 条 user 消息及其间消息/事件，其后全删；meta 保留", async () => {
+        const home = mkdtempSync(join(tmpdir(), "anycode-trunc-"));
+        process.env.HOME = home;
+        const store = new LocalSessionStore();
+        const key = { projectKey: "p", sessionId: "s-trunc" };
+        try {
+            await store.append(key, [
+                { kind: "meta", title: "t", updatedAt: 1 },
+                { kind: "message", message: { role: "user", content: "u1" } },
+                { kind: "event", event: { id: "e1", timestamp: 1, type: "Error", message: "x" } },
+                { kind: "message", message: { role: "assistant", content: "a1" } },
+                { kind: "message", message: { role: "user", content: "u2" } },
+                { kind: "message", message: { role: "assistant", content: "a2" } },
+                { kind: "message", message: { role: "user", content: "u3" } },
+                { kind: "meta", updatedAt: 9, usage: { promptTokens: 5, completionTokens: 1 } },
+            ] as never);
+            // keep=2：保留 u1,a1,u2,a2；u3 起删除（u2 的应答 a2 属于保留侧）
+            const kept = await store.truncateToUserMessages(key, 2);
+            expect(kept).toBe(2);
+            const entries = (await store.load(key))!;
+            const msgs = entries
+                .filter((e) => e.kind === "message")
+                .map((e) => (e as { message: { content: string } }).message.content);
+            expect(msgs).toEqual(["u1", "a1", "u2", "a2"]);
+            // 事件只留保留侧的
+            expect(entries.filter((e) => e.kind === "event")).toHaveLength(1);
+            // usage meta 保留
+            expect(entries.some((e) => e.kind === "meta" && e.usage)).toBe(true);
+            // 标题保留
+            const metas = entries.filter((e) => e.kind === "meta");
+            expect(metas.some((e) => (e as { title?: string }).title === "t")).toBe(true);
+        } finally {
+            process.env.HOME = origHome;
+            rmSync(home, { recursive: true, force: true });
+        }
+    });
+
+    it("keep=0 → 只剩 meta；keep 超出 → 不变", async () => {
+        const home = mkdtempSync(join(tmpdir(), "anycode-trunc2-"));
+        process.env.HOME = home;
+        const store = new LocalSessionStore();
+        const key = { projectKey: "p", sessionId: "s-trunc2" };
+        try {
+            await store.append(key, [
+                { kind: "message", message: { role: "user", content: "u1" } },
+                { kind: "message", message: { role: "user", content: "u2" } },
+            ] as never);
+            expect(await store.truncateToUserMessages(key, 0)).toBe(0);
+            expect((await store.load(key))!.filter((e) => e.kind === "message")).toHaveLength(0);
+            // 文件只剩 meta（truncate 写入了 meta 头）→ 再 append 后 keep=5
+            await store.append(key, [
+                { kind: "message", message: { role: "user", content: "u1" } },
+                { kind: "message", message: { role: "user", content: "u2" } },
+            ] as never);
+            expect(await store.truncateToUserMessages(key, 5)).toBe(2);
+            expect((await store.load(key))!.filter((e) => e.kind === "message")).toHaveLength(2);
+        } finally {
+            process.env.HOME = origHome;
+            rmSync(home, { recursive: true, force: true });
+        }
+    });
+});

@@ -709,8 +709,35 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         });
     });
 
-    app.post("/api/sessions/:sessionId/interact", async (c) => {
-        let body: { interactionId?: string; answers?: string[] } = {};
+    // 截断会话到前 keep 条 user 消息（SPEC-036 B-013 编辑重发）：其后消息/事件删除。
+    // 运行中会话拒绝（409）；文件状态不自动回滚——用户可配合快照回滚（/snapshots）。
+    app.post("/api/sessions/:sessionId/truncate", async (c) => {
+        const sessionId = c.req.param("sessionId");
+        const running = getAgentManager()
+            .statusList()
+            .some((s) => s.sessionId === sessionId);
+        if (running)
+            return c.json(
+                { statusMessage: "会话正在运行，请先停止再编辑重发" },
+                409,
+            );
+        let body: { keepUserMessages?: number } = {};
+        try {
+            body = await c.req.json();
+        } catch {
+            return c.json({ statusMessage: "invalid json body" }, 400);
+        }
+        const keep = body?.keepUserMessages;
+        if (typeof keep !== "number" || keep < 0)
+            return c.json({ statusMessage: "keepUserMessages required" }, 400);
+        const service = new SessionService();
+        const found = await service.findSession(sessionId);
+        if (!found) return c.json({ statusMessage: "session not found" }, 404);
+        const kept = await service.truncateToUserMessages(found.key, keep);
+        return c.json({ kept });
+    });
+
+    app.post("/api/sessions/:sessionId/interact", async (c) => {        let body: { interactionId?: string; answers?: string[] } = {};
         try {
             body = await c.req.json();
         } catch {

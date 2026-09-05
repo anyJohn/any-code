@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import type { AgentEvent } from "@/lib/sseEvents";
+import { Pencil, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n";
 import { SubagentBlock } from "./SubagentBlock";
@@ -41,6 +43,8 @@ interface MessageListProps {
     toggleSub: (id: string) => void;
     scrollRef: React.RefObject<HTMLDivElement | null>;
     onLayoutEffect: () => void;
+    /** 编辑用户消息重发（B-013）：ordinal=第几条 user 消息（0-based），text=编辑后文本 */
+    onEditUserMessage: (ordinal: number, text: string) => void;
 }
 
 /**
@@ -56,6 +60,7 @@ export function MessageList({
     toggleTool,
     toggleSub,
     scrollRef,
+    onEditUserMessage,
 }: MessageListProps) {
     const { t } = useT();
     // pending 且本轮尚未产出实质内容（Assistant 文本 / 思考 / 工具）→ 显示 typing dots。
@@ -114,7 +119,7 @@ export function MessageList({
     return (
         <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
             <div className="w-full max-w-3xl mx-auto px-4 py-4 flex flex-col gap-2">
-                {renderItems.map((item) => {
+                {renderItems.map((item, i) => {
                     if (item.kind === "turn") {
                         return (
                             <TurnBlock
@@ -144,11 +149,12 @@ export function MessageList({
                     const e = item.event;
                     if (e.type === "User") {
                         return (
-                            <div key={e.id} className="flex justify-end py-2">
-                                <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-primary px-3 py-1.5 text-sm text-primary-foreground whitespace-pre-wrap break-words">
-                                    {e.message}
-                                </div>
-                            </div>
+                            <UserBubble
+                                key={e.id}
+                                event={e}
+                                ordinal={userOrdinal(renderItems, i)}
+                                onEdit={onEditUserMessage}
+                            />
                         );
                     }
                     if (e.type === "Done" || e.type === "Stopped") {
@@ -262,6 +268,93 @@ export function MessageList({
                         </p>
                     </div>
                 )}
+            </div>
+        </div>
+    );
+}
+
+
+/** 该 User 渲染项是第几条 user 消息（0-based）——截断 API 的定位序数 */
+function userOrdinal(items: RenderItem[], index: number): number {
+    let n = 0;
+    for (let k = 0; k < index; k++) {
+        const it = items[k];
+        if (it.kind === "single" && it.event.type === "User") n++;
+    }
+    return n;
+}
+
+/**
+ * 用户消息气泡（B-013）：hover 出编辑按钮 → textarea 编辑 → 确认后
+ * onEdit(ordinal, text) 截断重发。编辑中按钮变确认/取消。
+ */
+function UserBubble({
+    event,
+    ordinal,
+    onEdit,
+}: {
+    event: Extract<AgentEvent, { type: "User" }>;
+    ordinal: number;
+    onEdit: (ordinal: number, text: string) => void;
+}) {
+    const { t } = useT();
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState(event.message);
+
+    if (editing) {
+        return (
+            <div key={event.id} className="flex justify-end py-2">
+                <div className="w-[80%] flex flex-col gap-1.5 rounded-2xl rounded-br-sm border border-primary/40 bg-primary/10 px-3 py-2">
+                    <textarea
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        rows={Math.min(8, draft.split("\n").length + 1)}
+                        className="w-full resize-none bg-transparent text-sm outline-none whitespace-pre-wrap"
+                        autoFocus
+                    />
+                    <div className="flex justify-end gap-1.5">
+                        <button
+                            onClick={() => {
+                                setDraft(event.message);
+                                setEditing(false);
+                            }}
+                            title={t("common.cancel")}
+                            className="p-1 rounded text-muted-foreground hover:text-foreground"
+                        >
+                            <X className="size-3.5" />
+                        </button>
+                        <button
+                            onClick={() => {
+                                const text = draft.trim();
+                                if (!text) return;
+                                setEditing(false);
+                                onEdit(ordinal, text);
+                            }}
+                            title={t("chat.resend")}
+                            className="p-1 rounded text-primary hover:bg-primary/10"
+                        >
+                            <Check className="size-3.5" />
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div key={event.id} className="flex justify-end items-end gap-1 py-2 group/msg">
+            <button
+                onClick={() => {
+                    setDraft(event.message);
+                    setEditing(true);
+                }}
+                title={t("chat.editMessage")}
+                className="p-1 rounded text-muted-foreground/0 group-hover/msg:text-muted-foreground hover:!text-foreground transition-colors"
+            >
+                <Pencil className="size-3.5" />
+            </button>
+            <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-primary px-3 py-1.5 text-sm text-primary-foreground whitespace-pre-wrap break-words">
+                {event.message}
             </div>
         </div>
     );

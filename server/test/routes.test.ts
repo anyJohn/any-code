@@ -1,4 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import os from "node:os";
+import fs from "node:fs";
+import path from "node:path";
+import { SessionService } from "@any-code/domain";
 import { createApp } from "../src/index.js";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -334,5 +338,59 @@ describe("文件 tab / 快照 diff 路由（SPEC-036）", () => {
         );
         expect(missing.status).toBe(400);
         expect(((await missing.json()) as { statusMessage: string }).statusMessage).toContain("不存在");
+    });
+});
+
+// SPEC-036 B-013：会话截断路由（编辑重发）
+
+describe("POST /api/sessions/:sessionId/truncate（SPEC-036 B-013）", () => {
+    const app = createApp();
+    let home: string;
+    let sessionId = "";
+    const origHome = process.env.HOME;
+
+    beforeAll(async () => {
+        home = fs.mkdtempSync(path.join(os.tmpdir(), "anycode-truncroute-"));
+        process.env.HOME = home;
+        const service = new SessionService();
+        const s = await service.create("p-trunc", "t");
+        sessionId = s.id;
+        const key = { projectKey: "p-trunc", sessionId };
+        await service.appendMessage(key, { role: "user", content: "u1" });
+        await service.appendMessage(key, { role: "assistant", content: "a1" });
+        await service.appendMessage(key, { role: "user", content: "u2" });
+        await service.appendMessage(key, { role: "assistant", content: "a2" });
+    });
+
+    afterAll(() => {
+        process.env.HOME = origHome;
+        fs.rmSync(home, { recursive: true, force: true });
+    });
+
+    it("keep=1 → u2/a2 删除；非法参数 400；不存在会话 404", async () => {
+        const res = await app.request(`/api/sessions/${sessionId}/truncate`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ keepUserMessages: 1 }),
+        });
+        expect(res.status).toBe(200);
+        const hist = (await (
+            await app.request(`/api/sessions/${sessionId}/history`)
+        ).json()) as { messages: Array<{ content: string }> };
+        expect(hist.messages.map((m) => m.content)).toEqual(["u1", "a1"]);
+
+        const bad = await app.request(`/api/sessions/${sessionId}/truncate`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({}),
+        });
+        expect(bad.status).toBe(400);
+
+        const missing = await app.request(`/api/sessions/none/truncate`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ keepUserMessages: 0 }),
+        });
+        expect(missing.status).toBe(404);
     });
 });

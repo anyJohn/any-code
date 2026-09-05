@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiJson } from "@/lib/api";
 import { useT } from "@/i18n";
 import {
     type AgentEvent,
@@ -384,6 +385,19 @@ export function useAgent(
 
     const clear = useCallback(() => setEvents([]), []);
 
+    /** 重取会话历史并整体替换 events（B-013 截断编辑重发后同步真值） */
+    const reloadHistory = useCallback(async () => {
+        if (!currentSessionId) return;
+        const data = await apiJson<{
+            events: AgentEventPayload[];
+        }>(`/api/sessions/${currentSessionId}/history`);
+        const fresh = (data?.events ?? []).map(
+            (e) => ({ ...e, id: nextId("hist") } as AgentEvent)
+        );
+        setEvents(fresh);
+        eventsRef.current = fresh;
+    }, [currentSessionId]);
+
     const appendSystem = useCallback((message: string) => {
         setEvents((prev) => [
             ...prev,
@@ -408,5 +422,6 @@ export function useAgent(
         submitInteraction,
         pendingPermission,
         submitPermission,
+        reloadHistory,
     };
 }

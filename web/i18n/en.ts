@@ -49,6 +49,8 @@ export const en: Record<string, string> = {
     "changes.noSnapshots": "None (no snapshots yet)",
     "changes.empty": "No file changes since this snapshot",
     "changes.showAll": "Show all files",
+    "chat.editMessage": "Edit & resend",
+    "chat.resend": "Resend",
     "chatView.compacting": "Compacting context…",
     "command.compactProgressPersisting": "Persisting session…",
     "command.compactProgressPreparing": "Preparing compaction…",

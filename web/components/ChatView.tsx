@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toRenderItems, toRenderItemsIncremental } from "@/lib/renderItems";
 import { useAppDispatch } from "@/hooks/useRedux";
+import { apiJson } from "@/lib/api";
 import { useAgent } from "@/hooks/useAgent";
 import { useCommand } from "@/hooks/useCommand";
 import { useFileReference } from "@/hooks/useFileReference";
@@ -55,6 +56,7 @@ export function ChatView({
         submitInteraction,
         pendingPermission,
         submitPermission,
+        reloadHistory,
     } = useAgent(sessionId, rootPath, initialEvents);
     const [snapshotsOpen, setSnapshotsOpen] = useState(false);
     const command = useCommand({
@@ -192,6 +194,20 @@ export function ChatView({
                         toggleSub={toggleSub}
                         scrollRef={scrollRef}
                         onLayoutEffect={() => {}}
+                        onEditUserMessage={(ordinal, text) => {
+                            void (async () => {
+                                const res = await apiJson<
+                                    { kept: number } | { statusMessage: string }
+                                >(`/api/sessions/${currentSessionId}/truncate`, {
+                                    method: "POST",
+                                    headers: { "content-type": "application/json" },
+                                    body: JSON.stringify({ keepUserMessages: ordinal }),
+                                });
+                                if (res && "statusMessage" in res) return;
+                                await reloadHistory();
+                                submit(text);
+                            })();
+                        }}
                     />
                 </>
             )}

@@ -19,6 +19,12 @@ export interface SessionStore {
     append(key: SessionKey, entries: SessionEntry[]): Promise<void>;
     /** 原子重写整个 session：保留原 title/createdAt，用给定 messages 替换全部消息。 */
     replaceMessages(key: SessionKey, messages: ChatMessage[]): Promise<void>;
+    /**
+     * 截断到前 keep 条 user 消息（批 3 B-013 编辑重发）：第 keep 条之后的
+     * 全部 message/event 条目删除；meta（createdAt/title/usage/sysfp）保留。
+     * 返回实际保留的 user 消息数。
+     */
+    truncateToUserMessages(key: SessionKey, keep: number): Promise<number>;
     load(key: SessionKey): Promise<SessionEntry[] | null>;
     listMeta(projectKey: string): Promise<SessionMeta[]>;
     remove(key: SessionKey): Promise<void>;
@@ -110,6 +116,40 @@ export class LocalSessionStore implements SessionStore {
         const tmp = `${file}.tmp`;
         await fs.writeFile(tmp, lines, "utf-8");
         await fs.rename(tmp, file);
+    }
+
+    async truncateToUserMessages(key: SessionKey, keep: number): Promise<number> {
+        const orig = (await this.load(key)) ?? [];
+        const metas = orig.filter(
+            (e): e is Extract<SessionEntry, { kind: "meta" }> => e.kind === "meta"
+        );
+        const id = key.sessionId;
+        const m = metas.length ? metaOf(id, metas) : null;
+        const now = Date.now();
+        const createdAt = m?.createdAt ?? now;
+        const title = m?.title;
+        const entries: SessionEntry[] = [
+            { kind: "meta", updatedAt: createdAt },
+            { kind: "meta", title, updatedAt: now },
+        ];
+        for (const meta of metas) {
+            if (meta.usage || meta.sysfp) entries.push(meta);
+        }
+        let kept = 0;
+        for (const e of orig) {
+            if (e.kind === "meta") continue;
+            if (e.kind === "message" && e.message.role === "user") {
+                if (kept === keep) break;
+                kept++;
+            }
+            entries.push(e);
+        }
+        const file = fileOf(key);
+        const lines = entries.map((e) => JSON.stringify(e)).join("\n") + "\n";
+        const tmp = `${file}.tmp`;
+        await fs.writeFile(tmp, lines, "utf-8");
+        await fs.rename(tmp, file);
+        return kept;
     }
 
     async load(key: SessionKey): Promise<SessionEntry[] | null> {

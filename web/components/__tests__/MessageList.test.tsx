@@ -26,7 +26,7 @@ const baseProps = (events: AgentEvent[], pending: boolean) => ({
     toggleTool: () => {},
     toggleSub: () => {},
     scrollRef: { current: null },
-    onLayoutEffect: () => {},
+    onLayoutEffect: () => {}, onEditUserMessage: () => {},
 });
 
 describe("MessageList 活动工具卡片（SPEC-018 AC-003）", () => {

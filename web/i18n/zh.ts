@@ -50,6 +50,8 @@ export const zh: Record<string, string> = {
     "changes.noSnapshots": "无（还没有快照）",
     "changes.empty": "该快照以来没有文件变更",
     "changes.showAll": "显示全部文件",
+    "chat.editMessage": "编辑并重发",
+    "chat.resend": "重发",
     "chatView.compacting": "正在压缩上下文…",
     "command.compactProgressPersisting": "写入会话…",
     "command.compactProgressPreparing": "准备压缩…",
