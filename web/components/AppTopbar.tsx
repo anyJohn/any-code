@@ -39,7 +39,7 @@ interface RecentSession {
  * 数据复用 GET /api/workspaces（内联 sessions），按 updatedAt 倒序取前 12；点击跳会话。
  */
 export function AppTopbar() {
-    const { selected, workspaces } = useAppSelector(selectWorkspace);
+    const { workspaces } = useAppSelector(selectWorkspace);
     const dispatch = useAppDispatch();
     const navigate = useNavigate();
     const { language, setLanguage, t } = useT();
@@ -147,14 +147,6 @@ export function AppTopbar() {
                 </DropdownMenuContent>
             </DropdownMenu>
 
-            {selected && (
-                <span
-                    className="text-xs text-muted-foreground font-mono truncate"
-                    title={selected.rootPath}
-                >
-                    {selected.name}
-                </span>
-            )}
             {addError && (
                 <span className="text-xs text-destructive truncate">
                     {addError}
