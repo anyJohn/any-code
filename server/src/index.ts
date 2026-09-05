@@ -16,6 +16,9 @@ import {
     switchDefaultModel,
     switchDefaultProvider,
     setUiLanguage,
+    getSkillUpdates,
+    upgradeSkill,
+    skipSkillUpdate,
     projectKeyOf,
     resolveContextWindow,
     resolveInteraction,
@@ -552,6 +555,22 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         const result = getAgentManager().stop(sessionId);
         if (result === null) return c.json({ statusMessage: "session not running" }, 404);
         return c.json({ status: result });
+    });
+
+    // ---- 技能更新（FR-25 ③：版本比对 + 升级/跳过）----
+    app.get("/api/skills/updates", (c) => c.json(getSkillUpdates()));
+    app.post("/api/skills/upgrade", async (c) => {
+        const body = (await c.req.json().catch(() => ({}))) as { name?: string };
+        const r = upgradeSkill(body?.name?.trim() ?? "");
+        return c.json(r, r.ok ? 200 : 400);
+    });
+    app.post("/api/skills/skip", async (c) => {
+        const body = (await c.req.json().catch(() => ({}))) as { name?: string };
+        const name = body?.name?.trim();
+        if (!name) return c.json({ statusMessage: "name required" }, 400);
+        const u = getSkillUpdates().find((x) => x.name === name);
+        skipSkillUpdate(name, u?.builtinVersion ?? "0.0.0");
+        return c.json({ ok: true });
     });
 
     // GET /api/running —— 全局运行快照（FR-30 B-004）：跨工作区 queued/running/waiting_ask + 标题，

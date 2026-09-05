@@ -15,8 +15,10 @@
   - Global 级别 Skill（`~/.anycode/skills/`）
   - 兼容 `~/.agents/skills/` 与 `~/.claude/skills/`（Claude Code）目录下 Skill（已实现，最低用户层；2026-09-04 补 claude 层——用户技能常装在那里）
   - 技能即文件：目录制 `<name>/SKILL.md`（可带 `references/scripts/assets` 子目录，agent 可读）或平铺 `<name>.md`；内置技能 = seed 机制（首启把随包技能拷进 `~/.anycode/skills/`，幂等不覆盖用户修改，落地即普通全局技能，FE-022）
-  - 已内置 anycode-docs 技能（AnyCode 自身配置与管理手册：改 config/mcp/tools/skills/rules/memory + 生效时机，让 agent 能自我管理配置）
+  - 已内置 anycode-docs 技能 v1.1.0（AnyCode 自身配置与管理手册：改 config/mcp/tools/skills/rules/memory/proxy + 生效时机，让 agent 能自我管理配置）
   - 已内置 office-mcp 技能（Office 39 工具：Word/Excel/PPT/PDF/OCR，MIT + 三审；未发 npm，需首次 clone+build 配 MCP）
+  - 已内置 code-review（代码审查五维清单）/ test-writing（测试编写指南）/ release-checklist（发布检查单）技能（FR-25 ①，2026-09-05）
+  - seed 升级策略（FR-25 ③，2026-09-05）：SKILL.md frontmatter 带 version+changes，内置升版 → Settings 技能更新卡提示（变更说明），可选升级（覆盖）或跳过（记偏好）；agent 启动时 Warning 提醒（每进程一次）
   - 原生 web 工具（用户决策 2026-09-03，取代内置 MCP 连接器）：`web_fetch`（网页→Markdown）/ `web_search`（ddg 免 key，可换 tavily/bing）/ `browser_use`（真浏览器 CDP 单工具：action=navigate/content/eval——导航/读页/点击填表）
 - Memory
   - 原文层：Session History（durable 事件日志，含 thinking / tool call / 报错 / usage 等，reload 重放）

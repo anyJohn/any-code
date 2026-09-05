@@ -8,7 +8,7 @@ import { agentLoop } from "./core";
 import { compactMessages } from "./compact";
 import { loadRule } from "./rule";
 import { resolveSkills, renderSkillCatalog } from "./skill";
-import { seedBuiltinSkills } from "./seed";
+import { seedBuiltinSkills, getSkillUpdates } from "./seed";
 import { EventStream } from "./eventStream";
 import {
     SessionService,
@@ -53,6 +53,9 @@ import {
     takeUntil,
     tap,
 } from "rxjs";
+
+/** FR-25 ③：技能更新提示每进程只发一次（per-request agent 下防刷屏） */
+let skillUpdatesWarned = false;
 
 interface AnyAgentOptions {
     /** 工作区根目录。Agent 的 bash cwd / 文件解析 / 配置加载都以此为锚。 */
@@ -120,6 +123,19 @@ class AnyAgent {
         const seeded = seedBuiltinSkills();
         if (seeded.length) {
             console.info(`[Seed] 内置技能已就位：${seeded.join(", ")}`);
+        }
+        // FR-25 ③：随包技能有更新 → Warning 提醒（覆盖/跳过走 Settings 技能更新卡）
+        if (!skillUpdatesWarned) {
+            const updates = getSkillUpdates();
+            if (updates.length) {
+                skillUpdatesWarned = true;
+                this.eventStream.submit({
+                    type: "Warning",
+                    message: `随包技能有新版本：${updates
+                        .map((u) => `${u.name} ${u.installedVersion}→${u.builtinVersion}`)
+                        .join("、")}（Settings → 技能更新 可升级或跳过）`,
+                });
+            }
         }
         this.initProcessor();
     }

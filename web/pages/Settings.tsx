@@ -19,6 +19,7 @@ import {
 import { DefaultProviderCard } from "./settings/DefaultProviderCard";
 import { ProvidersCard } from "./settings/ProvidersCard";
 import { ToolsCard } from "./settings/ToolsCard";
+import { SkillUpdatesCard } from "./settings/SkillUpdatesCard";
 import { McpCard } from "./settings/McpCard";
 import { PermissionsCard } from "./settings/PermissionsCard";
 
@@ -222,6 +223,7 @@ export default function SettingsPage() {
                             toolCfg={toolCfg}
                             patchCfg={patchToolCfg}
                         />
+                        <SkillUpdatesCard />
                         <McpCard
                             mcp={mcp}
                             patchMcp={patchMcp}

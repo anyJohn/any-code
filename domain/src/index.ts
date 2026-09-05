@@ -12,6 +12,7 @@ export {
 } from "./tools";
 export * from "./agent";
 export * from "./config";
+export * from "./seed";
 export * from "./ripgrep";
 export * from "./pendingInteractions";
 export * from "./builtin";
