@@ -348,7 +348,7 @@ export class Config {
                     },
                     browser_use: {
                         enabled: false,
-                        config: { cdpUrl: "http://127.0.0.1:9222" },
+                        config: { cdpUrl: "http://localhost:9222" },
                     },
                 },
             });

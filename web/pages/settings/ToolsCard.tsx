@@ -10,7 +10,7 @@ import type { ToolCatalogItem } from "./model";
 const SEARCH_PROVIDERS = ["ddg", "tavily", "bing"] as const;
 
 /** browser_use 的 cdpUrl 默认值：browser 级 http 端点，工具内部 /json/list 自动发现 page。 */
-const DEFAULT_CDPURL = "http://127.0.0.1:9222";
+const DEFAULT_CDPURL = "http://localhost:9222";
 
 function webConfig(cfg: Record<string, Record<string, unknown>>, name: string) {
     return (cfg[name] ?? {}) as Record<string, unknown>;
