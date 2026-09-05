@@ -61,6 +61,16 @@ export interface CompactOptions {
     focus?: string;
     /** 尾部保留消息条数（默认 KEEP_RECENT_MESSAGES）。可调，便于测试与未来调参。 */
     keepN?: number;
+    /** 进度回调（用户需求 2026-09-05）：阶段 + 摘要流式已生成 token 计数。
+     *  摘要输出长度未知 → 真实百分比不可得，只报诚实信号（阶段 + 活动计数）。 */
+    onProgress?: (p: CompactProgress) => void;
+}
+
+/** 压缩进度事件：preparing（组装）→ summarizing（流式摘要）→ persisting（落盘，由调用方发）。 */
+export interface CompactProgress {
+    phase: "preparing" | "summarizing" | "persisting";
+    /** 摘要已生成 tokens 估算（chars/4 启发式；仅 summarizing 阶段） */
+    generatedTokens?: number;
 }
 
 export interface CompactResult {
@@ -147,12 +157,23 @@ export function splitForCompact(
     return { head: rest.slice(0, cut), tail: rest.slice(cut) };
 }
 
-/** 调 LLM 产出结构化摘要（同 provider、禁用工具、非流式、max_tokens 4096）。 */
+/** 摘要生成 token 计数（chars/4 启发式，与全局估算同口径）。 */
+function generatedTokensEstimate(text: string): number {
+    return Math.ceil(text.length / CHARS_PER_TOKEN);
+}
+
+/**
+ * 调 LLM 产出结构化摘要（同 provider、禁用工具、max_tokens 4096）。
+ * 按 provider 的 streaming 配置二选一（用户决策 2026-09-05，失败即报错不兜底）：
+ * - streaming=true：流式聚合，每 ~150ms 上报已生成 token 计数（真实进度信号）
+ * - streaming=false：非流式，无计数，仅阶段事件（诚实：无信号不编造）
+ */
 async function summarize(
     llm: LlmProvider,
     conversation: string,
     opts: { focus?: string; previousSummary?: string },
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    onProgress?: (p: CompactProgress) => void
 ): Promise<string> {
     const client = new OpenAI({ apiKey: llm.apiKey, baseURL: llm.baseURL });
     const userPrompt = buildCompactionPrompt(
@@ -160,6 +181,44 @@ async function summarize(
         opts.previousSummary,
         opts.focus
     );
+
+    if (llm.streaming) {
+        const stream = await client.chat.completions.create(
+            {
+                model: llm.defaultModel,
+                messages: [
+                    { role: "system", content: COMPACT_SUMMARIZER_SYSTEM },
+                    { role: "user", content: userPrompt },
+                ],
+                max_tokens: SUMMARY_MAX_TOKENS,
+                stream: true,
+            },
+            { signal }
+        );
+        let text = "";
+        let lastEmit = 0;
+        for await (const chunk of stream) {
+            const delta = chunk.choices[0]?.delta?.content ?? "";
+            if (!delta) continue;
+            text += delta;
+            const now = Date.now();
+            if (now - lastEmit >= 150) {
+                lastEmit = now;
+                onProgress?.({
+                    phase: "summarizing",
+                    generatedTokens: generatedTokensEstimate(text),
+                });
+            }
+        }
+        if (!text) throw new Error("compaction summarizer returned no content");
+        onProgress?.({
+            phase: "summarizing",
+            generatedTokens: generatedTokensEstimate(text),
+        });
+        return text;
+    }
+
+    onProgress?.({ phase: "summarizing" }); // 非流式：无计数，仅阶段
     const resp = await client.chat.completions.create(
         {
             model: llm.defaultModel,
@@ -201,6 +260,7 @@ export async function compactMessages(
         rest = messages.slice();
     }
 
+    opts?.onProgress?.({ phase: "preparing" });
     const { head, tail } = splitForCompact(rest, opts?.keepN ?? KEEP_RECENT_MESSAGES);
     if (head.length === 0) {
         return {
@@ -231,7 +291,8 @@ export async function compactMessages(
         llm,
         serialized,
         { focus: opts?.focus, previousSummary },
-        signal
+        signal,
+        opts?.onProgress
     );
 
     const summaryContent = COMPACT_HANDOFF_PREFIX + summary;
@@ -256,6 +317,7 @@ export async function compactMessages(
         ];
     }
 
+    opts?.onProgress?.({ phase: "persisting" });
     const newMessages = systemMsg ? [systemMsg, ...newRest] : newRest;
     const afterTokens = estimateTokens(newMessages, undefined);
     return {

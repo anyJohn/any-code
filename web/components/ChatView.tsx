@@ -7,6 +7,7 @@ import { useAgent } from "@/hooks/useAgent";
 import { useCommand } from "@/hooks/useCommand";
 import { useFileReference } from "@/hooks/useFileReference";
 import { bumpSessions } from "@/store/workspaceSlice";
+import { fmtTokens } from "@/lib/format";
 import type { AgentEvent } from "@/lib/sseEvents";
 import { InputBox } from "./InputBox";
 import { MessageList } from "./MessageList";

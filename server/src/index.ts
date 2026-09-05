@@ -547,6 +547,9 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         return c.json(out);
     });
 
+    // POST /api/sessions/:sessionId/compact —— SSE（用户需求 2026-09-05）：
+    // 进度帧 {type:"progress", phase, generatedTokens?} + 终帧 {type:"result"|...}。
+    // 压缩占用会话（single-flight 与 /run 共用锁）。
     app.post("/api/sessions/:sessionId/compact", async (c) => {
         const sessionId = c.req.param("sessionId");
         let body: { focus?: string; workspacePath?: string } = {};
@@ -562,27 +565,70 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         if (running.has(sessionId))
             return c.json({ statusMessage: "session is running" }, 409);
         running.add(sessionId);
-        try {
-            const agent = await AnyAgent.create({ rootPath: workspacePath, sessionId });
-            if (!agent.getSession()) {
-                agent.destroy();
-                return c.json({ statusMessage: "session not found" }, 404);
-            }
-            const focus = body?.focus?.trim() || undefined;
-            const res = await agent.compact(focus);
-            agent.destroy();
-            return c.json(res);
-        } catch (err) {
-            return c.json(
-                {
-                    statusMessage: "compact failed",
-                    error: err instanceof Error ? err.message : String(err),
-                },
-                500,
-            );
-        } finally {
-            running.delete(sessionId);
-        }
+
+        const focus = body?.focus?.trim() || undefined;
+        const headers = {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache, no-transform",
+            Connection: "keep-alive",
+            "X-Accel-Buffering": "no",
+        };
+        const stream = new ReadableStream<Uint8Array>({
+            start(controller) {
+                const enc = new TextEncoder();
+                let closed = false;
+                const send = (obj: unknown) => {
+                    if (closed) return;
+                    try {
+                        controller.enqueue(
+                            enc.encode(`data: ${JSON.stringify(obj)}\n\n`)
+                        );
+                    } catch {
+                        // controller 已关
+                    }
+                };
+                const finish = () => {
+                    if (closed) return;
+                    closed = true;
+                    running.delete(sessionId);
+                    try {
+                        controller.close();
+                    } catch {
+                        // 已关
+                    }
+                };
+                void (async () => {
+                    let agent: AnyAgent | null = null;
+                    try {
+                        agent = await AnyAgent.create({
+                            rootPath: workspacePath,
+                            sessionId,
+                        });
+                        if (!agent.getSession()) {
+                            agent.destroy();
+                            send({ type: "error", text: "session not found" });
+                            return;
+                        }
+                        const res = await agent.compact(focus, (p) => send({ type: "progress", ...p }));
+                        send({
+                            type: "result",
+                            beforeTokens: res.beforeTokens,
+                            afterTokens: res.afterTokens,
+                            compacted: res.compacted,
+                        });
+                    } catch (err) {
+                        send({
+                            type: "error",
+                            text: err instanceof Error ? err.message : String(err),
+                        });
+                    } finally {
+                        agent?.destroy();
+                        finish();
+                    }
+                })();
+            },
+        });
+        return new Response(stream, { headers });
     });
 
     app.get("/api/sessions/:sessionId/history", async (c) => {

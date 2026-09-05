@@ -41,8 +41,12 @@ export function useCommand({ appendSystem, submit, projectKey, rootPath, current
     const { t } = useT();
     const [customCommands, setCustomCommands] = useState<CommandItem[]>([]);
     const [draft, setDraft] = useState("");
-    // /compact 进行中（调摘要 LLM 数秒）：驱动 indeterminate 进度条
+    // /compact 进行中（调摘要 LLM 数秒）：驱动进度条（阶段 + 流式已生成计数）
     const [compacting, setCompacting] = useState(false);
+    const [compactProgress, setCompactProgress] = useState<{
+        phase: "preparing" | "summarizing" | "persisting";
+        generatedTokens?: number;
+    } | null>(null);
 
     useEffect(() => {
         if (!projectKey) return;
@@ -139,6 +143,7 @@ export function useCommand({ appendSystem, submit, projectKey, rootPath, current
                         return;
                     }
                     setCompacting(true);
+                    setCompactProgress({ phase: "preparing" });
                     try {
                         const res = await fetch(
                             `/api/sessions/${currentSessionId}/compact`,
@@ -151,21 +156,7 @@ export function useCommand({ appendSystem, submit, projectKey, rootPath, current
                                 }),
                             }
                         );
-                        if (res.ok) {
-                            const r = (await res.json()) as {
-                                beforeTokens: number;
-                                afterTokens: number;
-                                compacted: boolean;
-                            };
-                            appendSystem(
-                                r.compacted
-                                    ? t("command.compacted", {
-                                          before: r.beforeTokens,
-                                          after: r.afterTokens,
-                                      })
-                                    : t("command.compactNotNeeded")
-                            );
-                        } else {
+                        if (!res.ok || !res.body) {
                             let text = t("command.compactFailed");
                             try {
                                 const j = (await res.json()) as {
@@ -176,9 +167,62 @@ export function useCommand({ appendSystem, submit, projectKey, rootPath, current
                                 // body 非 json
                             }
                             appendSystem(text);
+                            return;
+                        }
+                        // SSE 帧：progress（阶段+计数）→ result（终态）
+                        const reader = res.body.getReader();
+                        const dec = new TextDecoder();
+                        let buf = "";
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            buf += dec.decode(value, { stream: true });
+                            let idx;
+                            while ((idx = buf.indexOf("\n\n")) !== -1) {
+                                const frame = buf.slice(0, idx);
+                                buf = buf.slice(idx + 2);
+                                for (const line of frame.split("\n")) {
+                                    if (!line.startsWith("data:")) continue;
+                                    try {
+                                        const f = JSON.parse(
+                                            line.slice(5).trim()
+                                        ) as {
+                                            type?: string;
+                                            phase?: "preparing" | "summarizing" | "persisting";
+                                            generatedTokens?: number;
+                                            beforeTokens?: number;
+                                            afterTokens?: number;
+                                            compacted?: boolean;
+                                            text?: string;
+                                        };
+                                        if (f.type === "progress") {
+                                            setCompactProgress({
+                                                phase: f.phase ?? "preparing",
+                                                generatedTokens: f.generatedTokens,
+                                            });
+                                        } else if (f.type === "result") {
+                                            appendSystem(
+                                                f.compacted
+                                                    ? t("command.compacted", {
+                                                          before: f.beforeTokens ?? 0,
+                                                          after: f.afterTokens ?? 0,
+                                                      })
+                                                    : t("command.compactNotNeeded")
+                                            );
+                                        } else if (f.type === "error") {
+                                            appendSystem(
+                                                f.text ?? t("command.compactFailed")
+                                            );
+                                        }
+                                    } catch {
+                                        // 损坏帧跳过
+                                    }
+                                }
+                            }
                         }
                     } finally {
                         setCompacting(false);
+                        setCompactProgress(null);
                     }
                     return;
                 }
@@ -238,5 +282,6 @@ export function useCommand({ appendSystem, submit, projectKey, rootPath, current
         runCommand,
         runRawCommand,
         compacting,
+        compactProgress,
     };
 }

@@ -7,8 +7,26 @@ vi.mock("react-router-dom", () => ({
 
 import { useCommand } from "@/hooks/useCommand";
 
+// compact 路由已是 SSE：进度帧 + 结果帧（用户需求 2026-09-05）
+function sseResponse(frames: unknown[]): Response {
+    const enc = new TextEncoder();
+    const body = new ReadableStream({
+        start(controller) {
+            for (const f of frames) {
+                controller.enqueue(
+                    enc.encode(`data: ${JSON.stringify(f)}\n\n`)
+                );
+            }
+            controller.close();
+        },
+    });
+    return new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+    });
+}
+
 function mkDeps(over: Partial<{
-    clear: () => void;
     appendSystem: (m: string) => void;
     submit: (m: string) => void;
     projectKey?: string;
@@ -16,7 +34,6 @@ function mkDeps(over: Partial<{
     currentSessionId: string | null;
 }> = {}) {
     return {
-        clear: vi.fn(),
         appendSystem: vi.fn(),
         submit: vi.fn(),
         projectKey: undefined,
@@ -30,17 +47,19 @@ describe("useCommand /compact (AC-006)", () => {
     beforeEach(() => vi.stubGlobal("fetch", vi.fn()));
     afterEach(() => vi.unstubAllGlobals());
 
-    it("/compact <focus> → POST compact 端点带 focus，appendSystem 反馈", async () => {
+    it("/compact <focus> → POST compact 端点带 focus，SSE 进度+结果帧反馈", async () => {
         const f = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
         f.mockResolvedValue(
-            new Response(
-                JSON.stringify({
+            sseResponse([
+                { type: "progress", phase: "preparing" },
+                { type: "progress", phase: "summarizing", generatedTokens: 3 },
+                {
+                    type: "result",
                     beforeTokens: 1000,
                     afterTokens: 200,
                     compacted: true,
-                }),
-                { status: 200, headers: { "content-type": "application/json" } }
-            )
+                },
+            ])
         );
         const deps = mkDeps();
         const { result } = renderHook(() => useCommand(deps));
@@ -83,17 +102,14 @@ describe("useCommand /compact (AC-006)", () => {
         // resolve fetch → finally setCompacting(false) + appendSystem
         await act(async () => {
             resolveLater?.(
-                new Response(
-                    JSON.stringify({
+                sseResponse([
+                    {
+                        type: "result",
                         beforeTokens: 1000,
                         afterTokens: 200,
                         compacted: true,
-                    }),
-                    {
-                        status: 200,
-                        headers: { "content-type": "application/json" },
-                    }
-                )
+                    },
+                ])
             );
         });
         await waitFor(() => expect(result.current.compacting).toBe(false));
@@ -112,14 +128,7 @@ describe("useCommand /compact (AC-006)", () => {
     it("compacted=false → appendSystem 提示足够短", async () => {
         const f = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
         f.mockResolvedValue(
-            new Response(
-                JSON.stringify({
-                    beforeTokens: 0,
-                    afterTokens: 0,
-                    compacted: false,
-                }),
-                { status: 200, headers: { "content-type": "application/json" } }
-            )
+            sseResponse([{ type: "result", beforeTokens: 0, afterTokens: 0, compacted: false }])
         );
         const deps = mkDeps();
         const { result } = renderHook(() => useCommand(deps));

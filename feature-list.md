@@ -50,6 +50,7 @@
   - 手动指令 `/compact [聚焦]` 压缩
   - 保留最近若干消息，确保压缩不影响当前工作
   - 压缩失败发非终态 Warning（不误终止 run）
+  - 压缩进度 SSE（2026-09-05）：阶段（准备→摘要生成中→写入）+ 流式已生成 token 计数（真实活动信号，非伪百分比——摘要输出长度未知）；按 provider streaming 配置二选一，失败报错不兜底
 - bash 输出治理（AR-2）：双限截断（2000 行/40KB）+ 全量 spill 文件（结果附路径）；timeout_ms 可配（1-600s）
 - LLM 调用重试（AR-1）：429/5xx/网络/空响应指数退避 + 抖动（默认 3 次，provider.retry 可配），Retry-After 优先，重试发 Warning 可见
 - 上下文分级压缩（FR-6）：microcompact 清陈旧 tool result 先于全量摘要；阈值=窗口-13k buffer；超限被拒→被动压缩重试（AR-9）

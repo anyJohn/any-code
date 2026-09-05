@@ -322,7 +322,10 @@ class AnyAgent {
      * 压缩后整体重写 session.jsonl（保留 title/createdAt）。返回压缩前后 token 数。
      * 与 submit 驱动的 agentLoop 自动压缩共用 compactMessages，仅触发方式不同（手动 vs 75% 阈值）。
      */
-    async compact(focus?: string): Promise<{
+    async compact(
+        focus?: string,
+        onProgress?: (p: import("./compact").CompactProgress) => void
+    ): Promise<{
         beforeTokens: number;
         afterTokens: number;
         compacted: boolean;
@@ -337,7 +340,7 @@ class AnyAgent {
         const res = await compactMessages(
             session.messages,
             this.config.getCurrentProvider(),
-            focus != null ? { focus } : undefined
+            focus != null || onProgress ? { focus, onProgress } : undefined
         );
         if (res.compacted) {
             session.messages.length = 0;
