@@ -70,7 +70,11 @@ export function ChangesTab({ projectKey }: { projectKey: string }) {
         if (selected) void loadDiff(selected, activeFile);
     }, [selected, activeFile, loadDiff]);
 
-    const patchLines = useMemo(() => diff?.patch.split("\n") ?? [], [diff]);
+    // 空 patch（无变更）不进 split——否则 [""] 会渲染一个空代码框（用户反馈 bug）
+    const patchLines = useMemo(
+        () => (diff?.patch ? diff.patch.split("\n") : []),
+        [diff]
+    );
 
     if (!gitAvailable) {
         return <Empty text={t("changes.gitUnavailable")} />;
