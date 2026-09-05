@@ -91,11 +91,11 @@ export function ChangesTab({ projectKey }: { projectKey: string }) {
                                 setSelected(e.target.value);
                                 setActiveFile(null);
                             }}
-                            className="text-xs rounded-md border border-input bg-background px-2 py-1 max-w-[60%] truncate"
+                            className="text-xs rounded-md border border-input bg-background px-2 py-1 max-w-[60%]"
                         >
                             {snapshots.map((s) => (
                                 <option key={s.id} value={s.id}>
-                                    {new Date(s.ts).toLocaleString()} · {s.label}
+                                    {snapshotOptionLabel(s)}
                                 </option>
                             ))}
                         </select>
@@ -171,4 +171,15 @@ function Empty({ text }: { text: string }) {
             {text}
         </div>
     );
+}
+
+/**
+ * 下拉选项 label：时间 + 命令摘要前几个字符 + 省略号（用户反馈：完整 label
+ * 过长导致下拉框卡且巨长）。
+ */
+function snapshotOptionLabel(s: SnapshotInfo): string {
+    const time = new Date(s.ts).toLocaleTimeString();
+    const brief =
+        s.label.length > 14 ? s.label.slice(0, 14) + "…" : s.label;
+    return `${time} · ${brief}`;
 }
