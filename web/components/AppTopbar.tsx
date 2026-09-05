@@ -19,7 +19,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { ChevronsUpDown, Plus, FolderOpen, Languages, MessageSquare } from "lucide-react";
+import { Plus, FolderOpen, Languages, MessageSquare, ChevronUp } from "lucide-react";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { Logo } from "./Logo";
 import { apiJson } from "@/lib/api";
@@ -107,13 +107,12 @@ export function AppTopbar() {
         <div className="flex items-center gap-3 px-4 h-12">
             <Logo size={20} className="shrink-0" />
             <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+                {/* 触发器 = 会话历史 pill（与菜单内容一致）；工作区名降级为纯文本展示（切换归侧栏） */}
                 <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="gap-2">
-                        <FolderOpen className="size-4" />
-                        <span className="truncate max-w-[200px]">
-                            {selected?.name || t("topbar.selectWorkspace")}
-                        </span>
-                        <ChevronsUpDown className="size-3 text-muted-foreground" />
+                    <Button variant="ghost" size="sm" className="gap-1.5">
+                        <MessageSquare className="size-4" />
+                        <span>{t("topbar.recentSessions")}</span>
+                        <ChevronUp className="size-3 text-muted-foreground" />
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-80">
@@ -149,8 +148,11 @@ export function AppTopbar() {
             </DropdownMenu>
 
             {selected && (
-                <span className="text-xs text-muted-foreground font-mono truncate">
-                    {selected.rootPath}
+                <span
+                    className="text-xs text-muted-foreground font-mono truncate"
+                    title={selected.rootPath}
+                >
+                    {selected.name}
                 </span>
             )}
             {addError && (
