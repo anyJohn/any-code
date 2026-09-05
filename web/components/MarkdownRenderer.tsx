@@ -56,7 +56,7 @@ const CodeBlock = memo(function CodeBlock({
                 />
             </div>
             <pre className="rounded-t-none border border-t-0 border-zinc-800 bg-zinc-950 overflow-x-auto p-3 text-xs leading-relaxed text-zinc-100 [&>code]:bg-transparent [&>code]:!px-0 [&>code]:!py-0">
-                <code className={className}>{children}</code>
+                <code className={`${className ?? ""} hljs-dark`.trim()}>{children}</code>
             </pre>
         </div>
     );

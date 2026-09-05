@@ -8,8 +8,8 @@ import { App } from "@/App";
 import { TitleBar } from "@/components/TitleBar";
 import { isElectron } from "@/lib/electron";
 import { LanguageProvider } from "@/i18n";
+import "highlight.js/styles/github.css"; // hljs 亮色主题为默认；暗色覆盖见 globals.css（先于 globals 引入，让后者可覆盖）
 import "@/globals.css";
-import "highlight.js/styles/github-dark.css"; // 代码高亮主题（SPEC-036 B-001）：代码块恒暗底，明暗主题通用
 
 // 根布局：h-screen flex-col，承载 app-shell-bg 渐变。桌面端顶部条件渲染 TitleBar
 // （无边框窗口的内置控件）；浏览器模式 isElectron()=false，无 TitleBar，AppShell 占满如前。

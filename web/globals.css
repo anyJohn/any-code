@@ -189,3 +189,79 @@
     width: 40%;
     animation: compact-slide 1.1s ease-in-out infinite;
 }
+
+/* ── hljs 暗色上下文配色（github-dark 色板）──
+   github.css（亮色）为全局默认；`.dark` 主题或恒暗代码块（.hljs-dark）覆盖。 */
+.hljs {
+  background: transparent;
+}
+.dark .hljs,
+.hljs-dark {
+  color: #e6edf3;
+}
+.dark .hljs-comment,
+.hljs-dark .hljs-comment {
+  color: #8b949e;
+}
+.dark .hljs-keyword,
+.dark .hljs-selector-tag,
+.dark .hljs-literal,
+.dark .hljs-section,
+.dark .hljs-doctag,
+.dark .hljs-type,
+.dark .hljs-name,
+.dark .hljs-strong,
+.hljs-dark .hljs-keyword,
+.hljs-dark .hljs-selector-tag,
+.hljs-dark .hljs-literal,
+.hljs-dark .hljs-section,
+.hljs-dark .hljs-doctag,
+.hljs-dark .hljs-type,
+.hljs-dark .hljs-name,
+.hljs-dark .hljs-strong {
+  color: #ff7b72;
+}
+.dark .hljs-string,
+.dark .hljs-regexp,
+.dark .hljs-addition,
+.dark .hljs-attribute,
+.dark .hljs-meta .hljs-string,
+.hljs-dark .hljs-string,
+.hljs-dark .hljs-regexp,
+.hljs-dark .hljs-addition,
+.hljs-dark .hljs-attribute,
+.hljs-dark .hljs-meta .hljs-string {
+  color: #a5d6ff;
+}
+.dark .hljs-number,
+.dark .hljs-symbol,
+.dark .hljs-bullet,
+.dark .hljs-link,
+.dark .hljs-variable,
+.dark .hljs-template-variable,
+.hljs-dark .hljs-number,
+.hljs-dark .hljs-symbol,
+.hljs-dark .hljs-bullet,
+.hljs-dark .hljs-link,
+.hljs-dark .hljs-variable,
+.hljs-dark .hljs-template-variable {
+  color: #79c0ff;
+}
+.dark .hljs-title,
+.dark .hljs-title.class_,
+.dark .hljs-title.function_,
+.dark .hljs-built_in,
+.dark .hljs-attr,
+.dark .hljs-selector-id,
+.dark .hljs-selector-class,
+.dark .hljs-tag,
+.hljs-dark .hljs-title,
+.hljs-dark .hljs-title.class_,
+.hljs-dark .hljs-title.function_,
+.hljs-dark .hljs-built_in,
+.hljs-dark .hljs-attr,
+.hljs-dark .hljs-selector-id,
+.hljs-dark .hljs-selector-class,
+.hljs-dark .hljs-tag {
+  color: #d2a8ff;
+}

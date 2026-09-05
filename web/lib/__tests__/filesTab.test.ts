@@ -72,3 +72,30 @@ describe("parsePatch（变更 tab 行号）", () => {
         expect(meta.newNo).toBeNull();
     });
 });
+
+import { splitPatch } from "@/components/ChangesTab";
+
+describe("splitPatch（变更 tab 按文件手风琴）", () => {
+    it("按 diff --git 切分，取 b/ 侧路径", () => {
+        const map = splitPatch(
+            [
+                "diff --git a/a.txt b/a.txt",
+                "index 1..2 100644",
+                "--- a/a.txt",
+                "+++ b/a.txt",
+                "@@ -1 +1 @@",
+                "-x",
+                "+y",
+                "diff --git a/dir/b.md b/dir/b.md",
+                "--- a/dir/b.md",
+                "+++ b/dir/b.md",
+                "@@ -1 +1 @@",
+                "-p",
+                "+q",
+            ].join("\n")
+        );
+        expect([...map.keys()].sort()).toEqual(["a.txt", "dir/b.md"]);
+        expect(map.get("dir/b.md")).toContain("+q");
+        expect(map.get("dir/b.md")).not.toContain("-x");
+    });
+});
