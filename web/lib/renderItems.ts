@@ -16,16 +16,20 @@ export interface TurnItem {
     thinkingStartedAt?: number;
     thinkingEndedAt?: number;
     tools: Extract<AgentEvent, { type: "Tool" }>[];
+    /** 组起点事件下标（增量计算内部用） */
+    startIdx?: number;
 }
 export interface SubagentItem {
     kind: "subagent";
     runId: string;
     author: string;
     events: AgentEvent[];
+    startIdx?: number;
 }
 export interface SingleItem {
     kind: "single";
     event: AgentEvent;
+    startIdx?: number;
 }
 export type RenderItem = TurnItem | SubagentItem | SingleItem;
 
@@ -155,11 +159,14 @@ export function groupByTurn(
 export function toRenderItems(events: AgentEvent[]): RenderItem[] {
     const items: RenderItem[] = [];
     let mainBuf: AgentEvent[] = [];
-    let sub: { runId: string; author: string; events: AgentEvent[] } | null =
+    let mainStart = 0; // mainBuf 首事件下标（回合 startIdx）
+    let sub: { runId: string; author: string; events: AgentEvent[]; startIdx: number } | null =
         null;
     const flushMain = (closeThinkingAt?: number) => {
-        for (const t of groupByTurn(mainBuf, { closeThinkingAt }))
+        for (const t of groupByTurn(mainBuf, { closeThinkingAt })) {
+            t.startIdx = mainStart;
             items.push(t);
+        }
         mainBuf = [];
     };
     const flushSub = () => {
@@ -169,11 +176,13 @@ export function toRenderItems(events: AgentEvent[]): RenderItem[] {
                 runId: sub.runId,
                 author: sub.author,
                 events: sub.events,
+                startIdx: sub.startIdx,
             });
         }
         sub = null;
     };
-    for (const e of events) {
+    for (let i = 0; i < events.length; i++) {
+        const e = events[i];
         if (e.runId) {
             flushMain();
             if (sub && sub.runId === e.runId) {
@@ -184,6 +193,7 @@ export function toRenderItems(events: AgentEvent[]): RenderItem[] {
                     runId: e.runId,
                     author: e.author ?? "sub-agent",
                     events: [e],
+                    startIdx: i,
                 };
             }
         } else if (
@@ -200,15 +210,61 @@ export function toRenderItems(events: AgentEvent[]): RenderItem[] {
             //（Warning/User/Compact 等切断思考流 → 思考到此为止；终态同样闭合）
             flushMain(e.timestamp);
             flushSub();
-            items.push({ kind: "single", event: e });
+            items.push({ kind: "single", event: e, startIdx: i });
         } else {
             flushSub();
+            if (!mainBuf.length) mainStart = i;
             mainBuf.push(e);
         }
     }
     flushMain();
     flushSub();
     return items;
+}
+
+/** 组起点判定：Iteration / single 切分事件 / sub-agent runId 边界都开新组 */
+function isGroupStart(events: AgentEvent[], i: number): boolean {
+    const e = events[i];
+    if (e.type === "Iteration") return true;
+    if (
+        e.type === "System" || e.type === "User" || e.type === "Done" ||
+        e.type === "Stopped" || e.type === "Compact" || e.type === "Error" ||
+        e.type === "Warning" || e.type === "Permission"
+    ) return true;
+    if (e.runId) {
+        const prev = i > 0 ? events[i - 1] : undefined;
+        return !prev?.runId || prev.runId !== e.runId;
+    }
+    return false;
+}
+
+/**
+ * 增量渲染项（SPEC-036 B-005）：events 由 append 构建（引用稳定），公共前缀内的
+ * 已闭合组直接复用上次的对象（配合 TurnBlock/ToolRow 的 React.memo，长会话
+ * 追加事件时既有渲染项不重算），只对最后一个开着的组重算。
+ * 前缀断裂（resume 重放/压缩重写数组）或空缓存 → 全量重算，行为与 toRenderItems 一致。
+ */
+export function toRenderItemsIncremental(
+    events: AgentEvent[],
+    cache?: { events: AgentEvent[]; items: RenderItem[] }
+): RenderItem[] {
+    if (!cache?.items.length) return toRenderItems(events);
+    const min = Math.min(events.length, cache.events.length);
+    let m = 0;
+    while (m < min && events[m] === cache.events[m]) m++;
+    if (m === 0) return toRenderItems(events);
+    // 最后一个"安全切分点"：其后的组仍开着（可能吸收后续事件），之前的组全部闭合
+    let split = -1;
+    for (let i = 0; i < m; i++) if (isGroupStart(events, i)) split = i;
+    if (split <= 0) return toRenderItems(events);
+    // 闭合组 = 起点严格在切分点之前的组；切分点上的项（含 single）重算——
+    // single 重算成本可忽略，避免"既复用又入 tail"的边界重复。
+    const closed = cache.items.filter(
+        (it) => (it.startIdx ?? Number.MAX_SAFE_INTEGER) < split
+    );
+    const tail = toRenderItems(events.slice(split));
+    for (const it of tail) it.startIdx = (it.startIdx ?? 0) + split;
+    return [...closed, ...tail];
 }
 
 /** 工具调用摘要：按工具名挑最相关参数（参数字段名见 domain/src/tools/schema.ts） */

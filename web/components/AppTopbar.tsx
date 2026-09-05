@@ -19,7 +19,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { Plus, FolderOpen, Languages, MessageSquare, ChevronUp } from "lucide-react";
+import { Plus, FolderOpen, Languages, MessageSquare, ChevronUp, PanelLeft, X } from "lucide-react";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { Logo } from "./Logo";
 import { apiJson } from "@/lib/api";
@@ -37,8 +37,16 @@ interface RecentSession {
 /**
  * AppTopbar —— 当前工作区名 + 下拉（最近会话，取代原"最近工作区"——用户需求 2026-09-05）。
  * 数据复用 GET /api/workspaces（内联 sessions），按 updatedAt 倒序取前 12；点击跳会话。
+ * 窄屏（SPEC-036 B-003）：最左抽屉开关按钮（md:hidden）——侧栏在窄屏是覆盖式抽屉，
+ * 侧栏内部的折叠按钮随抽屉出屏，打开入口必须放这里。
  */
-export function AppTopbar() {
+export function AppTopbar({
+    sidebarMobileOpen,
+    onToggleSidebarMobile,
+}: {
+    sidebarMobileOpen?: boolean;
+    onToggleSidebarMobile?: () => void;
+}) {
     const { workspaces } = useAppSelector(selectWorkspace);
     const dispatch = useAppDispatch();
     const navigate = useNavigate();
@@ -105,6 +113,21 @@ export function AppTopbar() {
 
     return (
         <div className="flex items-center gap-3 px-4 h-12">
+            {onToggleSidebarMobile && (
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 px-2 md:hidden"
+                    title={t("shell.toggleSidebar")}
+                    onClick={onToggleSidebarMobile}
+                >
+                    {sidebarMobileOpen ? (
+                        <X className="size-4" />
+                    ) : (
+                        <PanelLeft className="size-4" />
+                    )}
+                </Button>
+            )}
             <Logo size={20} className="shrink-0" />
             <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
                 {/* 触发器 = 会话历史 pill（与菜单内容一致）；工作区名降级为纯文本展示（切换归侧栏） */}

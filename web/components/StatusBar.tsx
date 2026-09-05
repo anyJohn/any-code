@@ -129,7 +129,7 @@ export function StatusBar({
 
     return (
         <div className="shrink-0 border-t border-border px-4 py-1.5 text-xs text-muted-foreground flex items-center gap-3 max-w-3xl mx-auto w-full">
-            <span className="truncate font-mono">{modelLabel}</span>
+            <span className="truncate font-mono min-w-0">{modelLabel}</span>
             <div
                 className="flex items-center gap-1.5 min-w-0"
                 title={`${promptTokens} / ${ctxWindow}`}
@@ -147,9 +147,10 @@ export function StatusBar({
                     />
                 </div>
             </div>
+            {/* 累计 tokens（窄屏隐藏费用外次要项 SPEC-036 B-004） */}
             {totalPrompt + totalCompletion > 0 && (
                 <span
-                    className="shrink-0 tabular-nums"
+                    className="shrink-0 tabular-nums hidden sm:inline"
                     title={`${totalPrompt} + ${totalCompletion} tokens`}
                 >
                     {t("statusBar.total", {
@@ -158,8 +159,8 @@ export function StatusBar({
                     {cost !== null && cost > 0 && ` · $${cost.toFixed(4)}`}
                 </span>
             )}
-            <span className="shrink-0">skill: {status.skillCount}</span>
-            <span className="shrink-0">mcp: {status.mcpCount}</span>
+            <span className="shrink-0 hidden md:inline">skill: {status.skillCount}</span>
+            <span className="shrink-0 hidden md:inline">mcp: {status.mcpCount}</span>
         </div>
     );
 }

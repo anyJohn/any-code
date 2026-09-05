@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { toRenderItems } from "@/lib/renderItems";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { toRenderItems, toRenderItemsIncremental } from "@/lib/renderItems";
 import { useAppDispatch } from "@/hooks/useRedux";
 import { useAgent } from "@/hooks/useAgent";
 import { useCommand } from "@/hooks/useCommand";
@@ -90,12 +90,27 @@ export function ChatView({
     const scrollRef = useRef<HTMLDivElement>(null);
     const didInit = useRef(false);
 
-    const renderItems = useMemo(() => toRenderItems(events), [events]);
+    // 增量渲染项（SPEC-036 B-005）：公共前缀的闭合组复用上次对象，只重算最后一个
+    // 开着的组——配合 TurnBlock/SubagentBlock 的 memo，长会话追加事件不全量重渲染。
+    const itemsCache = useRef<{ events: typeof events; items: ReturnType<typeof toRenderItems> } | undefined>(
+        undefined
+    );
+    const renderItems = useMemo(
+        () => toRenderItemsIncremental(events, itemsCache.current),
+        [events]
+    );
+    useEffect(() => {
+        itemsCache.current = { events, items: renderItems };
+    }, [events, renderItems]);
 
-    const toggleTool = (id: string) =>
-        setOpenTools((p) => ({ ...p, [id]: !p[id] }));
-    const toggleSub = (id: string) =>
-        setOpenSubs((p) => ({ ...p, [id]: !p[id] }));
+    const toggleTool = useCallback(
+        (id: string) => setOpenTools((p) => ({ ...p, [id]: !p[id] })),
+        []
+    );
+    const toggleSub = useCallback(
+        (id: string) => setOpenSubs((p) => ({ ...p, [id]: !p[id] })),
+        []
+    );
 
     // 首次历史灌入强制滚到底（展示最新）；之后用户上滑阅读时不打断，仅 nearBottom 时滚。
     // useLayoutEffect 在 paint 前滚，避免闪顶。按 sessionId key 重挂载时 didInit 重置。

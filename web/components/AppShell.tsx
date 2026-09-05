@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AppTopbar } from "@/components/AppTopbar";
@@ -70,11 +70,20 @@ function RunningBanner() {
  * AppShell —— 圆角卡片可拖拽布局。
  * 两栏圆角卡片浮于 app 底色，中间窄分割栏（三点 grab handle）可按住拖拽调左右宽度。
  * 宽度 + 折叠态持久化到 localStorage。折叠时侧栏缩成 rail（= 折叠按钮宽）。
+ * 窄屏（<768px，SPEC-036 B-003）：侧栏变覆盖式抽屉——fixed 移出屏外，顶栏开关按钮开合，
+ * backdrop 点击关，路由跳转后自动收；桌面（≥768px）拖宽/折叠行为完全不变。
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
     const [sidebarWidth, setSidebarWidth] = useState<number>(DEFAULT_W);
     const [collapsed, setCollapsed] = useState(false);
+    const [mobileOpen, setMobileOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
+    const location = useLocation();
+
+    // 路由跳转后自动收抽屉（窄屏节奏：选完就走，别挡内容）
+    useEffect(() => {
+        setMobileOpen(false);
+    }, [location.pathname]);
 
     // 初始宽度 + 折叠态从 localStorage 读
     useEffect(() => {
@@ -116,9 +125,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
     return (
         <div ref={containerRef} className="flex-1 min-h-0 flex p-2">
+            {/* 窄屏 backdrop：抽屉打开时点击关闭 */}
+            {mobileOpen && (
+                <div
+                    className="fixed inset-0 z-40 bg-black/40 md:hidden"
+                    onClick={() => setMobileOpen(false)}
+                />
+            )}
             <aside
                 style={{ width: collapsed ? COLLAPSED_W : sidebarWidth }}
-                className="shrink-0 rounded-lg border border-border bg-background overflow-hidden flex flex-col transition-[width] duration-150"
+                className={`shrink-0 rounded-lg border border-border bg-background overflow-hidden flex flex-col transition-[width] duration-150
+                    max-md:!w-72 max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:rounded-none max-md:border-y-0 max-md:border-r max-md:z-50 max-md:transition-transform
+                    ${mobileOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}
             >
                 <AppSidebar
                     collapsed={collapsed}
@@ -126,22 +144,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     onExpand={() => setCollapsed(false)}
                 />
             </aside>
-            {/* 三点 grab handle：按住拖拽调宽（折叠态隐藏） */}
+            {/* 三点 grab handle：按住拖拽调宽（折叠态隐藏；窄屏无拖拽） */}
             {!collapsed && (
                 <div
                     onMouseDown={onHandleDown}
                     role="separator"
                     aria-orientation="vertical"
-                    className="group shrink-0 w-2 cursor-col-resize flex flex-col items-center justify-center gap-1.5 rounded transition-colors hover:bg-accent/50"
+                    className="group shrink-0 w-2 cursor-col-resize max-md:hidden flex flex-col items-center justify-center gap-1.5 rounded transition-colors hover:bg-accent/50"
                 >
                     <span className="size-1 rounded-full bg-muted-foreground/40 group-hover:bg-foreground/60" />
                     <span className="size-1 rounded-full bg-muted-foreground/40 group-hover:bg-foreground/60" />
                     <span className="size-1 rounded-full bg-muted-foreground/40 group-hover:bg-foreground/60" />
                 </div>
             )}
-            <div className="flex-1 min-w-0 rounded-lg border border-border bg-background overflow-hidden flex flex-col">
+            <div className="flex-1 min-w-0 rounded-lg max-md:rounded-none max-md:border-0 border border-border bg-background overflow-hidden flex flex-col">
                 <header className="shrink-0 border-b border-border bg-background">
-                    <AppTopbar />
+                    <AppTopbar
+                        sidebarMobileOpen={mobileOpen}
+                        onToggleSidebarMobile={() => setMobileOpen((v) => !v)}
+                    />
                 </header>
                 <RunningBanner />
                 <main className="flex-1 min-h-0 overflow-hidden">{children}</main>

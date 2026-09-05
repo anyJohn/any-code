@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { groupByTurn, toRenderItems, formatToolCall } from "@/lib/renderItems";
+import {
+    groupByTurn,
+    toRenderItems,
+    toRenderItemsIncremental,
+    formatToolCall,
+} from "@/lib/renderItems";
 import type { AgentEvent } from "@/lib/sseEvents";
 
 const ev = <T extends AgentEvent["type"]>(
@@ -340,5 +345,70 @@ describe("groupByTurn 终态闭合思考（bugfix）", () => {
             ev("Thinking", "hmm", { turnId: "t1" }),
         ]);
         expect(turns[0].thinkingFinished).toBeUndefined();
+    });
+});
+
+// SPEC-036 B-005：增量渲染项——闭合组复用（引用相等）+ 开放组重算 + 前缀断裂回退
+describe("toRenderItemsIncremental (SPEC-036 B-005)", () => {
+    it("追加事件：闭合组对象引用复用，仅开放组重建", () => {
+        const base = [
+            ev("System", "hi"),
+            ev("Iteration", "i1", { turnId: "t1" }),
+            ev("Assistant", "a1", { turnId: "t1" }),
+            ev("Done", "done"),
+        ];
+        const first = toRenderItems(base);
+        // append 新回合（引用稳定地扩数组，模拟 setEvents(prev => [...prev, e])）
+        const next = [...base, ev("Iteration", "i2", { turnId: "t2" }), ev("Assistant", "a2", { turnId: "t2" })];
+        const inc = toRenderItemsIncremental(next, { events: base, items: first });
+        // System + turn t1 闭合复用；Done single（在切分点上）与 t2 重算
+        expect(inc).toHaveLength(4);
+        expect(inc[0]).toBe(first[0]);
+        expect(inc[1]).toBe(first[1]);
+        expect(inc[2]).not.toBe(first[2]);
+        expect(inc[3].startIdx).toBe(4);
+        // 与全量计算等价
+        expect(toRenderItems(next).map((i) => i.kind)).toEqual(inc.map((i) => i.kind));
+    });
+
+    it("开着的回合被后续事件吸收：重算该组，闭合组仍复用", () => {
+        const base = [
+            ev("Iteration", "i1", { turnId: "t1" }),
+            ev("Assistant", "part", { turnId: "t1" }),
+        ];
+        const first = toRenderItems(base);
+        const next = [...base, ev("Assistant", " more", { turnId: "t1" })];
+        const inc = toRenderItemsIncremental(next, { events: base, items: first });
+        expect(inc).toHaveLength(1);
+        expect(inc[0]).not.toBe(first[0]); // t1 仍开着 → 重建
+        expect(toRenderItems(next)[0]).toEqual(inc[0]);
+    });
+
+    it("sub-agent 边界作为组起点复用", () => {
+        const base = [
+            ev("Assistant", "main", { turnId: "t1" }),
+            ev("Tool", "x", { runId: "r1", author: "plan" } as never),
+        ];
+        const first = toRenderItems(base);
+        const next = [...base, ev("Tool", "y", { runId: "r1", author: "plan" } as never)];
+        const inc = toRenderItemsIncremental(next, { events: base, items: first });
+        expect(inc[0]).toBe(first[0]); // 主回合闭合复用
+        expect(inc[1].kind).toBe("subagent");
+    });
+
+    it("前缀断裂（resume 重放新对象）→ 全量重算", () => {
+        const base = [ev("System", "hi"), ev("Done", "d")];
+        const first = toRenderItems(base);
+        // 同内容但新对象（指针不同）
+        const replay = [ev("System", "hi"), ev("Done", "d")];
+        const inc = toRenderItemsIncremental(replay, { events: base, items: first });
+        expect(inc[0]).not.toBe(first[0]);
+    });
+
+    it("shrink（压缩重写）与空缓存安全回退", () => {
+        const base = [ev("System", "hi"), ev("Done", "d")];
+        const first = toRenderItems(base);
+        expect(toRenderItemsIncremental([ev("Done", "d")], { events: base, items: first })).toHaveLength(1);
+        expect(toRenderItemsIncremental(base)).toHaveLength(2);
     });
 });

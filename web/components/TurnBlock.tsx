@@ -1,14 +1,17 @@
 "use client";
 
+import { memo } from "react";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolRow } from "./ToolRow";
+import { CopyButton } from "./MarkdownRenderer";
 import type { RenderItem } from "@/lib/renderItems";
 
 /**
  * TurnBlock —— 单回合块：迭代标签 + thinking + assistant 文本 + tools。
+ * memo（SPEC-036 B-005）：item 引用由增量 renderItems 保持稳定——新事件不重渲染历史回合。
  */
-export function TurnBlock({
+export const TurnBlock = memo(function TurnBlock({
     item,
     live,
     openTools,
@@ -21,7 +24,7 @@ export function TurnBlock({
     toggleTool: (id: string) => void;
 }) {
     return (
-        <div className="flex flex-col gap-2 py-3 border-b border-border/60">
+        <div className="flex flex-col gap-2 py-3 border-b border-border/60 group/turn">
             {item.iteration && (
                 <span className="text-[10px] font-mono text-muted-foreground/60">
                     {item.iteration.message}
@@ -37,10 +40,15 @@ export function TurnBlock({
                 />
             )}
             {item.assistant && (
-                <div className="flex py-1">
+                <div className="flex items-start gap-1 py-1">
                     <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-muted px-3 py-2">
                         <MarkdownRenderer content={item.assistant.message} />
                     </div>
+                    {/* 整条消息复制（SPEC-036 B-002）：hover 显示 */}
+                    <CopyButton
+                        text={item.assistant.message}
+                        className="p-1 rounded text-muted-foreground/0 group-hover/turn:text-muted-foreground hover:!text-foreground transition-colors mt-1"
+                    />
                 </div>
             )}
             {item.tools.map((t) => (
@@ -54,4 +62,4 @@ export function TurnBlock({
             ))}
         </div>
     );
-}
+});

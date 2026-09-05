@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import {
     Collapsible,
     CollapsibleContent,
@@ -13,7 +14,7 @@ import type { AgentEvent } from "@/lib/sseEvents";
 /**
  * SubagentBlock —— sub-agent 调用折叠块：内部按 turn 分组渲染。
  */
-export function SubagentBlock({
+export const SubagentBlock = memo(function SubagentBlock({
     runId,
     author,
     events,
@@ -80,4 +81,4 @@ export function SubagentBlock({
             </CollapsibleContent>
         </Collapsible>
     );
-}
+});
