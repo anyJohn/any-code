@@ -90,8 +90,9 @@ export default function ChatPage() {
         return () => {
             cancelled = true;
         };
+        // selected 晚到（刷新后 redux 重建）也需重算——否则 /chat/new 永远停在"未选工作区"门
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [routeSessionId]);
+    }, [routeSessionId, selected?.projectKey]);
 
     if (ready === "missing") {
         return (

@@ -498,6 +498,66 @@ function normalizePricing(
     return out;
 }
 
+export interface SwitchResult {
+    ok: boolean;
+    message: string;
+}
+
+/** 切换默认模型（校验 model 在当前 provider 的 models 中）。 */
+export function switchDefaultModel(modelId: string): SwitchResult {
+    const cfg = Config.load();
+    const provider = cfg.providers[cfg.default];
+    if (!provider) return { ok: false, message: `provider "${cfg.default}" 不存在` };
+    if (!provider.models.some((m) => m.id === modelId)) {
+        return {
+            ok: false,
+            message: `model "${modelId}" 不在 provider "${cfg.default}" 的 models 中`,
+        };
+    }
+    provider.defaultModel = modelId;
+    saveFull(cfg);
+    return { ok: true, message: modelId };
+}
+
+/** 设置界面语言（FR-29，全字段回写）。仅接受 zh/en。 */
+export function setUiLanguage(language: string): SwitchResult {
+    if (language !== "zh" && language !== "en") {
+        return { ok: false, message: "language 仅支持 zh / en" };
+    }
+    const cfg = Config.load();
+    cfg.ui = { ...cfg.ui, language };
+    saveFull(cfg);
+    return { ok: true, message: language };
+}
+
+/** 切换默认 provider（校验存在）。 */
+export function switchDefaultProvider(name: string): SwitchResult {
+    const cfg = Config.load();
+    if (!cfg.providers[name]) {
+        return { ok: false, message: `provider "${name}" 不存在` };
+    }
+    cfg.default = name;
+    saveFull(cfg);
+    return { ok: true, message: name };
+}
+
+/** 全字段回写（与 server PATCH 同语义：非目标段原样保留，防误清）。 */
+function saveFull(cfg: Config): void {
+    Config.save({
+        providers: cfg.providers,
+        default: cfg.default,
+        mcp: cfg.mcpServers,
+        gitBashPath: cfg.gitBashPath,
+        permissions: cfg.permissions,
+        maxConcurrentRuns: cfg.maxConcurrentRuns,
+        ui: cfg.ui,
+        pricing: cfg.pricing,
+        tools: cfg.tools,
+        proxy: cfg.proxy,
+        noProxy: cfg.noProxy,
+    });
+}
+
 /** proxy 归一化（用户决策 2026-09-03）：仅接受 http(s):// URL，其余视为未设置。 */
 function normalizeProxy(v?: string): string | undefined {
     if (typeof v !== "string" || !v.trim()) return undefined;

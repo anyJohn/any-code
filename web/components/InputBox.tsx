@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { CommandItem } from "@/hooks/useCommand";
 import type { FileEntry } from "@/hooks/useFileReference";
+import { ModelPicker } from "./ModelPicker";
 import { useT } from "@/i18n";
 
 interface InputBoxProps {
@@ -29,6 +30,9 @@ interface InputBoxProps {
     // 发送
     send: () => void;
     stop: () => void;
+    // 模型切换 pill（左下角，用户需求 2026-09-04）
+    projectKey?: string;
+    onModelSwitched?: () => void;
     // 未匹配指令的 Enter 路径
     runRawCommand: (rawDraft: string) => void;
 }
@@ -57,6 +61,8 @@ export function InputBox({
     send,
     stop,
     runRawCommand,
+    projectKey,
+    onModelSwitched,
 }: InputBoxProps) {
     const { t } = useT();
     const taRef = useRef<HTMLTextAreaElement>(null);
@@ -165,8 +171,7 @@ export function InputBox({
                             ))}
                         </div>
                     )}
-                    <div className="flex items-end gap-2">
-                        <textarea
+                    <textarea
                             ref={taRef}
                             value={draft}
                             disabled={pending}
@@ -277,13 +282,26 @@ export function InputBox({
                                 }
                             }}
                         />
-                        {pending ? (
-                            <Button variant="destructive" onClick={stop}>
-                                {t("inputBox.stop")}
-                            </Button>
-                        ) : (
-                            <Button onClick={send}>{t("inputBox.send")}</Button>
-                        )}
+                        {/* 底部工具栏（参考 ChatGPT/LibreChat composer）：左模型切换，右发送 */}
+                        <div className="flex items-center justify-between pt-0.5">
+                            <ModelPicker
+                                projectKey={projectKey}
+                                disabled={pending}
+                                onSwitched={() => onModelSwitched?.()}
+                            />
+                            {pending ? (
+                                <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={stop}
+                                >
+                                    {t("inputBox.stop")}
+                                </Button>
+                            ) : (
+                                <Button size="sm" onClick={send}>
+                                    {t("inputBox.send")}
+                                </Button>
+                            )}
                     </div>
                 </div>
             </div>

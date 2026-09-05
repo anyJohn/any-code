@@ -91,13 +91,11 @@
   - 展示当前模型与 Provider
   - 展示可用 Skill 数与 MCP 数
 - Command（slash 指令）
-  - `/model` 切换模型
-  - `/provider` 切换 provider
+  - 模型/Provider 切换改为输入框左下角选择器（2026-09-04，取代 /model /provider；参考主流 AI composer）
   - `/compact` 压缩上下文
   - `/config` 打开设置
   - `/sessions` 列出对话
-  - `/clear` 清空对话
-  - `/new` 新建对话
+  - `/new` 新建对话（/clear 已并入，2026-09-04 移除）
   - `/help` 帮助
   - 重命名 Session：侧栏 inline 编辑（已实现，非 slash 指令）
   - `@` 引用文件

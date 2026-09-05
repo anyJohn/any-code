@@ -48,7 +48,6 @@ export function ChatView({
     } = useAgent(sessionId, rootPath, initialEvents);
     const [snapshotsOpen, setSnapshotsOpen] = useState(false);
     const command = useCommand({
-        clear,
         appendSystem,
         submit,
         projectKey,
@@ -81,6 +80,8 @@ export function ChatView({
         prevPending.current = pending;
     }, [pending, dispatch]);
 
+    // 模型切换后刷新 StatusBar 的当前模型显示（ModelPicker 回调）
+    const [statusRefresh, setStatusRefresh] = useState(0);
     const [openTools, setOpenTools] = useState<Record<string, boolean>>({});
     const [openSubs, setOpenSubs] = useState<Record<string, boolean>>({});
     const [highlight, setHighlight] = useState(0);
@@ -171,6 +172,8 @@ export function ChatView({
                 send={send}
                 stop={stop}
                 runRawCommand={command.runRawCommand}
+                projectKey={projectKey}
+                onModelSwitched={() => setStatusRefresh((k) => k + 1)}
             />
 
             {projectKey && (
@@ -178,6 +181,7 @@ export function ChatView({
                     projectKey={projectKey}
                     events={events}
                     pending={pending}
+                    refreshKey={statusRefresh}
                 />
             )}
 

@@ -32,11 +32,14 @@ export function StatusBar({
     projectKey,
     events,
     pending,
+    refreshKey,
 }: {
     projectKey: string;
     events: AgentEvent[];
     /** run 进行中——pending 变化（run 开始/结束）时重拉 status，让 agent 改 config 后下条 run 反映 */
     pending: boolean;
+    /** 模型切换等外部变更 → 手动触发重拉（ModelPicker 回调，2026-09-04） */
+    refreshKey?: number;
 }) {
     const { t } = useT();
     const [status, setStatus] = useState<StatusInfo>({
@@ -71,7 +74,7 @@ export function StatusBar({
         return () => {
             cancelled = true;
         };
-    }, [projectKey, pending]);
+    }, [projectKey, pending, refreshKey]);
 
     // FR-22：单价表（config pricing 段）；未配则不显示费用
     useEffect(() => {

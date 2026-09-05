@@ -13,6 +13,9 @@ import {
     createWorkspace,
     maskApiKey,
     toolCatalog,
+    switchDefaultModel,
+    switchDefaultProvider,
+    setUiLanguage,
     projectKeyOf,
     resolveContextWindow,
     resolveInteraction,
@@ -789,56 +792,23 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         } catch {
             return c.json({ statusMessage: "invalid json body" }, 400);
         }
-        let cfg: Config;
-        try {
-            cfg = Config.load();
-        } catch (e) {
-            return c.json({ statusMessage: (e as Error).message }, 400);
-        }
-        try {
-            // FR-29：语言偏好（ui.language）单独 PATCH——与 default/modelId 互不依赖
-            if (body.language !== undefined) {
-                if (body.language !== "zh" && body.language !== "en") {
-                    return c.json({ statusMessage: "language 仅支持 zh / en" }, 400);
-                }
-                cfg.ui = { ...cfg.ui, language: body.language };
-            }
-            if (body.modelId) {
-                const provider = cfg.providers[cfg.default];
-                if (!provider)
-                    return c.json({ statusMessage: `provider "${cfg.default}" 不存在` }, 400);
-                if (!provider.models.some((m) => m.id === body.modelId))
-                    return c.json(
-                        { statusMessage: `model "${body.modelId}" 不在 provider "${cfg.default}" 的 models 中` },
-                        400,
-                    );
-                provider.defaultModel = body.modelId;
-            } else if (body.default) {
-                const newDefault = body.default.trim();
-                if (!cfg.providers[newDefault])
-                    return c.json({ statusMessage: `provider "${newDefault}" 不存在` }, 400);
-                cfg.default = newDefault;
-            } else if (body.language === undefined) {
-                return c.json({ statusMessage: "需要 default / modelId / language 之一" }, 400);
-            }
-            Config.save({
-                providers: cfg.providers,
-                default: cfg.default,
-                mcp: cfg.mcpServers,
-                // PATCH 只改 default/modelId/language——其余段原样保留，防误清
-                gitBashPath: cfg.gitBashPath,
-                permissions: cfg.permissions,
-                maxConcurrentRuns: cfg.maxConcurrentRuns,
-                ui: cfg.ui,
-                pricing: cfg.pricing,
-                tools: cfg.tools,
-                proxy: cfg.proxy,
-                noProxy: cfg.noProxy,
-            });
+        // 切换实现收归 domain（switchDefault*/setUiLanguage 全字段回写，非目标段原样保留）
+        if (body.modelId) {
+            const r = switchDefaultModel(body.modelId);
+            if (!r.ok) return c.json({ statusMessage: r.message }, 400);
             return c.json({ statusMessage: "switched" });
-        } catch (e) {
-            return c.json({ statusMessage: (e as Error).message }, 400);
         }
+        if (body.default) {
+            const r = switchDefaultProvider(body.default.trim());
+            if (!r.ok) return c.json({ statusMessage: r.message }, 400);
+            return c.json({ statusMessage: "switched" });
+        }
+        if (body.language !== undefined) {
+            const r = setUiLanguage(body.language);
+            if (!r.ok) return c.json({ statusMessage: r.message }, 400);
+            return c.json({ statusMessage: "switched" });
+        }
+        return c.json({ statusMessage: "需要 default / modelId / language 之一" }, 400);
     });
 
     // 裁决"永久允许/拒绝"落盘（SPEC-032 B-006）：单独小路由——避免 web 走整表单

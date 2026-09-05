@@ -10,20 +10,18 @@ export interface CommandItem {
 }
 
 // desc 存 i18n key（command.*）：useCommand 内经 t() 渲染成当前语言文案
+// web 自持命令清单（用户决策 2026-09-04：命令定义归各 interface，domain 只持有方法）。
+// model/provider 切换改为输入框左下角 ModelPicker（不再是斜杠命令）；/clear 与 /new 重叠已删。
 export const BUILTIN_COMMANDS: CommandItem[] = [
-    { name: "clear", desc: "command.clearDesc" },
     { name: "new", desc: "command.newDesc" },
     { name: "help", desc: "command.helpDesc" },
     { name: "config", desc: "command.configDesc" },
-    { name: "model", desc: "command.modelDesc" },
-    { name: "provider", desc: "command.providerDesc" },
     { name: "sessions", desc: "command.sessionsDesc" },
     { name: "compact", desc: "command.compactDesc" },
     { name: "rewind", desc: "command.rewindDesc" },
 ];
 
 interface UseCommandDeps {
-    clear: () => void;
     appendSystem: (msg: string) => void;
     submit: (msg: string) => void;
     projectKey?: string;
@@ -38,7 +36,7 @@ interface UseCommandDeps {
  * draft 是受控的：本 hook 不持有 draft，由调用方传入。
  * runCommand(name) 从 draft 提取 args，清空 draft 后执行。
  */
-export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, currentSessionId, openSnapshots }: UseCommandDeps) {
+export function useCommand({ appendSystem, submit, projectKey, rootPath, currentSessionId, openSnapshots }: UseCommandDeps) {
     const navigate = useNavigate();
     const { t } = useT();
     const [customCommands, setCustomCommands] = useState<CommandItem[]>([]);
@@ -96,10 +94,6 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
     const executeCommand = useCallback(
         async (name: string, args: string) => {
             switch (name) {
-                case "clear":
-                    clear();
-                    appendSystem(t("command.cleared"));
-                    return;
                 case "new":
                     navigate("/chat/new");
                     return;
@@ -112,111 +106,6 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
                     return;
                 case "help":
                     appendSystem(buildHelpText());
-                    return;
-                case "model":
-                    if (!projectKey) {
-                        appendSystem(t("command.noWorkspace"));
-                        return;
-                    }
-                    if (!args) {
-                        const [st, cfg] = await Promise.all([
-                            apiJson<{
-                                provider: string;
-                                model: string;
-                                modelName: string;
-                            }>(`/api/workspaces/${projectKey}/status`),
-                            apiJson<{
-                                providers: Record<
-                                    string,
-                                    { models: { id: string; name?: string }[] }
-                                >;
-                                default: string;
-                            }>(`/api/config`),
-                        ]);
-                        if (!st) {
-                            appendSystem(t("command.cannotGetModel"));
-                            return;
-                        }
-                        const lines: string[] = [
-                            t("command.currentModel", {
-                                provider: st.provider,
-                                modelName: st.modelName,
-                                model: st.model,
-                            }),
-                        ];
-                        const provider = cfg?.providers[cfg.default];
-                        if (provider?.models.length) {
-                            lines.push("", t("command.availableModels"));
-                            for (const m of provider.models) {
-                                lines.push(
-                                    `  ${m.id}${m.name ? ` (${m.name})` : ""}`
-                                );
-                            }
-                        }
-                        appendSystem(lines.join("\n"));
-                    } else {
-                        const res = await fetch(`/api/config`, {
-                            method: "PATCH",
-                            headers: { "content-type": "application/json" },
-                            body: JSON.stringify({ modelId: args }),
-                        });
-                        if (res.ok) {
-                            appendSystem(t("command.modelSwitched", { model: args }));
-                        } else {
-                            let text = t("command.switchFailed");
-                            try {
-                                const j = (await res.json()) as {
-                                    statusMessage?: string;
-                                };
-                                if (j.statusMessage) text = j.statusMessage;
-                            } catch {
-                                // body 非 json
-                            }
-                            appendSystem(text);
-                        }
-                    }
-                    return;
-                case "provider":
-                    if (!projectKey) {
-                        appendSystem(t("command.noWorkspace"));
-                        return;
-                    }
-                    if (!args) {
-                        const data = await apiJson<{ provider: string }>(
-                            `/api/workspaces/${projectKey}/status`
-                        );
-                        if (data) {
-                            appendSystem(
-                                t("command.currentProvider", {
-                                    provider: data.provider,
-                                })
-                            );
-                        } else {
-                            appendSystem(t("command.cannotGetProvider"));
-                        }
-                    } else {
-                        const res = await fetch(`/api/config`, {
-                            method: "PATCH",
-                            headers: { "content-type": "application/json" },
-                            body: JSON.stringify({ default: args }),
-                        });
-                        if (res.ok) {
-                            appendSystem(
-                                t("command.providerSwitched", { provider: args })
-                            );
-                        } else {
-                            let text = t("command.switchFailed");
-                            try {
-                                const j = (await res.json()) as {
-                                    statusMessage?: string;
-                                };
-                                if (j.statusMessage) text = j.statusMessage;
-                            } catch {
-                                // body 非 json
-                            }
-                            appendSystem(text);
-                        }
-                    }
                     return;
                 case "sessions":
                     if (!projectKey) {
@@ -304,7 +193,6 @@ export function useCommand({ clear, appendSystem, submit, projectKey, rootPath, 
             }
         },
         [
-            clear,
             appendSystem,
             navigate,
             projectKey,
