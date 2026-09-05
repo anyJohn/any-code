@@ -142,17 +142,14 @@ describe("snapshot 结构化存储（用户决策 2026-09-06）", () => {
         }
     });
 
-    it("parseSnapshotMessage：新 JSON 格式 + 旧 session 前缀 + 纯文本降级", () => {
+    it("parseSnapshotMessage：JSON 格式", () => {
         expect(parseSnapshotMessage('{"c":"bash ls","s":"s1"}')).toEqual({
             sessionId: "s1",
             command: "bash ls",
         });
-        expect(
-            parseSnapshotMessage("session 1234abcd-1111-2222-3333-444455556666 | write a.txt")
-        ).toEqual({ sessionId: "1234abcd-1111-2222-3333-444455556666", command: "write a.txt" });
-        expect(parseSnapshotMessage("plain old label")).toEqual({
+        expect(parseSnapshotMessage('{"c":"bash ls"}')).toEqual({
             sessionId: null,
-            command: "plain old label",
+            command: "bash ls",
         });
     });
 });

@@ -30,24 +30,13 @@ export interface Snapshot {
 }
 
 /**
- * commit message ↔ 结构化快照事实（用户决策 2026-09-06：domain 不存展示 label，
- * 存 sessionId + command；时间戳走 git commit 时间）。
- * 旧格式（纯文本 label，或 "session <id> | <cmd>" 前缀）降级解析。
+ * commit message ↔ 结构化快照事实（command + sessionId；时间戳走 git commit 时间）。
  */
 export function parseSnapshotMessage(
     msg: string
 ): { sessionId: string | null; command: string } {
-    try {
-        const obj = JSON.parse(msg) as { c?: string; s?: string | null };
-        if (typeof obj.c === "string") {
-            return { sessionId: obj.s ?? null, command: obj.c };
-        }
-    } catch {
-        // 非 JSON → 旧格式
-    }
-    const legacy = /^session ([0-9a-f-]{8,}) \| (.*)$/s.exec(msg);
-    if (legacy) return { sessionId: legacy[1], command: legacy[2] };
-    return { sessionId: null, command: msg };
+    const obj = JSON.parse(msg) as { c?: string; s?: string | null };
+    return { sessionId: obj.s ?? null, command: obj.c ?? "" };
 }
 
 function snapshotMessage(command: string, sessionId: string | null): string {
