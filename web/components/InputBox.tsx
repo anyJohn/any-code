@@ -182,7 +182,7 @@ export function InputBox({
                             disabled={pending}
                             rows={1}
                             placeholder={t("inputBox.placeholder")}
-                            className="flex-1 resize-none border-0 focus-visible:ring-0 bg-transparent text-sm leading-6 max-h-40 overflow-y-auto py-1.5"
+                            className="flex-1 resize-none border-0 outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 bg-transparent text-sm leading-6 max-h-40 overflow-y-auto py-1.5"
                             onChange={(e) => setDraft(e.target.value)}
                             onKeyDown={(e) => {
                                 // Alt+Enter 换行（优先，无视弹层）
