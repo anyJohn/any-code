@@ -151,5 +151,9 @@ describe("snapshot 结构化存储（用户决策 2026-09-06）", () => {
             sessionId: null,
             command: "bash ls",
         });
+        expect(parseSnapshotMessage("session 3d…（旧格式）")).toEqual({
+            sessionId: null,
+            command: "session 3d…（旧格式）",
+        });
     });
 });

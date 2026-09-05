@@ -35,8 +35,12 @@ export interface Snapshot {
 export function parseSnapshotMessage(
     msg: string
 ): { sessionId: string | null; command: string } {
-    const obj = JSON.parse(msg) as { c?: string; s?: string | null };
-    return { sessionId: obj.s ?? null, command: obj.c ?? "" };
+    try {
+        const obj = JSON.parse(msg) as { c?: string; s?: string | null };
+        return { sessionId: obj.s ?? null, command: obj.c ?? "" };
+    } catch {
+        return { sessionId: null, command: msg };
+    }
 }
 
 function snapshotMessage(command: string, sessionId: string | null): string {
