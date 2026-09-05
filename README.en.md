@@ -81,7 +81,7 @@ Monorepo (pnpm workspace): `domain` (agent kernel, pure ESM) · `server` (hono H
 
 Staying true to the "minimal readable kernel" positioning: **small but complete + real-protocol ecosystem + lightweight orchestration**. See [feature-list.md](./feature-list.md) for everything shipped.
 
-- **Planned**: `create_skill` procedural memory / ACP lightweight orchestration / CI-CD / desktop code signing & auto-update
+- **Planned**: ACP lightweight orchestration / CI-CD / desktop code signing & auto-update / RAG cross-session long-term memory (far future)
 - **Explicitly not doing**: everything-is-a-plugin framework · messaging-platform gateways · process-level sandbox (permission system suffices) · scope expansion
 
 ## Contributing

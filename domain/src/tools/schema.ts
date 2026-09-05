@@ -229,25 +229,31 @@ const writeSchema: ChatCompletionTool = {
     },
 };
 
-const saveMemorySchema: ChatCompletionTool = {
+const updateMemorySchema: ChatCompletionTool = {
     type: "function",
     function: {
-        name: ToolName.SaveMemory,
+        name: ToolName.UpdateMemory,
         description:
-            "Save a piece of information to long-term memory for future sessions. Use this when you learn something worth remembering across conversations (user preferences, key decisions, project conventions, durable facts). Do NOT use it for transient task state or trivial chatter. Default scope is project (this workspace); use global for cross-project preferences.",
+            "Persist information to long-term memory for future sessions, or consolidate existing memory. Use append when you learn something worth remembering across conversations (user preferences, key decisions, project conventions, durable facts); use rewrite occasionally to consolidate — rewrite the whole memory with redundant/merged/stale entries cleaned up (the current memory is already in your system prompt). Do NOT use it for transient task state or trivial chatter. Default scope is project (this workspace); use global for cross-project preferences.",
         parameters: {
             type: "object",
             properties: {
                 content: {
                     type: "string",
                     description:
-                        "The memory content to persist. Write it as a concise, self-contained note (you control phrasing).",
+                        "append = the memory note to add (concise, self-contained). rewrite = the FULL new memory body (## timestamp entries) replacing the file.",
                 },
                 scope: {
                     type: "string",
                     enum: ["project", "global"],
                     description:
                         "project = this workspace only (default); global = cross-project general preference.",
+                },
+                mode: {
+                    type: "string",
+                    enum: ["append", "rewrite"],
+                    description:
+                        "append (default) adds one entry; rewrite replaces the whole memory file for the scope. Rewrite sparingly — only when memory has grown redundant or stale.",
                 },
             },
             required: ["content"],
@@ -312,7 +318,7 @@ export {
     executeBashSchema,
     jobOutputSchema,
     jobKillSchema,
-    saveMemorySchema,
+    updateMemorySchema,
     askQuestionSchema,
     skillSchema,
 };

@@ -543,7 +543,7 @@ class AnyAgent {
     }
 
     private getSystemMessage(workspace: Workspace): ChatMessage[] {
-        const memory = loadMemory(workspace);
+        const memory = loadMemory(workspace, this.config.memory.maxChars);
         const rule = loadRule(workspace);
         // 技能目录注入（SPEC-031 B-004）：只注入 name+description 的 <available_skills>，不加正文。
         const skills = renderSkillCatalog(resolveSkills(workspace).values());

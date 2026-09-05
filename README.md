@@ -81,7 +81,7 @@ monorepo（pnpm workspace）：`domain`（agent 内核，纯 ESM）· `server`�
 
 守「最小可读内核」定位：**小而全 + 真协议接入生态 + 轻量编排**。已完成项详见 [feature-list.md](./feature-list.md)。
 
-- **待实现**：`create_skill` 程序性记忆 / ACP 轻量编排 / CI-CD / 桌面签名与自动更新
+- **待实现**：ACP 轻量编排 / CI-CD / 桌面签名与自动更新 / RAG 跨 Session 长期记忆（远期）
 - **明确不做**：一切皆插件框架 · 消息平台网关 · 进程级沙箱（权限策略兜底）· 体量扩张
 
 ## 贡献

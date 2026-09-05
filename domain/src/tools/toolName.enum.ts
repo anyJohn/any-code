@@ -6,7 +6,7 @@ enum ToolName {
     Explore = "explore",
     Glob = "glob",
     Grep = "grep",
-    SaveMemory = "save_memory",
+    UpdateMemory = "update_memory",
     AskQuestion = "ask_question",
     Skill = "use_skill",
     JobOutput = "job_output",

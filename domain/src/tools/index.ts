@@ -8,7 +8,7 @@ import {
     editSchema,
     exploreSchema,
     executeBashSchema,
-    saveMemorySchema,
+    updateMemorySchema,
     askQuestionSchema,
     skillSchema,
 } from "./schema";
@@ -19,7 +19,7 @@ import { writeFunc } from "./functions/write";
 import { exploreFunc } from "./functions/explore";
 import { globFunc } from "./functions/glob";
 import { grepFunc } from "./functions/grep";
-import { saveMemoryFunc } from "./functions/saveMemory";
+import { updateMemoryFunc } from "./functions/updateMemory";
 import { askQuestionFunc } from "./functions/askQuestion";
 import { skillFunc } from "./functions/skill";
 import { jobOutputFunc, jobKillFunc } from "./functions/jobs";
@@ -98,10 +98,10 @@ const grepTool: Tool = {
     handler: grepFunc,
     meta: { readOnly: true, concurrencySafe: true },
 };
-// save_memory 写技能/记忆文件（用户指正 2026-09-04：会操控本地文件，非只读）
-const saveMemoryTool: Tool = {
-    schema: saveMemorySchema,
-    handler: saveMemoryFunc,
+// update_memory 写记忆文件（用户指正 2026-09-04：会操控本地文件，非只读；SPEC-035 加 rewrite 蒸馏）
+const updateMemoryTool: Tool = {
+    schema: updateMemorySchema,
+    handler: updateMemoryFunc,
     meta: { readOnly: false, concurrencySafe: false },
 };
 const askQuestionTool: Tool = {
@@ -136,7 +136,7 @@ const builtinTools: Tool[] = [
     exploreTool,
     globTool,
     grepTool,
-    saveMemoryTool,
+    updateMemoryTool,
     askQuestionTool,
     skillTool,
     createSkillTool,

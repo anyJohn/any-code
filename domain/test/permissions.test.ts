@@ -21,8 +21,8 @@ const RULE = (tool: string, pattern: string | undefined, action: PermissionRule[
     action,
 });
 
-// AR-7：只读集合等价旧内置表（read/grep/glob/explore/use_skill/ask_question/save_memory）
-const READ_ONLY = new Set(["read", "grep", "glob", "explore", "use_skill", "ask_question", "save_memory"]);
+// AR-7：只读集合等价旧内置表（read/grep/glob/explore/use_skill/ask_question/update_memory）
+const READ_ONLY = new Set(["read", "grep", "glob", "explore", "use_skill", "ask_question", "update_memory"]);
 
 const evalBasic = (
     mode: PermissionMode,

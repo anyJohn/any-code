@@ -104,22 +104,24 @@ export function shellNote(kind: ShellKind): string {
     return "";
 }
 
-/** save_memory 引导段：由 toolNotes 按开关注入（save_memory 关闭时不进 prompt）。 */
+/** update_memory 引导段：由 toolNotes 按开关注入（update_memory 关闭时不进 prompt）。 */
 export const memoryNote =
     "\n\n# Memory\n" +
-    "You have a `save_memory` tool to persist information worth remembering across sessions " +
+    "You have an `update_memory` tool to persist information worth remembering across sessions " +
     "(user preferences, key decisions, project conventions, durable facts). " +
     "Use scope=project for workspace-specific notes, scope=global for cross-project preferences. " +
+    "mode=rewrite replaces the whole memory file for the scope — use it sparingly to consolidate " +
+    "when memory has grown redundant or stale. " +
     "Only call it when genuinely necessary; do not record trivial or transient task state.";
 
 /**
  * 工具门控注入（用户需求 2026-09-04）：只在对应工具启用时注入引导段——
  * 工具关闭后其 system prompt 段落不进 LLM 上下文（避免教模型用不存在的工具）。
- * save_memory 虽非只读，写操作由权限层管，这里只负责引导。
+ * update_memory 虽非只读，写操作由权限层管，这里只负责引导。
  */
 export function toolNotes(enabled: ReadonlySet<string>): string {
     let s = "";
-    if (enabled.has("save_memory")) s += memoryNote;
+    if (enabled.has("update_memory")) s += memoryNote;
     const web: string[] = [];
     if (enabled.has("web_search")) {
         web.push("`web_search` searches the web (ddg by default, provider configurable)");

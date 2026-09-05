@@ -3,8 +3,8 @@ import { toolNotes } from "../src/prompt";
 
 // 用户需求 2026-09-04：工具关闭时其 system prompt 引导段不注入。
 describe("toolNotes 工具门控注入", () => {
-    it("save_memory 开 → Memory 段在；关 → 不注入", () => {
-        expect(toolNotes(new Set(["save_memory"]))).toContain("# Memory");
+    it("update_memory 开 → Memory 段在；关 → 不注入", () => {
+        expect(toolNotes(new Set(["update_memory"]))).toContain("# Memory");
         expect(toolNotes(new Set())).not.toContain("# Memory");
     });
 

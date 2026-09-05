@@ -1,7 +1,7 @@
 /*
  * Memory —— 项目级 + 全局级两层记忆，纯 markdown。
  *
- * 写入由 save_memory 工具触发（LLM 主动调用）。
+ * 写入由 update_memory 工具触发（LLM 主动调用；SPEC-035：append 追加 + rewrite 全量重写蒸馏）。
  * 读取在 getSystemMessage 合并全局 + 项目两层注入系统提示词。
  * 格式保持 markdown（## 时间戳 + content），兼容旧 Task/Result 条目（降级读取）。
  */
@@ -43,6 +43,21 @@ export function saveMemory(
     } else {
         fs.writeFileSync(file, "# Agent Memory\n\n" + entry, "utf-8");
     }
+}
+
+/**
+ * 全量重写指定层的记忆文件（SPEC-035 B-002）：content 即该文件新正文（LLM
+ * 依据 system prompt 已注入的当前记忆整理，无需先读）。记忆文件是缓存不是
+ * 数据源——不做备份/版本，写坏靠用户 git / 手改兜底（SPEC-035 C-002）。
+ */
+export function rewriteMemory(
+    workspace: Workspace,
+    content: string,
+    scope: MemoryScope = "project"
+): void {
+    const file = memoryFile(workspace, scope);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "# Agent Memory\n\n" + content.trim() + "\n", "utf-8");
 }
 
 /**

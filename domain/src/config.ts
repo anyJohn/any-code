@@ -215,6 +215,8 @@ export interface ConfigShape {
     noProxy?: string;
     /** 通用工具开关与配置（用户决策 2026-09-03）：key = 工具名；enabled=false 剔除该工具（未配置 = 启用）。 */
     tools?: Record<string, ToolConfigEntry>;
+    /** 记忆注入（SPEC-035 B-004）：maxChars = 两层合并后的注入截断窗口。 */
+    memory?: { maxChars?: number };
     /** @deprecated 旧内置能力段（SPEC-031）——load 时迁移到 tools 段，保存不再写出。 */
     abilities?: Record<string, AbilityConfig>;
 }
@@ -297,6 +299,8 @@ export class Config {
     ui: { language?: "zh" | "en" };
     /** 模型单价（FR-22）：缺省空表 → 界面只显 tokens。 */
     pricing: Record<string, ModelPricing>;
+    /** 记忆注入（SPEC-035）：maxChars = 注入截断窗口，缺省 4000。 */
+    memory: { maxChars: number };
 
     private constructor(
         providers: Record<string, LlmProvider>,
@@ -309,7 +313,8 @@ export class Config {
         permissions: Required<PermissionsConfig>,
         maxConcurrentRuns: number,
         ui: { language?: "zh" | "en" },
-        pricing: Record<string, ModelPricing>
+        pricing: Record<string, ModelPricing>,
+        memory: { maxChars: number }
     ) {
         this.providers = providers;
         this.default = def;
@@ -322,6 +327,7 @@ export class Config {
         this.maxConcurrentRuns = maxConcurrentRuns;
         this.ui = ui;
         this.pricing = pricing;
+        this.memory = memory;
     }
 
     static load(): Config {
@@ -384,7 +390,8 @@ export class Config {
             normalizePermissions(parsed?.permissions),
             normalizeMaxConcurrentRuns(parsed?.maxConcurrentRuns),
             normalizeUi(parsed?.ui),
-            normalizePricing(parsed?.pricing)
+            normalizePricing(parsed?.pricing),
+            normalizeMemory(parsed?.memory)
         );
     }
 
@@ -456,6 +463,7 @@ export class Config {
                 proxy: normalizeProxy(data.proxy),
                 noProxy: normalizeNoProxy(data.noProxy),
                 tools: normalizeTools(data.tools),
+                memory: normalizeMemory(data.memory),
             }),
             "utf-8"
         );
@@ -475,6 +483,17 @@ function normalizeMaxConcurrentRuns(v?: number): number {
 function normalizeUi(v?: { language?: "zh" | "en" }): { language?: "zh" | "en" } {
     const language = v?.language === "zh" || v?.language === "en" ? v.language : undefined;
     return language ? { language } : {};
+}
+
+/** memory 段归一化（SPEC-035 B-004）：maxChars 正整数，缺省 4000（原硬编码窗口值）。 */
+export const DEFAULT_MEMORY_MAX_CHARS = 4000;
+function normalizeMemory(v?: { maxChars?: number }): { maxChars: number } {
+    const n = v?.maxChars;
+    const maxChars =
+        typeof n === "number" && Number.isFinite(n) && n >= 1
+            ? Math.floor(n)
+            : DEFAULT_MEMORY_MAX_CHARS;
+    return { maxChars };
 }
 
 /** pricing 段归一化（FR-22）：仅保留 input/output 均为正数的条目。 */

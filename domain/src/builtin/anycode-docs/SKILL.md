@@ -33,6 +33,7 @@ no_proxy: localhost,127.0.0.1 # 可选，代理豁免
 pricing: # 可选，模型单价（$/1M tokens），配了显示会话费用
   gpt-4o: { input: 2.5, output: 10 }
 maxConcurrentRuns: 3 # 可选，并行运行上限（0 = 不限）
+memory: { maxChars: 4000 } # 可选，记忆注入截断窗口（字符）
 gitBashPath: ... # 可选，Windows Git Bash 路径
 ui: { language: zh } # 可选，界面语言（zh/en，缺省跟随系统）
 ```
@@ -59,9 +60,10 @@ additive 三层注入 system prompt：全局 `~/.anycode/AGENTS.md` + `~/.agents
 
 ## 记忆（Memory）
 
-`save_memory` 工具主动写（LLM 决定记什么）：
+`update_memory` 工具主动写（LLM 决定记什么）：
 - 全局 `~/.anycode/memory.md`（scope=global，跨项目偏好）
 - 项目 `<root>/.anycode/memory.md`（scope=project，本项目约定）
+- 缺省 mode=append 追加条目；记忆冗余/过时时可低频用 mode=rewrite 全量重写该层（蒸馏整理，content 即新全文）
 注入 system prompt，下条消息生效。
 
 ## 会话（Sessions）
@@ -70,7 +72,7 @@ additive 三层注入 system prompt：全局 `~/.anycode/AGENTS.md` + `~/.agents
 
 ## 工具
 
-内置：`bash` `read` `write` `edit` `explore` `glob` `grep` `save_memory` `create_skill` `ask_question` `use_skill` `job_output` `job_kill` + `plan`（sub-agent 拆解复杂任务）。
+内置：`bash` `read` `write` `edit` `explore` `glob` `grep` `update_memory` `create_skill` `ask_question` `use_skill` `job_output` `job_kill` + `plan`（sub-agent 拆解复杂任务）。
 web 工具：`web_search` `web_fetch`（联网，代理走全局 proxy）；`browser_use`（CDP 真浏览器：navigate/content/eval，需浏览器 --remote-debugging-port）。
 
 ## 常见操作
@@ -81,7 +83,7 @@ web 工具：`web_search` `web_fetch`（联网，代理走全局 proxy）；`bro
 - **开/关工具或配工具参数**：config.yaml `tools` 段（如 `browser_use: { enabled: true, config: { cdpUrl } }`）→ 工具配置当轮生效，开关下条消息生效。
 - **配代理**：config.yaml 顶层 `proxy`（被墙的 LLM API / 搜索都必须走它时）→ 下条消息生效。
 - **加规则**：写 `AGENTS.md` 到上述三层之一 → 下条消息生效。
-- **记记忆**：调 `save_memory` 工具（别手写 memory.md）。
+- **记记忆**：调 `update_memory` 工具（别手写 memory.md）。
 
 ## 约束
 
