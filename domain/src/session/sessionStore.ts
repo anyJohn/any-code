@@ -75,8 +75,12 @@ export class LocalSessionStore implements SessionStore {
     ): Promise<void> {
         const file = fileOf(key);
         await fs.mkdir(path.dirname(file), { recursive: true });
-        // 保留原 title/createdAt：读现有 meta 提炼，缺失则用默认。
-        const metas = await readMetas(file);
+        // 读全量条目（含事件）——压缩重写只替换模型上下文（消息），不吞 UI 历史真值
+        //（bugfix 2026-09-05：此前只保留 meta，压缩一次 durable 事件全丢，历史记录不可看）
+        const origEntries = (await this.load(key)) ?? [];
+        const metas = origEntries.filter(
+            (e): e is Extract<SessionEntry, { kind: "meta" }> => e.kind === "meta"
+        );
         const id = key.sessionId;
         const orig = metas.length ? metaOf(id, metas) : null;
         const now = Date.now();
@@ -90,7 +94,11 @@ export class LocalSessionStore implements SessionStore {
         ];
         // FR-22/AR-23：保留原 usage 增量与 sysfp 指纹 meta——重写消息不重置累计/审计锚点
         for (const m of metas) {
-            if (m.kind === "meta" && (m.usage || m.sysfp)) entries.push(m);
+            if (m.usage || m.sysfp) entries.push(m);
+        }
+        // durable 事件条目原样保留（内部相对顺序不变）——压缩的是模型上下文，UI 历史不丢
+        for (const e of origEntries) {
+            if (e.kind === "event") entries.push(e);
         }
         for (const m of messages) {
             // system 不入盘（与 appendMessage 一致：system 每任务重建，不持久化）

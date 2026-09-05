@@ -77,6 +77,17 @@ describe("崩溃重建（AR-23 acceptance）", () => {
         }); // usage 走同 store
         await svc.appendMessage(key, u("q2"));
         await svc.appendMessage(key, a("a2"));
+        // durable 事件（UI 历史真值）
+        await svc.appendEvent(
+            key,
+            {
+                timestamp: Date.now(),
+                type: "Tool",
+                message: "bash",
+                turnId: "t1",
+                data: { name: "bash", args: {}, result: "ok" },
+            } as never
+        );
         // 记录崩溃前上下文（排除 system head）
         const before = [u("q1"), a("a1"), u("q2"), a("a2")];
         // "崩溃"：全新 service/store 从盘重建
@@ -90,6 +101,8 @@ describe("崩溃重建（AR-23 acceptance）", () => {
         expect(r3?.sysfp).toEqual({ hash: "fp1", model: "m" });
         expect(r3?.usage?.promptTokens).toBe(10);
         expect(r3?.messages).toEqual([u("q1"), a("a1")]);
+        // durable 事件保留（UI 历史真值不丢）
+        expect(r3?.events.some((e) => e.type === "Tool")).toBe(true);
         // list 的 meta 同样带指纹
         const list = await svc3.list(PK);
         expect(list.find((x) => x.id === session.id)?.sysfp).toEqual({
