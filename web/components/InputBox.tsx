@@ -33,6 +33,8 @@ interface InputBoxProps {
     // 模型切换 pill（左下角，用户需求 2026-09-04）
     projectKey?: string;
     onModelSwitched?: () => void;
+    /** /compact 进行中：禁用输入（该会话被压缩占用，发送会 409） */
+    compacting?: boolean;
     // 未匹配指令的 Enter 路径
     runRawCommand: (rawDraft: string) => void;
 }
@@ -63,8 +65,11 @@ export function InputBox({
     runRawCommand,
     projectKey,
     onModelSwitched,
+    compacting,
 }: InputBoxProps) {
     const { t } = useT();
+    // 压缩占用会话：发送必 409——输入禁用 + 占位文案，别让用户白打
+    const busy = pending || compacting;
     const taRef = useRef<HTMLTextAreaElement>(null);
 
     // 自动增高（按内容，上限 160px 后滚动）
@@ -298,7 +303,11 @@ export function InputBox({
                                     {t("inputBox.stop")}
                                 </Button>
                             ) : (
-                                <Button size="sm" onClick={send}>
+                                <Button
+                                    size="sm"
+                                    onClick={send}
+                                    disabled={compacting}
+                                >
                                     {t("inputBox.send")}
                                 </Button>
                             )}

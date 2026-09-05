@@ -74,6 +74,7 @@ export const en: Record<string, string> = {
     "inputBox.useProvider": "Set default",
     "inputBox.placeholder": "Type a task… (Enter to send, Shift+Enter for newline, / commands, @ files)",
     "inputBox.send": "Send",
+    "inputBox.compacting": "Compacting context…",
     "inputBox.stop": "Stop",
     "interactionModal.answerPlaceholder": "Type your answer",
     "interactionModal.otherPlaceholder": "Type a custom answer",

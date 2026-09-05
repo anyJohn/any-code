@@ -75,6 +75,7 @@ export const zh: Record<string, string> = {
     "inputBox.useProvider": "设为默认",
     "inputBox.placeholder": "输入任务…（Enter 发送，Shift+Enter 换行，/ 指令，@ 文件）",
     "inputBox.send": "发送",
+    "inputBox.compacting": "正在压缩上下文…",
     "inputBox.stop": "停止",
     "interactionModal.answerPlaceholder": "输入你的回答",
     "interactionModal.otherPlaceholder": "输入自定义答案",

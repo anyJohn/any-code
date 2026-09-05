@@ -174,6 +174,7 @@ export function ChatView({
                 runRawCommand={command.runRawCommand}
                 projectKey={projectKey}
                 onModelSwitched={() => setStatusRefresh((k) => k + 1)}
+                compacting={command.compacting}
             />
 
             {projectKey && (
