@@ -40,14 +40,14 @@ export const TurnBlock = memo(function TurnBlock({
                 />
             )}
             {item.assistant && (
-                <div className="flex items-start gap-1 py-1">
+                <div className="flex flex-col items-start gap-0.5 py-1 group/turn">
                     <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-muted px-3 py-2">
                         <MarkdownRenderer content={item.assistant.message} />
                     </div>
-                    {/* 整条消息复制（SPEC-036 B-002）：hover 显示 */}
+                    {/* 整条消息复制（SPEC-036 B-002）：hover 显示，气泡右下 */}
                     <CopyButton
                         text={item.assistant.message}
-                        className="p-1 rounded text-muted-foreground/0 group-hover/turn:text-muted-foreground hover:!text-foreground transition-colors mt-1"
+                        className="p-1 rounded text-muted-foreground/0 group-hover/turn:text-muted-foreground hover:!text-foreground transition-colors self-end"
                     />
                 </div>
             )}
