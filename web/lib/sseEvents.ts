@@ -155,6 +155,16 @@ export interface SessionListItem {
     usage?: SessionUsageInfo;
 }
 
+/** 工作区（含内联 sessions——GET /api/workspaces 一次返回全部，避免点开二次请求）。 */
+export interface WorkspaceWithSessions {
+    rootPath: string;
+    projectKey: string;
+    name: string;
+    addedAt: number;
+    lastUsedAt: number;
+    sessions?: SessionListItem[];
+}
+
 /** GET /api/running 条目：全局运行快照（跨工作区，含会话标题）。 */
 export interface RunningSessionInfo {
     sessionId: string;

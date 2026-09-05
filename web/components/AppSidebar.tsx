@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "@/hooks/useRedux";
 import {
@@ -10,7 +10,7 @@ import {
     refreshWorkspaces,
 } from "@/store/workspaceSlice";
 import type { WorkspaceMeta } from "@any-code/domain";
-import type { SessionListItem } from "@/lib/sseEvents";
+import type { SessionListItem, WorkspaceWithSessions } from "@/lib/sseEvents";
 import {
     Collapsible,
     CollapsibleTrigger,
@@ -49,8 +49,6 @@ import { DirectoryPicker } from "./DirectoryPicker";
 import { Logo } from "./Logo";
 import { Link } from "react-router-dom";
 
-type SessionsStatus = "loading" | "ready" | "error";
-
 /**
  * AppSidebar —— 工作区 Collapsible + sessions。
  * 双重高亮：工作区行 selected.projectKey + 会话行 activeSessionId。
@@ -72,10 +70,12 @@ export function AppSidebar({
     const navigate = useNavigate();
     const { t } = useT();
 
+    // /api/workspaces 内联返回每个工作区的 sessions（用户需求 2026-09-05）：
+    // 一次请求拿到全部，点开工作区不再二次请求（避免 UI 跳变）；轮询同端点静默刷新。
     const [sessionsMap, setSessionsMap] = useState<Record<string, SessionListItem[]>>({});
     const sessionsMapRef = useRef(sessionsMap);
     sessionsMapRef.current = sessionsMap;
-    const [sessionsStatus, setSessionsStatus] = useState<Record<string, SessionsStatus>>({});
+    const [sessionsLoaded, setSessionsLoaded] = useState(false);
     const [openKeys, setOpenKeys] = useState<Record<string, boolean>>({});
     const [sidebarErr, setSidebarErr] = useState("");
     const [pickerOpen, setPickerOpen] = useState(false);
@@ -112,54 +112,43 @@ export function AppSidebar({
         dispatch(refreshWorkspaces());
     }, [dispatch]);
 
-    // 选中工作区变化时自动展开 + 加载 sessions（chat 页加载 / 点 workspace）
-    useEffect(() => {
-        if (selected) {
-            setOpenKeys((p) => ({ ...p, [selected.projectKey]: true }));
-            if (!sessionsMap[selected.projectKey]) {
-                loadSessions(selected);
-            }
+    // 拉取全部工作区 + 内联 sessions（含运行状态/用量，server 端合并）
+    const loadAll = useCallback(async (opts?: { silent?: boolean }) => {
+        if (!opts?.silent) setSessionsLoaded(false);
+        const list = await apiJson<WorkspaceWithSessions[]>("/api/workspaces");
+        if (!list) {
+            setSidebarErr(t("sidebar.loadSessionsFailed"));
+            return;
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selected]);
+        setSidebarErr("");
+        setSessionsMap(
+            Object.fromEntries(
+                list.map((w) => [w.projectKey, w.sessions ?? []])
+            )
+        );
+        setSessionsLoaded(true);
+    }, []);
 
-    // 会话列表变更信号（新会话创建后 bumpSessions）→ 重拉当前工作区 sessions。
-    // 初值 0 跳过（挂载时上面 [selected] effect 已拉过）。
+    // 挂载即拉（sessions 一次性到位，点开工作区零请求）
     useEffect(() => {
-        if (selected && sessionsVersion > 0) loadSessions(selected);
+        void loadAll();
+    }, [loadAll]);
+
+    // 会话列表变更信号（新会话创建后 bumpSessions）→ 静默重拉
+    useEffect(() => {
+        if (sessionsVersion > 0) void loadAll({ silent: true });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sessionsVersion]);
 
-    const loadSessions = async (w: WorkspaceMeta) => {
-        setSessionsStatus((p) => ({ ...p, [w.projectKey]: "loading" }));
-        const list = await apiJson<SessionListItem[]>(
-            `/api/workspaces/${w.projectKey}/sessions`
-        );
-        if (list === null) {
-            setSessionsStatus((p) => ({ ...p, [w.projectKey]: "error" }));
-            return;
-        }
-        setSessionsMap((p) => ({ ...p, [w.projectKey]: list }));
-        setSessionsStatus((p) => ({ ...p, [w.projectKey]: "ready" }));
-    };
-
-    // FR-30 B-004：运行状态轮询（3s，页面可见时）。静默刷新已加载工作区的会话列表——
-    // 服务端在 SessionMeta 上合并 status/pendingAsk（running/waiting_ask/queued），驱动行内徽标。
+    // FR-30 B-004：运行状态轮询（3s，页面可见时）——同一端点静默刷新
     useEffect(() => {
         const tick = () => {
             if (document.visibilityState !== "visible") return;
-            for (const projectKey of Object.keys(sessionsMapRef.current)) {
-                void (async () => {
-                    const list = await apiJson<SessionListItem[]>(
-                        `/api/workspaces/${projectKey}/sessions`
-                    );
-                    if (list) setSessionsMap((p) => ({ ...p, [projectKey]: list }));
-                })();
-            }
+            void loadAll({ silent: true });
         };
         const t = setInterval(tick, 3000);
         return () => clearInterval(t);
-    }, []);
+    }, [loadAll]);
 
     const onPicked = async (path: string) => {
         setAddError("");
@@ -178,7 +167,6 @@ export function AppSidebar({
 
     const onToggle = (w: WorkspaceMeta) => {
         const willOpen = !openKeys[w.projectKey];
-        if (willOpen && !sessionsMap[w.projectKey]) loadSessions(w);
         dispatch(setSelected(w));
         setOpenKeys((p) => ({ ...p, [w.projectKey]: willOpen }));
     };
@@ -187,7 +175,6 @@ export function AppSidebar({
     const onOpenWorkspace = (w: WorkspaceMeta) => {
         dispatch(setSelected(w));
         setOpenKeys((p) => ({ ...p, [w.projectKey]: true }));
-        if (!sessionsMap[w.projectKey]) loadSessions(w);
         navigate("/");
     };
 
@@ -575,21 +562,14 @@ export function AppSidebar({
                                             {sidebarErr}
                                         </p>
                                     )}
-                                    {(sessionsStatus[w.projectKey] === "loading" ||
-                                        (!sessionsStatus[w.projectKey] &&
-                                            !sessionsMap[w.projectKey])) &&
+                                    {!sessionsLoaded &&
                                         Array.from({ length: 3 }).map((_, i) => (
                                             <Skeleton
                                                 key={i}
                                                 className="h-6 mx-2 rounded"
                                             />
                                         ))}
-                                    {sessionsStatus[w.projectKey] === "error" && (
-                                        <p className="px-2 py-1 text-[11px] text-destructive">
-                                            {t("sidebar.loadSessionsFailed")}
-                                        </p>
-                                    )}
-                                    {sessionsStatus[w.projectKey] === "ready" &&
+                                    {sessionsLoaded &&
                                         (sessionsMap[w.projectKey] ?? []).map((s) => {
                                             const rt = renameTarget?.s.id === s.id ? renameTarget : null;
                                             const isActive =
@@ -711,7 +691,7 @@ export function AppSidebar({
                                                 </div>
                                             );
                                         })}
-                                    {sessionsStatus[w.projectKey] === "ready" &&
+                                    {sessionsLoaded &&
                                         (sessionsMap[w.projectKey] ?? []).length === 0 && (
                                             <p className="px-2 py-1 text-[11px] text-muted-foreground">
                                                 {t("sidebar.noSessions")}

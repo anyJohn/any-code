@@ -120,7 +120,34 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
     const app = new Hono();
 
     // ==================== workspaces ====================
-    app.get("/api/workspaces", (c) => c.json(WorkspaceRegistry.list()));
+    // GET /api/workspaces —— 工作区 + 内联 sessions（用户需求 2026-09-05）：
+    // 一次返回全部（含运行状态/用量），web 点开工作区零二次请求。会话读取失败 → 空列表降级。
+    app.get("/api/workspaces", async (c) => {
+        const service = new SessionService();
+        const statusById = new Map(
+            getAgentManager()
+                .statusList()
+                .map((s) => [s.sessionId, s])
+        );
+        const list = await Promise.all(
+            WorkspaceRegistry.list().map(async (w) => {
+                let sessions: unknown[] = [];
+                try {
+                    const metas = await service.list(w.projectKey);
+                    sessions = metas.map((x) => {
+                        const st = statusById.get(x.id);
+                        return st
+                            ? { ...x, status: st.status, pendingAsk: st.pendingAsk }
+                            : x;
+                    });
+                } catch {
+                    // 该工作区会话读取失败 → 空列表，不阻断整体
+                }
+                return { ...w, sessions };
+            })
+        );
+        return c.json(list);
+    });
 
     app.post("/api/workspaces", async (c) => {
         let body: { path?: string } = {};
