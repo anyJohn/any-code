@@ -45,6 +45,7 @@ export const en: Record<string, string> = {
     "todo.title": "Task plan",
     "todo.round": "Round {round}",
     "changes.gitUnavailable": "git unavailable — no change history",
+    "changes.noneChanged": "None (no changes)",
     "changes.noSnapshots": "None (no snapshots yet)",
     "changes.empty": "No file changes since this snapshot",
     "changes.showAll": "Show all files",

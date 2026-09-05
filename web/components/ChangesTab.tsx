@@ -9,6 +9,8 @@ interface SnapshotInfo {
     id: string;
     label: string;
     ts: number;
+    /** 工作树相对该快照的变更文件数（domain list 计算） */
+    changes: number;
 }
 
 interface DiffResult {
@@ -24,8 +26,57 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 /**
+ * patch 逐行解析：从 @@ -a,b +c,d @@ 头推导每行的旧行号/新行号（diff 视图行号
+ * gutter 用）。hunk 头/文件头等元行行号为 null。
+ */
+export interface PatchRow {
+    oldNo: number | null;
+    newNo: number | null;
+    text: string;
+}
+
+export function parsePatch(patch: string): PatchRow[] {
+    const rows: PatchRow[] = [];
+    let oldNo = 0;
+    let newNo = 0;
+    for (const line of patch.split("\n")) {
+        if (line.startsWith("@@")) {
+            const m = /@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+            if (m) {
+                oldNo = parseInt(m[1], 10);
+                newNo = parseInt(m[2], 10);
+            }
+            rows.push({ oldNo: null, newNo: null, text: line });
+        } else if (line.startsWith("+")) {
+            rows.push({ oldNo: null, newNo, text: line });
+            newNo++;
+        } else if (line.startsWith("-")) {
+            rows.push({ oldNo, newNo: null, text: line });
+            oldNo++;
+        } else if (line.startsWith("\\")) {
+            // "\ No newline at end of file"：元行，不推进行号
+            rows.push({ oldNo: null, newNo: null, text: line });
+        } else if (
+            line.startsWith("diff ") ||
+            line.startsWith("index ") ||
+            line.startsWith("--- ") ||
+            line.startsWith("+++ ")
+        ) {
+            rows.push({ oldNo: null, newNo: null, text: line });
+        } else {
+            // 上下文行（含空行 " "）
+            rows.push({ oldNo, newNo, text: line });
+            oldNo++;
+            newNo++;
+        }
+    }
+    return rows;
+}
+
+/**
  * ChangesTab（SPEC-036 B-007 变更 tab）：工作树相对所选快照的变更。
- * 快照下拉（缺省最新）+ 文件列表（点击过滤 patch）+ 统一 diff 视图（+/- 行着色）。
+ * 快照下拉（仅列出有变更的快照，用户反馈 2026-09-06）+ 文件列表（点击过滤
+ * patch）+ 统一 diff 视图（行号 gutter + +/- 行全宽着色）。
  */
 export function ChangesTab({ projectKey }: { projectKey: string }) {
     const { t } = useT();
@@ -43,8 +94,11 @@ export function ChangesTab({ projectKey }: { projectKey: string }) {
         ).then((data) => {
             if (cancelled || !data) return;
             setGitAvailable(data.gitAvailable);
-            setSnapshots(Array.isArray(data?.snapshots) ? data.snapshots : []);
-            if (!selected && data.snapshots?.length) setSelected(data.snapshots[0].id);
+            const all = Array.isArray(data?.snapshots) ? data.snapshots : [];
+            // 只列有变更的快照（全靠后无变更 → 显示"无"占位）
+            const changed = all.filter((s) => (s.changes ?? 0) > 0);
+            setSnapshots(changed);
+            if (!selected && changed.length) setSelected(changed[0].id);
         });
         return () => {
             cancelled = true;
@@ -52,27 +106,29 @@ export function ChangesTab({ projectKey }: { projectKey: string }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [projectKey]);
 
-    const loadDiff = useCallback(async (id: string, path: string | null) => {
-        setError("");
-        const q = path ? `?path=${encodeURIComponent(path)}` : "";
-        const data = await apiJson<DiffResult | { statusMessage: string }>(
-            `/api/workspaces/${projectKey}/snapshots/${id}/diff${q}`
-        );
-        if (data && "statusMessage" in data) {
-            setError(data.statusMessage);
-            setDiff(null);
-        } else {
-            setDiff(data ?? { files: [], patch: "" });
-        }
-    }, [projectKey]);
+    const loadDiff = useCallback(
+        async (id: string, path: string | null) => {
+            setError("");
+            const q = path ? `?path=${encodeURIComponent(path)}` : "";
+            const data = await apiJson<DiffResult | { statusMessage: string }>(
+                `/api/workspaces/${projectKey}/snapshots/${id}/diff${q}`
+            );
+            if (data && "statusMessage" in data) {
+                setError(data.statusMessage);
+                setDiff(null);
+            } else {
+                setDiff(data ?? { files: [], patch: "" });
+            }
+        },
+        [projectKey]
+    );
 
     useEffect(() => {
         if (selected) void loadDiff(selected, activeFile);
     }, [selected, activeFile, loadDiff]);
 
-    // 空 patch（无变更）不进 split——否则 [""] 会渲染一个空代码框（用户反馈 bug）
-    const patchLines = useMemo(
-        () => (diff?.patch ? diff.patch.split("\n") : []),
+    const patchRows = useMemo(
+        () => (diff?.patch ? parsePatch(diff.patch) : []),
         [diff]
     );
 
@@ -84,9 +140,9 @@ export function ChangesTab({ projectKey }: { projectKey: string }) {
             <div className="w-full max-w-3xl mx-auto px-4 py-3 flex flex-col gap-3">
                 <div className="flex items-center gap-2">
                     {snapshots.length === 0 ? (
-                        // 空状态下拉显示"无"（细节反馈 2026-09-06）
+                        // 空状态显示"无"（细节反馈 2026-09-06）
                         <span className="text-xs rounded-md border border-input bg-muted/40 px-2 py-1 text-muted-foreground">
-                            {t("changes.noSnapshots")}
+                            {t("changes.noneChanged")}
                         </span>
                     ) : (
                         <select
@@ -149,20 +205,37 @@ export function ChangesTab({ projectKey }: { projectKey: string }) {
                     </div>
                 )}
 
-                {patchLines.length > 0 && (
-                    <pre className="rounded-md border border-border bg-muted/40 overflow-x-auto p-3 text-xs leading-relaxed font-mono">
-                        {patchLines.map((line, i) => (
-                            <div
-                                key={i}
-                                className={cn(
-                                    line.startsWith("+") && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-                                    line.startsWith("-") && "bg-destructive/10 text-destructive"
-                                )}
-                            >
-                                {line || " "}
-                            </div>
-                        ))}
-                    </pre>
+                {patchRows.length > 0 && (
+                    <div className="rounded-md border border-border bg-muted/40 overflow-x-auto text-xs leading-relaxed font-mono">
+                        <div className="min-w-max">
+                            {patchRows.map((r, i) => {
+                                const added = r.text.startsWith("+") && r.oldNo === null;
+                                const removed = r.text.startsWith("-") && r.newNo === null;
+                                return (
+                                    <div
+                                        key={i}
+                                        className={cn(
+                                            "flex",
+                                            added &&
+                                                "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                                            removed &&
+                                                "bg-destructive/10 text-destructive"
+                                        )}
+                                    >
+                                        <span className="select-none w-12 shrink-0 text-right pr-2 text-muted-foreground/50 sticky left-0 bg-muted/40">
+                                            {r.oldNo ?? ""}
+                                        </span>
+                                        <span className="select-none w-12 shrink-0 text-right pr-2 text-muted-foreground/50 sticky left-12 bg-muted/40">
+                                            {r.newNo ?? ""}
+                                        </span>
+                                        <span className="pr-4 whitespace-pre">
+                                            {r.text || " "}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
                 )}
             </div>
         </div>

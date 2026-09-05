@@ -39,3 +39,36 @@ describe("文件引用格式（SPEC-036 B-011）", () => {
         ).toBe("a/b.ts:10-20");
     });
 });
+
+// SPEC-036：patch 解析——@@ 头推导旧行号/新行号
+import { parsePatch } from "@/components/ChangesTab";
+
+describe("parsePatch（变更 tab 行号）", () => {
+    it("hunk 头后续行正确推导行号；+/−/上下文/元行分类正确", () => {
+        const rows = parsePatch(
+            [
+                "diff --git a/a.txt b/a.txt",
+                "index 111..222 100644",
+                "--- a/a.txt",
+                "+++ b/a.txt",
+                "@@ -3,3 +3,3 @@",
+                " ctx",
+                "-old",
+                "+new",
+                "\\ No newline at end of file",
+            ].join("\n")
+        );
+        const ctx = rows.find((r) => r.text === " ctx")!;
+        expect(ctx.oldNo).toBe(3);
+        expect(ctx.newNo).toBe(3);
+        const del = rows.find((r) => r.text === "-old")!;
+        expect(del.oldNo).toBe(4);
+        expect(del.newNo).toBeNull();
+        const add = rows.find((r) => r.text === "+new")!;
+        expect(add.oldNo).toBeNull();
+        expect(add.newNo).toBe(4);
+        const meta = rows.find((r) => r.text.startsWith("\\"))!;
+        expect(meta.oldNo).toBeNull();
+        expect(meta.newNo).toBeNull();
+    });
+});

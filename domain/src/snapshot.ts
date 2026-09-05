@@ -23,6 +23,8 @@ export interface Snapshot {
     /** 说明（工具名 + 参数摘要） */
     label: string;
     ts: number;
+    /** 工作树相对该快照的变更文件数（list 时计算；变更 tab 过滤无变更快照用） */
+    changes: number;
 }
 
 export interface SnapshotService {
@@ -191,7 +193,8 @@ export function createSnapshotService(
     const commitish = async (label: string): Promise<Snapshot | null> => {
         const head = await runGit(["rev-parse", "HEAD"], gitDir, { cwd: workspaceRoot });
         if (!head.ok) return null;
-        return { id: head.out.trim(), label, ts: Date.now() };
+        // changes 由 list() 统一计算回填；刚拍的快照此刻必然 0（与工作树一致）
+        return { id: head.out.trim(), label, ts: Date.now(), changes: 0 };
     };
 
     return {
@@ -225,13 +228,37 @@ export function createSnapshotService(
                 { cwd: workspaceRoot }
             );
             if (!log.ok) return [];
-            return log.out
+            const base = log.out
                 .split("\n")
                 .filter(Boolean)
                 .map((line) => {
                     const [id, label, ts] = line.split("\x1f");
                     return { id, label, ts: Number(ts) * 1000 };
                 });
+            // 每快照的变更文件数（SPEC-036 / 用户反馈 2026-09-06）：变更 tab 过滤
+            // 无变更快照。未跟踪文件先 intent-to-add 登记；8 并发控 git 进程数。
+            await runGit(["add", "--intent-to-add", "-A"], gitDir, {
+                workTree: workspaceRoot,
+                cwd: workspaceRoot,
+            });
+            const countFor = async (id: string): Promise<number> => {
+                const d = await runGit(["diff", "--name-only", id], gitDir, {
+                    workTree: workspaceRoot,
+                    cwd: workspaceRoot,
+                });
+                return d.ok
+                    ? d.out.split("\n").filter(Boolean).length
+                    : 0;
+            };
+            const counts = new Map<string, number>();
+            for (let i = 0; i < base.length; i += 8) {
+                await Promise.all(
+                    base.slice(i, i + 8).map(async (s) => {
+                        counts.set(s.id, await countFor(s.id));
+                    })
+                );
+            }
+            return base.map((s) => ({ ...s, changes: counts.get(s.id) ?? 0 }));
         },
 
         async rollbackTo(id: string): Promise<void> {
