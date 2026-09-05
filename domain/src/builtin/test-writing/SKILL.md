@@ -1,9 +1,6 @@
 ---
 name: test-writing
 description: "测试编写指南——AAA 结构、边界优先、mock 纪律与失败信息质量，适配 vitest/jest 风格单测"
-version: 1.0.0
-changes: |
-  - 首次发布：AAA 结构 + 边界清单 + mock 纪律
 ---
 
 # 测试编写

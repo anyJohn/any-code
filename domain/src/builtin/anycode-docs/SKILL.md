@@ -1,12 +1,6 @@
 ---
 name: anycode-docs
 description: "AnyCode 自身配置与管理手册——改 config/mcp/tools/skills/rules/memory/proxy 的操作指南"
-version: 1.1.0
-changes: |
-  - abilities 段已废除：内置 web 能力改为原生工具，开关与配置走 tools 段
-  - 新增全局出网代理 proxy / no_proxy（LLM 调用与 web 工具统一走此代理）
-  - 新增 tools 段通用工具开关与私有配置（每个工具可 enabled + config）
-  - 技能源新增 ~/.claude/skills/ 兼容层（Claude Code 技能目录）
 ---
 
 # AnyCode 配置与管理
@@ -56,7 +50,7 @@ ui: { language: zh } # 可选，界面语言（zh/en，缺省跟随系统）
 - 目录制 `<name>/SKILL.md`（可带 `references/scripts/assets` 子目录；调 `use_skill` 读全文，结果含 `<dir>`，可经 read/glob 读资源）
 - 平铺 `<name>.md`（兼容旧格式）
 - 同名高层覆盖低层 + warning
-- 内置技能：随包 seed 到 `~/.anycode/skills/`（幂等，不覆盖用户改过的；有新版本时提示，可选升级或跳过）
+- 内置技能：随包 seed 到 `~/.anycode/skills/`（幂等，不覆盖用户改过的；想拿内置新版：删掉本地副本重新启动即可）
 - **创建技能**：用 `create_skill` 工具（name 用小写字母/数字/连字符；自动落对位置，勿手写路径安装）
 
 ## 规则（AGENTS.md）

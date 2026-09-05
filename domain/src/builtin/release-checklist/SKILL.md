@@ -1,9 +1,6 @@
 ---
 name: release-checklist
 description: "发布流程检查单——semver 判定、changelog、构建验证、回归清单与发布后检查，按序执行不跳步"
-version: 1.0.0
-changes: |
-  - 首次发布：六步检查单
 ---
 
 # 发布检查单
