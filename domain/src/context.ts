@@ -40,7 +40,9 @@ export interface ToolContext {
     /** 工具权限上下文（SPEC-032）：undefined = 权限系统未启用（直通，测试/兼容路径）。 */
     permissions?: PermissionContext;
     /** 工作区快照钩子（AR-4，异步）：写类工具执行前自动快照；undefined = 未启用（跳过）。 */
-    snapshot?: { snapshot(label: string): Promise<Snapshot | null> };
+    snapshot?: {
+        snapshot(command: string, sessionId?: string | null): Promise<Snapshot | null>;
+    };
     /** 命名 provider 表（FR-11）：sub-agent 按 def.provider 覆盖 llm 时查此表 */
     providers?: Record<string, import("./config").LlmProvider>;
     /** 当前 sub-agent 委托深度（FR-11）：主 agent 0；AgentTool 内 +1，超 def.maxDepth 拒绝 */

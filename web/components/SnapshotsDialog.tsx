@@ -14,7 +14,8 @@ import { useT } from "@/i18n";
 
 interface Snapshot {
     id: string;
-    label: string;
+    /** 触发快照的命令（domain 存事实，展示文本在此拼接） */
+    command: string;
     ts: number;
 }
 
@@ -117,7 +118,7 @@ export function SnapshotsDialog({
                             >
                                 <span className="min-w-0 flex flex-col">
                                     <span className="truncate text-sm">
-                                        {s.label}
+                                        {s.command}
                                     </span>
                                     <span className="text-[11px] text-muted-foreground font-mono">
                                         {fmt(s.ts)} · {s.id.slice(0, 8)}

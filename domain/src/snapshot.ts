@@ -20,18 +20,45 @@ import { projectKeyOf } from "./session";
 export interface Snapshot {
     /** commit hash（回滚 id） */
     id: string;
-    /** 说明（工具名 + 参数摘要） */
-    label: string;
     ts: number;
+    /** 触发快照的会话 id（run 起点快照为当前会话；手工调用可为 null） */
+    sessionId: string | null;
+    /** 触发快照的命令（工具名 + 参数摘要）。domain 只存事实——展示用 label 由 interface 层自行拼接 */
+    command: string;
     /** 工作树相对该快照的变更文件数（list 时计算；变更 tab 过滤无变更快照用） */
     changes: number;
+}
+
+/**
+ * commit message ↔ 结构化快照事实（用户决策 2026-09-06：domain 不存展示 label，
+ * 存 sessionId + command；时间戳走 git commit 时间）。
+ * 旧格式（纯文本 label，或 "session <id> | <cmd>" 前缀）降级解析。
+ */
+export function parseSnapshotMessage(
+    msg: string
+): { sessionId: string | null; command: string } {
+    try {
+        const obj = JSON.parse(msg) as { c?: string; s?: string | null };
+        if (typeof obj.c === "string") {
+            return { sessionId: obj.s ?? null, command: obj.c };
+        }
+    } catch {
+        // 非 JSON → 旧格式
+    }
+    const legacy = /^session ([0-9a-f-]{8,}) \| (.*)$/s.exec(msg);
+    if (legacy) return { sessionId: legacy[1], command: legacy[2] };
+    return { sessionId: null, command: msg };
+}
+
+function snapshotMessage(command: string, sessionId: string | null): string {
+    return JSON.stringify({ c: command, s: sessionId });
 }
 
 export interface SnapshotService {
     /** git 可用性（首次解析后缓存） */
     available(): boolean;
     /** 工作区快照；失败/不可用返回 null（best-effort，不阻断工具执行） */
-    snapshot(label: string): Promise<Snapshot | null>;
+    snapshot(command: string, sessionId?: string | null): Promise<Snapshot | null>;
     /** 快照列表（新→旧） */
     list(): Promise<Snapshot[]>;
     /** 回滚工作区到指定快照（恢复该时点已跟踪文件）。失败抛错由调用方处理。 */
@@ -190,17 +217,20 @@ export function createSnapshotService(
         return true;
     };
 
-    const commitish = async (label: string): Promise<Snapshot | null> => {
+    const commitish = async (
+        command: string,
+        sessionId: string | null
+    ): Promise<Snapshot | null> => {
         const head = await runGit(["rev-parse", "HEAD"], gitDir, { cwd: workspaceRoot });
         if (!head.ok) return null;
         // changes 由 list() 统一计算回填；刚拍的快照此刻必然 0（与工作树一致）
-        return { id: head.out.trim(), label, ts: Date.now(), changes: 0 };
+        return { id: head.out.trim(), command, sessionId, ts: Date.now(), changes: 0 };
     };
 
     return {
         available: (): boolean => resolveGitPath(gitHint) !== null,
 
-        async snapshot(label: string): Promise<Snapshot | null> {
+        async snapshot(command: string, sessionId?: string | null): Promise<Snapshot | null> {
             if (!(await ensureRepo())) return null;
             const add = await runGit(["add", "-A", "--"], gitDir, {
                 workTree: workspaceRoot,
@@ -211,13 +241,13 @@ export function createSnapshotService(
                 [
                     "-c", "user.name=anycode",
                     "-c", "user.email=anycode@local",
-                    "commit", "--quiet", "--allow-empty", "-m", label,
+                    "commit", "--quiet", "--allow-empty", "-m", snapshotMessage(command, sessionId ?? null),
                 ],
                 gitDir,
                 { workTree: workspaceRoot, cwd: workspaceRoot }
             );
             if (!commit.ok) return null;
-            return commitish(label);
+            return commitish(command, sessionId ?? null);
         },
 
         async list(): Promise<Snapshot[]> {
@@ -232,8 +262,9 @@ export function createSnapshotService(
                 .split("\n")
                 .filter(Boolean)
                 .map((line) => {
-                    const [id, label, ts] = line.split("\x1f");
-                    return { id, label, ts: Number(ts) * 1000 };
+                    const [id, msg, ts] = line.split("\x1f");
+                    const { sessionId, command } = parseSnapshotMessage(msg);
+                    return { id, sessionId, command, ts: Number(ts) * 1000 };
                 });
             // 每快照的变更文件数（SPEC-036 / 用户反馈 2026-09-06）：变更 tab 过滤
             // 无变更快照。未跟踪文件先 intent-to-add 登记；8 并发控 git 进程数。

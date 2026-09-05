@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createSnapshotService } from "../src/snapshot";
+import { createSnapshotService, parseSnapshotMessage } from "../src/snapshot";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -116,5 +116,43 @@ describe.skipIf(!gitOn)("createSnapshotService.diffFrom（SPEC-036 B-007）", ()
         const svc = createSnapshotService(ws);
         await expect(svc.diffFrom("$(rm -rf /)")).rejects.toThrow("非法快照 id");
         await expect(svc.diffFrom("deadbeef")).rejects.toThrow("不存在");
+    });
+});
+
+// SPEC-036 / 用户决策 2026-09-06：domain 存结构化事实（command + sessionId），不存展示 label
+describe("snapshot 结构化存储（用户决策 2026-09-06）", () => {
+    const origHome = process.env.HOME;
+    it("snapshot(command, sessionId) → list() 返回结构化字段", async () => {
+        const home = mkdtempSync(join(tmpdir(), "anycode-snapmeta-"));
+        process.env.HOME = home;
+        const ws = join(home, "proj");
+        mkdirSync(ws, { recursive: true });
+        writeFileSync(join(ws, "f.txt"), "x\n");
+        try {
+            const svc = createSnapshotService(ws);
+            await svc.snapshot("write f.txt", "sess-1234");
+            const list = await svc.list();
+            expect(list).toHaveLength(1);
+            expect(list[0].command).toBe("write f.txt");
+            expect(list[0].sessionId).toBe("sess-1234");
+            expect(typeof list[0].ts).toBe("number");
+        } finally {
+            process.env.HOME = origHome;
+            rmSync(home, { recursive: true, force: true });
+        }
+    });
+
+    it("parseSnapshotMessage：新 JSON 格式 + 旧 session 前缀 + 纯文本降级", () => {
+        expect(parseSnapshotMessage('{"c":"bash ls","s":"s1"}')).toEqual({
+            sessionId: "s1",
+            command: "bash ls",
+        });
+        expect(
+            parseSnapshotMessage("session 1234abcd-1111-2222-3333-444455556666 | write a.txt")
+        ).toEqual({ sessionId: "1234abcd-1111-2222-3333-444455556666", command: "write a.txt" });
+        expect(parseSnapshotMessage("plain old label")).toEqual({
+            sessionId: null,
+            command: "plain old label",
+        });
     });
 });

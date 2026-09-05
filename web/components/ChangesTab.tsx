@@ -7,7 +7,8 @@ import { cn } from "@/lib/utils";
 
 interface SnapshotInfo {
     id: string;
-    label: string;
+    /** 触发快照的命令（domain 存事实，展示 label 在此拼接） */
+    command: string;
     ts: number;
     /** 工作树相对该快照的变更文件数（domain list 计算） */
     changes: number;
@@ -250,15 +251,10 @@ function Empty({ text }: { text: string }) {
     );
 }
 
-/**
- * 下拉选项 label：时间 + 命令摘要前几个字符 + 省略号（用户反馈：完整 label
- * 过长导致下拉框卡且巨长）。旧快照的 label 可能带 "session <id> | " 前缀，
- * 显示时剥掉（用户反馈：下拉不应出现 session/sessionid）。
- */
+/** 下拉选项 label（interface 层拼接）：时间 + 命令摘要前几个字符 + 省略号 */
 function snapshotOptionLabel(s: SnapshotInfo): string {
     const time = new Date(s.ts).toLocaleTimeString();
-    const cleaned = s.label.replace(/^session [0-9a-f-]+ \| /, "");
     const brief =
-        cleaned.length > 14 ? cleaned.slice(0, 14) + "…" : cleaned;
+        s.command.length > 14 ? s.command.slice(0, 14) + "…" : s.command;
     return `${time} · ${brief}`;
 }

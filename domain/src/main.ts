@@ -461,10 +461,11 @@ class AnyAgent {
                 : undefined,
             // AR-23：日志不变式断言（seen 由 onMessage/压缩/resume 标记）
             logInvariant: { seen: this.loggedMessages },
-            // AR-4：写类工具执行前自动快照（label = 工具名 + 参数摘要；session id
-            // 不进 label——用户反馈 2026-09-06：快照下拉不该出现 session/sessionid）
+            // AR-4：写类工具执行前自动快照——domain 存结构化事实（命令 + 会话 id），
+            // 展示 label 由 interface 层拼接
             snapshot: {
-                snapshot: async (label: string) => this.snapshots.snapshot(label),
+                snapshot: async (command: string) =>
+                    this.snapshots.snapshot(command, this.session?.id ?? null),
             },
         };
         await agentLoop(
