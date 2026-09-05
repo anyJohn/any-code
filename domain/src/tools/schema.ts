@@ -14,6 +14,11 @@ const executeBashSchema: ChatCompletionTool = {
                     type: "string",
                     description: "The bash command to execute",
                 },
+                intent: {
+                    type: "string",
+                    description:
+                        "One short sentence (in the user's language) describing WHAT this command is for, e.g. \"检查依赖版本\". Shown to the user as the title of the tool row.",
+                },
                 timeout_ms: {
                     type: "number",
                     description:

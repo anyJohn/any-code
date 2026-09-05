@@ -44,10 +44,10 @@ export const TurnBlock = memo(function TurnBlock({
                     <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-muted px-3 py-2">
                         <MarkdownRenderer content={item.assistant.message} />
                     </div>
-                    {/* 整条消息复制（SPEC-036 B-002）：hover 显示，气泡右下 */}
+                    {/* 整条消息复制（B-002）：hover 显示，气泡左下（用户反馈 2026-09-06） */}
                     <CopyButton
                         text={item.assistant.message}
-                        className="p-1 rounded text-muted-foreground/0 group-hover/turn:text-muted-foreground hover:!text-foreground transition-colors self-end"
+                        className="p-1 rounded text-muted-foreground/0 group-hover/turn:text-muted-foreground hover:!text-foreground transition-colors"
                     />
                 </div>
             )}

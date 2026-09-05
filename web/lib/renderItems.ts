@@ -275,8 +275,12 @@ export function formatToolCall(data: unknown): string {
     const arg = (k: string): string =>
         typeof a[k] === "string" ? String(a[k]) : "";
     switch (d.name) {
-        case "bash":
+        case "bash": {
+            // intent（用户反馈 2026-09-06，学习 Claude Code）：易读标题优先
+            const intent = arg("intent");
+            if (intent) return intent;
             return `bash ${arg("command") || ""}`.trim();
+        }
         case "read":
         case "write":
             return `${d.name} ${arg("filePath") || ""}`.trim();

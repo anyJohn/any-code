@@ -12,6 +12,7 @@ import {
     unregisterInteraction,
 } from "../pendingInteractions";
 import { validateToolArgs } from "./validateArgs";
+import { resolvePathWithEscape } from "../workspace";
 import { runBeforeToolHook, runAfterToolHook } from "../extensions";
 
 /** 截断 args 里的长字符串值（>maxLen → 前 maxLen + "[truncated, N total]"）。
@@ -34,6 +35,8 @@ interface ToolPlan {
     preAllowed: boolean;
     verdict: PermissionVerdict | null;
     cacheKey?: string;
+    /** edit/write 目标在工作区外（B-013）：ask 放行后把该绝对路径注入 args 供 handler 使用 */
+    escapeAbs?: string;
 }
 
 function truncateArgs(args: Record<string, unknown>): Record<string, unknown> {
@@ -168,7 +171,33 @@ export async function toolCall(
                 verdict.action === "allow" ||
                 (verdict.action === "ask" && perm.allowOnce.has(cacheKey));
         }
-        plans.push({ call: toolCall, tool, args, funcName, preAllowed, verdict, cacheKey });
+        // edit/write 逃逸（B-013）：硬拒绝会把模型逼去 bash 绕道（绕开快照/审计通道）。
+        // 改为权限 ask——标准模式弹裁决窗，信任模式（allow）直通，deny 规则照拒。
+        let escapeAbs: string | undefined;
+        if (
+            (funcName === "edit" || funcName === "write") &&
+            typeof args.filePath === "string" &&
+            typeof ctx.workspace?.rootPath === "string"
+        ) {
+            const { abs, escaped } = resolvePathWithEscape(ctx.workspace, args.filePath);
+            if (escaped) {
+                escapeAbs = abs;
+                if (verdict && verdict.action === "ask") {
+                    verdict = {
+                        ...verdict,
+                        ruleKey: undefined,
+                    };
+                    cacheKey = `${funcName}|escape:${abs}`;
+                    preAllowed = perm
+                        ? perm.allowOnce.has(cacheKey)
+                        : false;
+                } else if (!verdict) {
+                    // 权限系统未启用（测试/兼容路径）：维持旧行为硬拒绝
+                    escapeAbs = undefined;
+                }
+            }
+        }
+        plans.push({ call: toolCall, tool, args, funcName, preAllowed, verdict, cacheKey, escapeAbs });
     }
 
     // ── FR-8 并行路径：批内全部并发安全、只读且预判全放行 → Promise.all，结果按调用序落盘 ──
@@ -207,6 +236,10 @@ export async function toolCall(
         if (denied !== null) {
             result.push(toolRow(p.call, denied));
             continue;
+        }
+        // 逃逸路径已被 ask 放行（或信任模式直通）——注入已批准的绝对路径供 handler 使用
+        if (p.escapeAbs !== undefined) {
+            p.args.__absFilePath = p.escapeAbs;
         }
         // AR-16 钩子：beforeToolCall 可拒绝执行（deny → 结果行，模型自纠）
         const hookDeny = await runBeforeToolHook(ctx.hooks, p.funcName, p.args);
@@ -314,8 +347,14 @@ async function permissionGate(plan: ToolPlan, ctx: ToolContext): Promise<string 
         tool: funcName,
         args,
     });
-    const cacheKey = `${funcName}|${verdict.ruleKey ?? funcName}`;
-    const summary = JSON.stringify(truncateArgs(args));
+    // 逃逸目标（B-013）：ask 缓存键按绝对路径隔离，弹窗摘要展示真实写点
+    const isEscape = plan.escapeAbs !== undefined;
+    const cacheKey = isEscape
+        ? `${funcName}|escape:${plan.escapeAbs}`
+        : `${funcName}|${verdict.ruleKey ?? funcName}`;
+    const summary = isEscape
+        ? `工作区外文件：${plan.escapeAbs}\n${JSON.stringify(truncateArgs(args))}`
+        : JSON.stringify(truncateArgs(args));
 
     // allow：仅用户规则放行需审计（mode 默认放行不打扰事件流，AC-007）
     if (verdict.action === "allow") {

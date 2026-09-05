@@ -112,6 +112,21 @@ export function createWorkspace(rootPath: string): Workspace {
  * 逃逸错误会回传 LLM，让它知道是越界而非文件不存在，下轮自行调整路径。
  * 注意：这是上下文边界（防 LLM 拼错路径读到 workspace 外），不是安全沙箱。
  */
+/**
+ * 解析 + 逃逸标记（B-013 改造：edit/write 逃逸走权限 ask 而非硬拒绝——
+ * 硬拒绝把模型逼去 bash 绕道，反而绕开了文件工具的快照/审计通道）。
+ * 调用方决定逃逸后的策略（工具层触发 PermissionAsk）。
+ */
+export function resolvePathWithEscape(
+    workspace: Workspace,
+    userPath: string
+): { abs: string; escaped: boolean } {
+    const abs = path.resolve(workspace.rootPath, userPath);
+    const rel = path.relative(workspace.rootPath, abs);
+    const escaped = rel.startsWith("..") || path.isAbsolute(rel);
+    return { abs, escaped };
+}
+
 export function resolvePath(workspace: Workspace, userPath: string): string {
     const resolved = path.resolve(workspace.rootPath, userPath);
     const rel = path.relative(workspace.rootPath, resolved);

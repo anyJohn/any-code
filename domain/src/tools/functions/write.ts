@@ -22,7 +22,9 @@ export const writeFunc = async (
     const { workspace } = ctx;
     let tmp: string | null = null;
     try {
-        const filePath = resolvePath(workspace, args.filePath);
+        const filePath =
+            (args as { __absFilePath?: string }).__absFilePath ??
+            resolvePath(workspace, args.filePath);
         await fs.mkdir(path.dirname(filePath), { recursive: true });
 
         const stalenessWarn = stalenessWarning(

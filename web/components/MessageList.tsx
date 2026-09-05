@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { AgentEvent } from "@/lib/sseEvents";
 import { Pencil, Check, X } from "lucide-react";
+import { CopyButton } from "./MarkdownRenderer";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n";
 import { SubagentBlock } from "./SubagentBlock";
@@ -342,19 +343,28 @@ function UserBubble({
     }
 
     return (
-        <div key={event.id} className="flex justify-end items-end gap-1 py-2 group/msg">
-            <button
-                onClick={() => {
-                    setDraft(event.message);
-                    setEditing(true);
-                }}
-                title={t("chat.editMessage")}
-                className="p-1 rounded text-muted-foreground/0 group-hover/msg:text-muted-foreground hover:!text-foreground transition-colors"
-            >
-                <Pencil className="size-3.5" />
-            </button>
-            <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-primary px-3 py-1.5 text-sm text-primary-foreground whitespace-pre-wrap break-words">
-                {event.message}
+        <div key={event.id} className="flex justify-end py-2 group/msg">
+            <div className="max-w-[80%] flex flex-col items-start">
+                <div className="rounded-2xl rounded-br-sm bg-primary px-3 py-1.5 text-sm text-primary-foreground whitespace-pre-wrap break-words select-text">
+                    {event.message}
+                </div>
+                {/* 复制 + 编辑：气泡下方左缘（用户反馈 2026-09-06） */}
+                <div className="flex gap-0.5 mt-0.5">
+                    <CopyButton
+                        text={event.message}
+                        className="p-1 rounded text-muted-foreground/0 group-hover/msg:text-muted-foreground hover:!text-foreground transition-colors"
+                    />
+                    <button
+                        onClick={() => {
+                            setDraft(event.message);
+                            setEditing(true);
+                        }}
+                        title={t("chat.editMessage")}
+                        className="p-1 rounded text-muted-foreground/0 group-hover/msg:text-muted-foreground hover:!text-foreground transition-colors"
+                    >
+                        <Pencil className="size-3.5" />
+                    </button>
+                </div>
             </div>
         </div>
     );

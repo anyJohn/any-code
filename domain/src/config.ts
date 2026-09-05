@@ -50,6 +50,8 @@ const MODEL_CONTEXT_TABLE: Record<string, number> = {
     "gpt-4o-mini": 128000,
     "gpt-4-turbo": 128000,
     "gpt-3.5-turbo": 16385,
+    // zhipu glm-5 系列（用户实测确认 flash 支持 1M；其余 glm 未确认不乱填）
+    "glm-5.3-flash": 1000000,
 };
 
 /**

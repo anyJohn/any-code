@@ -20,6 +20,7 @@ import {
     resolveContextWindow,
     resolveInteraction,
     resolvePath,
+    resolveSkills,
     hasInteraction,
     runRipgrep,
     SessionService,
@@ -208,15 +209,13 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
             name,
             type: s.type ?? "",
         }));
-        const skillsDir = join(workspaceConfigDir(workspace), "skills");
+        // 技能计数 = resolveSkills 全量（4 层合并 + 目录式 SKILL.md）——原实现只数
+        // 项目级平铺 .md，内置 seed（全局目录）全漏 → 恒 0（用户报告 2026-09-06）
         let skillNames: string[] = [];
         try {
-            const entries = readdirSync(skillsDir, { withFileTypes: true });
-            skillNames = entries
-                .filter((e) => e.isFile() && e.name.endsWith(".md"))
-                .map((e) => e.name.slice(0, -3));
+            skillNames = [...resolveSkills(workspace).keys()];
         } catch {
-            // 目录不存在 → 0 个技能
+            // 解析失败 → 0 个技能
         }
         const currentModel = provider.models.find((m) => m.id === provider.defaultModel);
         return c.json({

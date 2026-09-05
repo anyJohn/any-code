@@ -21,7 +21,9 @@ export const editFunc = async (
     const { workspace } = ctx;
     try {
         const { oldString, newString } = args;
-        const filePath = resolvePath(workspace, args.filePath);
+        const filePath =
+            (args as { __absFilePath?: string }).__absFilePath ??
+            resolvePath(workspace, args.filePath);
         const content = await fs.readFile(filePath, "utf-8");
 
         if (!content.includes(oldString)) {

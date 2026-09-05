@@ -141,6 +141,12 @@ export function ChatView({
     }, [events.length]);
 
     const send = () => {
+        // 发送后视图同步（用户反馈 2026-09-06）：回到聊天 tab 并滚到底
+        setTab("chat");
+        requestAnimationFrame(() => {
+            const el = scrollRef.current;
+            if (el) el.scrollTop = el.scrollHeight;
+        });
         const task = command.draft;
         let message = task;
         if (fileRef.chips.length) {
