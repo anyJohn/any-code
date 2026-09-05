@@ -5,7 +5,7 @@ import {
     Dialog,
     DialogContent,
     DialogHeader,
-    DialogFooter,
+    ModalFooter,
     DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -148,17 +148,14 @@ export function InteractionModal({
                         </div>
                     ))}
                 </div>
-                <DialogFooter>
-                    <Button variant="ghost" onClick={onClose}>
-                        {t("interactionModal.stopTask")}
-                    </Button>
+                <ModalFooter onClose={onClose} closeLabel={t("interactionModal.stopTask")}>
                     <Button
                         disabled={!allAnswered}
                         onClick={() => onSubmit(answers)}
                     >
                         {t("interactionModal.submit")}
                     </Button>
-                </DialogFooter>
+                </ModalFooter>
             </DialogContent>
         </Dialog>
     );

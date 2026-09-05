@@ -108,26 +108,11 @@ export function FilePreviewModal({
                 className="bg-background rounded-lg border border-border shadow-xl w-full max-w-4xl h-[80vh] flex flex-col"
                 onClick={(e) => e.stopPropagation()}
             >
+                {/* DesignSpec：header = 标题 + close icon；操作入 footer */}
                 <div className="shrink-0 flex items-center gap-2 px-4 h-11 border-b border-border">
                     <span className="font-mono text-sm truncate flex-1 min-w-0">
                         {filePath}
                     </span>
-                    {range && (
-                        <span className="text-xs text-primary shrink-0">
-                            {t("files.selectedRange", {
-                                start: range[0],
-                                end: range[1],
-                            })}
-                        </span>
-                    )}
-                    <button
-                        onClick={addRef}
-                        disabled={!!error}
-                        className="shrink-0 inline-flex items-center gap-1 text-xs rounded-md bg-primary text-primary-foreground px-2 py-1 disabled:opacity-50"
-                    >
-                        <Plus className="size-3" />
-                        {range ? t("files.addRangeRef") : t("files.addWholeRef")}
-                    </button>
                     <button
                         onClick={onClose}
                         title={t("common.close")}
@@ -142,7 +127,7 @@ export function FilePreviewModal({
                         {error}
                     </div>
                 ) : (
-                    <div ref={scrollRef} className="flex-1 overflow-auto">
+                    <div ref={scrollRef} className="flex-1 overflow-auto min-h-0">
                         <div className="min-w-max text-xs font-mono leading-5">
                             {lines.map((line, i) => {
                                 const n = i + 1;
@@ -177,6 +162,34 @@ export function FilePreviewModal({
                         </div>
                     </div>
                 )}
+
+                {/* DesignSpec：footer = close 左（普通按钮）+ 主操作右（primary） */}
+                <div className="shrink-0 flex items-center justify-between gap-2 px-4 h-12 border-t border-border">
+                    <span className="text-xs text-muted-foreground truncate">
+                        {range
+                            ? t("files.selectedRange", {
+                                  start: range[0],
+                                  end: range[1],
+                              })
+                            : ""}
+                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <button
+                            onClick={onClose}
+                            className="text-xs rounded-md border border-input bg-background px-3 py-1.5 hover:bg-accent"
+                        >
+                            {t("common.close")}
+                        </button>
+                        <button
+                            onClick={addRef}
+                            disabled={!!error}
+                            className="inline-flex items-center gap-1 text-xs rounded-md bg-primary text-primary-foreground px-3 py-1.5 disabled:opacity-50"
+                        >
+                            <Plus className="size-3" />
+                            {range ? t("files.addRangeRef") : t("files.addWholeRef")}
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     );

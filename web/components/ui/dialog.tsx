@@ -3,6 +3,7 @@ import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
@@ -70,6 +71,42 @@ const DialogTitle = React.forwardRef<
 ));
 DialogTitle.displayName = DialogPrimitive.Title.displayName;
 
+/** 副标题（DesignSpec 弹窗规范：header 承载标题 + 副标题，可选） */
+const DialogSubtitle = ({ className, ...props }: React.HTMLAttributes<HTMLParagraphElement>) => (
+    <p
+        className={cn("text-sm text-muted-foreground", className)}
+        {...props}
+    />
+);
+DialogSubtitle.displayName = "DialogSubtitle";
+
+/**
+ * ModalFooter（DesignSpec 弹窗规范）：close 按钮固定左侧（outline 普通配色，
+ * 不得 primary），具体弹窗操作（children，primary）右对齐。所有弹窗 footer 用此组件。
+ */
+function ModalFooter({
+    onClose,
+    closeLabel,
+    children,
+}: {
+    onClose: () => void;
+    closeLabel: string;
+    children?: React.ReactNode;
+}) {
+    return (
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <Button variant="outline" onClick={onClose}>
+                {closeLabel}
+            </Button>
+            {children ? (
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:gap-2">
+                    {children}
+                </div>
+            ) : null}
+        </div>
+    );
+}
+
 export {
     Dialog,
     DialogPortal,
@@ -80,4 +117,6 @@ export {
     DialogHeader,
     DialogFooter,
     DialogTitle,
+    DialogSubtitle,
+    ModalFooter,
 };

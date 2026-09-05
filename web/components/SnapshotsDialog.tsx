@@ -6,6 +6,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
+    ModalFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { apiJson } from "@/lib/api";
@@ -152,6 +153,8 @@ export function SnapshotsDialog({
                         </p>
                     )}
                 </div>
+                {/* DesignSpec 弹窗规范：footer 至少有 close（左）；回滚是行内操作不入 footer */}
+                <ModalFooter onClose={onClose} closeLabel={t("common.close")} />
             </DialogContent>
         </Dialog>
     );

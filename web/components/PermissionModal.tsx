@@ -5,7 +5,7 @@ import {
     Dialog,
     DialogContent,
     DialogHeader,
-    DialogFooter,
+    ModalFooter,
     DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -43,7 +43,7 @@ export function PermissionModal({
         : "";
 
     return (
-        <Dialog open onOpenChange={() => {}}>
+        <Dialog open onOpenChange={(o) => !o && onDecision("deny", scope)}>
             <DialogContent className="max-w-lg" onInteractOutside={(e) => e.preventDefault()}>
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
@@ -138,13 +138,11 @@ export function PermissionModal({
                     )}
                 </div>
 
-                <DialogFooter className="gap-2">
-                    <Button
-                        variant="outline"
-                        onClick={() => onDecision("deny", scope)}
-                    >
-                        {t("permissionModal.deny")}
-                    </Button>
+                {/* DesignSpec：拒绝 = 左侧 close（关闭即裁决为拒绝）；允许在右侧 */}
+                <ModalFooter
+                    onClose={() => onDecision("deny", scope)}
+                    closeLabel={t("permissionModal.deny")}
+                >
                     <Button
                         onClick={() =>
                             onDecision(
@@ -159,7 +157,7 @@ export function PermissionModal({
                                 : "permissionModal.allowAlways"
                         )}
                     </Button>
-                </DialogFooter>
+                </ModalFooter>
             </DialogContent>
         </Dialog>
     );

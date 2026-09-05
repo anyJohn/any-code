@@ -79,20 +79,27 @@ export function ChangesTab({ projectKey }: { projectKey: string }) {
         <div className="h-full overflow-y-auto">
             <div className="w-full max-w-3xl mx-auto px-4 py-3 flex flex-col gap-3">
                 <div className="flex items-center gap-2">
-                    <select
-                        value={selected}
-                        onChange={(e) => {
-                            setSelected(e.target.value);
-                            setActiveFile(null);
-                        }}
-                        className="text-xs rounded-md border border-input bg-background px-2 py-1 max-w-[60%] truncate"
-                    >
-                        {snapshots.map((s) => (
-                            <option key={s.id} value={s.id}>
-                                {new Date(s.ts).toLocaleString()} · {s.label}
-                            </option>
-                        ))}
-                    </select>
+                    {snapshots.length === 0 ? (
+                        // 空状态下拉显示"无"（细节反馈 2026-09-06）
+                        <span className="text-xs rounded-md border border-input bg-muted/40 px-2 py-1 text-muted-foreground">
+                            {t("changes.noSnapshots")}
+                        </span>
+                    ) : (
+                        <select
+                            value={selected}
+                            onChange={(e) => {
+                                setSelected(e.target.value);
+                                setActiveFile(null);
+                            }}
+                            className="text-xs rounded-md border border-input bg-background px-2 py-1 max-w-[60%] truncate"
+                        >
+                            {snapshots.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                    {new Date(s.ts).toLocaleString()} · {s.label}
+                                </option>
+                            ))}
+                        </select>
+                    )}
                     {activeFile && (
                         <button
                             onClick={() => setActiveFile(null)}

@@ -6,7 +6,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
-    DialogFooter,
+    ModalFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -114,17 +114,17 @@ export function DirectoryPicker({
                         ))
                     )}
                 </ScrollArea>
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>
-                        {t("common.cancel")}
-                    </Button>
+                <ModalFooter
+                    onClose={() => onOpenChange(false)}
+                    closeLabel={t("common.cancel")}
+                >
                     <Button
                         onClick={confirm}
                         disabled={!current || current === "此电脑"}
                     >
                         <Check className="size-4" /> {t("dirPicker.selectDirectory")}
                     </Button>
-                </DialogFooter>
+                </ModalFooter>
             </DialogContent>
         </Dialog>
     );

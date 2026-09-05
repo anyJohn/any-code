@@ -46,6 +46,7 @@ export const zh: Record<string, string> = {
     "todo.title": "任务计划",
     "todo.round": "第 {round} 轮",
     "changes.gitUnavailable": "git 不可用，无变更记录",
+    "changes.noSnapshots": "无（还没有快照）",
     "changes.empty": "该快照以来没有文件变更",
     "changes.showAll": "显示全部文件",
     "chatView.compacting": "正在压缩上下文…",
