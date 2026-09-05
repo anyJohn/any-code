@@ -15,7 +15,16 @@ import { StatusBar } from "./StatusBar";
 import { InteractionModal } from "./InteractionModal";
 import { PermissionModal } from "./PermissionModal";
 import { SnapshotsDialog } from "./SnapshotsDialog";
+import { ChangesTab } from "./ChangesTab";
+import { FilesTab } from "./FilesTab";
+import { FilePreviewModal } from "./FilePreviewModal";
+import { TodoPanel } from "./TodoPanel";
 import { useT } from "@/i18n";
+import { MessagesSquare, GitCompare, FolderOpen } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+/** ChatView 主区三 tab（SPEC-036 DEC-124）：聊天（默认）/ 变更 / 文件 */
+type MainTab = "chat" | "changes" | "files";
 
 /**
  * ChatView —— 聊天主视图容器：组合 MessageList / InputBox / StatusBar，
@@ -86,6 +95,8 @@ export function ChatView({
     const [openTools, setOpenTools] = useState<Record<string, boolean>>({});
     const [openSubs, setOpenSubs] = useState<Record<string, boolean>>({});
     const [highlight, setHighlight] = useState(0);
+    const [tab, setTab] = useState<MainTab>("chat");
+    const [previewPath, setPreviewPath] = useState<string | null>(null);
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const didInit = useRef(false);
@@ -134,26 +145,60 @@ export function ChatView({
             message =
                 task +
                 "\n\nFiles: " +
-                fileRef.chips.map((c) => c.path).join(", ");
+                fileRef.chips.map((c) => fileRef.formatEntry(c)).join(", ");
         }
         fileRef.chips.forEach((c) => fileRef.removeChip(c.path));
         command.setDraft("");
         submit(message);
     };
 
+    const TABS: { key: MainTab; icon: React.ReactNode; label: string }[] = [
+        { key: "chat", icon: <MessagesSquare className="size-3.5" />, label: t("tab.chat") },
+        { key: "changes", icon: <GitCompare className="size-3.5" />, label: t("tab.changes") },
+        { key: "files", icon: <FolderOpen className="size-3.5" />, label: t("tab.files") },
+    ];
+
     return (
         <div className="h-full flex flex-col">
-            <MessageList
-                renderItems={renderItems}
-                events={events}
-                pending={pending}
-                openTools={openTools}
-                openSubs={openSubs}
-                toggleTool={toggleTool}
-                toggleSub={toggleSub}
-                scrollRef={scrollRef}
-                onLayoutEffect={() => {}}
-            />
+            {/* 三 tab（SPEC-036 DEC-124）：聊天 / 变更 / 文件 */}
+            <div className="shrink-0 flex items-center gap-1 px-4 pt-2 max-w-3xl mx-auto w-full">
+                {TABS.map((x) => (
+                    <button
+                        key={x.key}
+                        onClick={() => setTab(x.key)}
+                        className={cn(
+                            "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors",
+                            tab === x.key
+                                ? "bg-accent text-foreground"
+                                : "text-muted-foreground hover:bg-accent/60"
+                        )}
+                    >
+                        {x.icon}
+                        {x.label}
+                    </button>
+                ))}
+            </div>
+
+            {tab === "chat" && (
+                <>
+                    <TodoPanel events={events} />
+                    <MessageList
+                        renderItems={renderItems}
+                        events={events}
+                        pending={pending}
+                        openTools={openTools}
+                        openSubs={openSubs}
+                        toggleTool={toggleTool}
+                        toggleSub={toggleSub}
+                        scrollRef={scrollRef}
+                        onLayoutEffect={() => {}}
+                    />
+                </>
+            )}
+            {tab === "changes" && projectKey && <ChangesTab projectKey={projectKey} />}
+            {tab === "files" && projectKey && (
+                <FilesTab projectKey={projectKey} onOpenFile={setPreviewPath} />
+            )}
 
             {command.compacting && (
                 <div className="shrink-0 w-full max-w-3xl mx-auto px-4 pb-1">
@@ -221,6 +266,19 @@ export function ChatView({
                 <SnapshotsDialog
                     projectKey={projectKey}
                     onClose={() => setSnapshotsOpen(false)}
+                />
+            )}
+
+            {previewPath && projectKey && (
+                <FilePreviewModal
+                    projectKey={projectKey}
+                    filePath={previewPath}
+                    onClose={() => setPreviewPath(null)}
+                    onAddReference={(path, lines) => {
+                        const name = path.split("/").pop() ?? path;
+                        fileRef.addFile({ path, name, lines });
+                        setPreviewPath(null);
+                    }}
                 />
             )}
         </div>

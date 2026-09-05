@@ -70,3 +70,51 @@ describe("createSnapshotService（AR-4）", () => {
         await expect(svc.snapshot("x")).resolves.toBeNull();
     });
 });
+
+// SPEC-036 B-007：diffFrom——工作树相对快照的变更（变更 tab 数据源）
+describe.skipIf(!gitOn)("createSnapshotService.diffFrom（SPEC-036 B-007）", () => {
+    const origHome = process.env.HOME;
+    let home: string;
+    let ws: string;
+
+    beforeEach(() => {
+        home = mkdtempSync(join(tmpdir(), "anycode-snapdiff-"));
+        process.env.HOME = home;
+        ws = join(home, "proj");
+        mkdirSync(ws, { recursive: true });
+    });
+
+    afterEach(() => {
+        process.env.HOME = origHome;
+        rmSync(home, { recursive: true, force: true });
+    });
+
+    it("快照后修改/新增文件 → name-status 与 patch 正确；单文件过滤生效", async () => {
+        writeFileSync(join(ws, "a.txt"), "one\n");
+        const svc = createSnapshotService(ws);
+        const snap = await svc.snapshot("before");
+        expect(snap).not.toBeNull();
+        const id = snap!.id;
+
+        writeFileSync(join(ws, "a.txt"), "one\ntwo\n");
+        writeFileSync(join(ws, "b.txt"), "new\n");
+
+        const all = await svc.diffFrom(id);
+        const byStatus = new Map(all.files.map((f) => [f.path, f.status]));
+        expect(byStatus.get("a.txt")).toBe("M");
+        expect(byStatus.get("b.txt")).toBe("A");
+        expect(all.patch).toContain("+two");
+        expect(all.patch).toContain("+new");
+
+        const single = await svc.diffFrom(id, "a.txt");
+        expect(single.files).toHaveLength(1);
+        expect(single.files[0].path).toBe("a.txt");
+        expect(single.patch).not.toContain("b.txt");
+    });
+
+    it("非法 id / 不存在的快照 → 抛错", async () => {
+        const svc = createSnapshotService(ws);
+        await expect(svc.diffFrom("$(rm -rf /)")).rejects.toThrow("非法快照 id");
+        await expect(svc.diffFrom("deadbeef")).rejects.toThrow("不存在");
+    });
+});

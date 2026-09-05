@@ -164,6 +164,9 @@ export function InputBox({
                                 >
                                     <span className="font-mono text-primary truncate max-w-[12rem]">
                                         {c.name}
+                                        {c.lines
+                                            ? `:${c.lines[0]}-${c.lines[1]}`
+                                            : ""}
                                     </span>
                                     <button
                                         type="button"

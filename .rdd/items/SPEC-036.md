@@ -3,7 +3,7 @@ id: SPEC-036
 type: spec
 story: FR-21
 parent: FR-21
-status: implementing（批 1 已完成 2026-09-05）
+status: implementing（批 1、2 已完成 2026-09-05）
 owner: human
 created: 2026-09-05
 persists: permanent

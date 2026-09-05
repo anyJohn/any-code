@@ -7,6 +7,8 @@ import { matchAtFileToken } from "@/lib/atFile";
 export interface FileEntry {
     path: string;
     name: string;
+    /** 行号引用（SPEC-036 B-010/B-011）：preview 划选起止行，如 10-20 */
+    lines?: [number, number];
 }
 
 /**
@@ -74,6 +76,18 @@ export function useFileReference({
         [setDraft]
     );
 
+    /** 添加/替换引用（SPEC-036 B-010）：preview 划选行或整文件。同路径覆盖旧 chip。 */
+    const addFile = useCallback((item: FileEntry) => {
+        setChips((prev) => {
+            const rest = prev.filter((c) => c.path !== item.path);
+            return [...rest, item];
+        });
+    }, []);
+
+    /** 引用格式化（发送拼接用）：path 或 path:10-20 */
+    const formatEntry = (c: FileEntry): string =>
+        c.lines ? `${c.path}:${c.lines[0]}-${c.lines[1]}` : c.path;
+
     const removeChip = useCallback((path: string) => {
         setChips((prev) => prev.filter((c) => c.path !== path));
     }, []);
@@ -90,6 +104,8 @@ export function useFileReference({
             setFileHighlight,
             filePopoverOpen,
             selectFile,
+            addFile,
+            formatEntry,
             removeChip,
             popLastChip,
         }),
@@ -99,6 +115,8 @@ export function useFileReference({
             fileHighlight,
             filePopoverOpen,
             selectFile,
+            addFile,
+            formatEntry,
             removeChip,
             popLastChip,
         ]

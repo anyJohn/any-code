@@ -34,6 +34,15 @@ export interface SnapshotService {
     list(): Promise<Snapshot[]>;
     /** 回滚工作区到指定快照（恢复该时点已跟踪文件）。失败抛错由调用方处理。 */
     rollbackTo(id: string): Promise<void>;
+    /**
+     * 工作树相对指定快照的变更（SPEC-036 B-007，变更 tab）：
+     * status 为 git name-status（A/M/D/R…），patch 为统一 diff 文本。
+     * path 可选——限定单文件。id 必须来自 list（防参数注入）。
+     */
+    diffFrom(
+        id: string,
+        path?: string
+    ): Promise<{ files: { path: string; status: string }[]; patch: string }>;
 }
 
 const GIT_TIMEOUT_MS = 30_000;
@@ -238,6 +247,39 @@ export function createSnapshotService(
                 cwd: workspaceRoot,
             });
             if (!co.ok) throw new Error(`回滚失败：${co.out.trim()}`);
+        },
+
+        async diffFrom(id, path) {
+            if (!(await ensureRepo()))
+                throw new Error("git 不可用，无法对比快照");
+            if (!/^[0-9a-f]{7,40}$/.test(id)) throw new Error("非法快照 id");
+            const known = (await this.list()).some((s) => s.id === id);
+            if (!known) throw new Error(`快照 ${id} 不存在`);
+            // 新建未跟踪文件不进 git diff——先 intent-to-add 登记为空 blob（shadow 仓库 index，无副作用）
+            await runGit(["add", "--intent-to-add", "-A"], gitDir, {
+                workTree: workspaceRoot,
+                cwd: workspaceRoot,
+            });
+            const pathArgs = path ? ["--", path] : [];
+            const [st, patch] = await Promise.all([
+                runGit(["diff", "--name-status", id, ...pathArgs], gitDir, {
+                    workTree: workspaceRoot,
+                    cwd: workspaceRoot,
+                }),
+                runGit(["diff", id, ...pathArgs], gitDir, {
+                    workTree: workspaceRoot,
+                    cwd: workspaceRoot,
+                }),
+            ]);
+            if (!st.ok) throw new Error(`对比失败：${st.out.trim()}`);
+            const files = st.out
+                .split("\n")
+                .filter(Boolean)
+                .map((line) => {
+                    const [status, ...rest] = line.split("\t");
+                    return { status, path: rest.join("\t") };
+                });
+            return { files, patch: patch.ok ? patch.out : "" };
         },
     };
 }

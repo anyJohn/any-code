@@ -19,6 +19,7 @@ import {
     projectKeyOf,
     resolveContextWindow,
     resolveInteraction,
+    resolvePath,
     hasInteraction,
     runRipgrep,
     SessionService,
@@ -254,22 +255,58 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         const workspace = resolveWorkspace(projectKey);
         if (!workspace) return c.json({ statusMessage: "workspace not found" }, 404);
         const q = (c.req.query("q") ?? "").trim().toLowerCase();
-        const { stdout } = await runRipgrep(["--files"], { cwd: workspace.rootPath });
-        const all = stdout
+        // SPEC-036 B-008 文件 tab：all=1 返回全量（@file 补全仍限 20）；ignored=1
+        // 额外列出 gitignore/隐藏文件（rg --no-ignore --hidden）
+        const all = c.req.query("all") === "1";
+        const ignored = c.req.query("ignored") === "1";
+        const args = ["--files"];
+        if (ignored) args.push("--no-ignore", "--hidden");
+        const { stdout } = await runRipgrep(args, { cwd: workspace.rootPath });
+        const allList = stdout
             .split("\n")
             .map((l) => l.trim())
             .filter(Boolean)
             .map((p) => ({ path: p, name: basename(p) }));
         const out = q
-            ? all
+            ? allList
                   .filter(
                       (f) =>
                           f.path.toLowerCase().includes(q) ||
                           f.name.toLowerCase().includes(q),
                   )
-                  .slice(0, 20)
-            : all.slice(0, 20);
+                  .slice(0, all ? 2000 : 20)
+            : allList.slice(0, all ? 2000 : 20);
         return c.json(out);
+    });
+
+    // 工作区文件只读预览（SPEC-036 B-009）：路径守卫 + 大小上限 + 二进制拒显 + 容错解码
+    app.get("/api/workspaces/:projectKey/file", (c) => {
+        const workspace = resolveWorkspace(c.req.param("projectKey"));
+        if (!workspace) return c.json({ statusMessage: "workspace not found" }, 404);
+        const rel = c.req.query("path")?.trim();
+        if (!rel) return c.json({ statusMessage: "path required" }, 400);
+        // resolvePath 对逃逸路径抛错（路径穿越防护）
+        let abs: string;
+        try {
+            abs = resolvePath(workspace, rel);
+        } catch {
+            return c.json({ statusMessage: "path escapes workspace" }, 400);
+        }
+        let stat: import("node:fs").Stats;
+        try {
+            stat = statSync(abs);
+        } catch {
+            return c.json({ statusMessage: "file not found" }, 404);
+        }
+        if (!stat.isFile()) return c.json({ statusMessage: "not a file" }, 400);
+        if (stat.size > 1024 * 1024)
+            return c.json({ statusMessage: "文件过大（>1MB），不支持预览" }, 400);
+        const buf = readFileSync(abs);
+        // 二进制判定：首块含 null byte（RelayAgent 同构）
+        if (buf.subarray(0, 8000).includes(0))
+            return c.json({ statusMessage: "binary file" }, 400);
+        const content = buf.toString("utf-8", 0, buf.length); // Node 容错：无效序列替换为 U+FFFD
+        return c.json({ path: rel, size: stat.size, content });
     });
 
     app.get("/api/workspaces/:projectKey/sessions", async (c) => {
@@ -942,11 +979,29 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
 
     // ==================== snapshots（AR-4 快照与回滚） ====================
     // 快照存于 ~/.anycode/snapshots/<projectKey>/（shadow-git，项目目录零污染）。
-    app.get("/api/workspaces/:projectKey/snapshots", (c) => {
+    app.get("/api/workspaces/:projectKey/snapshots", async (c) => {
         const workspace = resolveWorkspace(c.req.param("projectKey"));
         if (!workspace) return c.json({ statusMessage: "workspace not found" }, 404);
         const svc = createSnapshotService(workspace.rootPath);
-        return c.json({ gitAvailable: svc.available(), snapshots: svc.list() });
+        // bugfix（SPEC-036 批 2 发现）：list() 是 async，原同步路由把 Promise 序列化成 {}
+        return c.json({ gitAvailable: svc.available(), snapshots: await svc.list() });
+    });
+
+    // 工作树相对快照的变更（SPEC-036 B-007 变更 tab）：files(name-status) + patch(统一 diff)
+    app.get("/api/workspaces/:projectKey/snapshots/:id/diff", async (c) => {
+        const workspace = resolveWorkspace(c.req.param("projectKey"));
+        if (!workspace) return c.json({ statusMessage: "workspace not found" }, 404);
+        const svc = createSnapshotService(workspace.rootPath);
+        const path = c.req.query("path")?.trim() || undefined;
+        try {
+            const diff = await svc.diffFrom(c.req.param("id"), path);
+            return c.json(diff);
+        } catch (e) {
+            return c.json(
+                { statusMessage: e instanceof Error ? e.message : String(e) },
+                400,
+            );
+        }
     });
 
     app.post("/api/workspaces/:projectKey/snapshots/rollback", async (c) => {

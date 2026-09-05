@@ -256,3 +256,83 @@ describe("POST /api/config/permissions/rule + 项目级 permissions 路由", () 
         expect(got2.rules).toEqual([{ tool: "bash", action: "deny" }]);
     });
 });
+
+// SPEC-036 B-007/008/009：文件 tab + 快照 diff 路由
+describe("文件 tab / 快照 diff 路由（SPEC-036）", () => {
+    const app = createApp();
+    let PK = "";
+
+    beforeAll(async () => {
+        const os = await import("node:os");
+        const fs = await import("node:fs");
+        const path = await import("node:path");
+        const ws = fs.mkdtempSync(path.join(os.tmpdir(), "anycode-files-"));
+        fs.writeFileSync(path.join(ws, "hello.ts"), "const a = 1;\n");
+        fs.writeFileSync(path.join(ws, "big.bin"), Buffer.from([0x41, 0x00, 0x42]));
+        fs.writeFileSync(path.join(ws, "huge.txt"), "x".repeat(1024 * 1024 + 1));
+        fs.mkdirSync(path.join(ws, "sub"));
+        fs.writeFileSync(path.join(ws, "sub", "n.md"), "# hi\n");
+        await app.request("/api/workspaces", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ path: ws }),
+        });
+        const list = (await (
+            await app.request("/api/workspaces")
+        ).json()) as Array<{ rootPath: string; projectKey: string }>;
+        PK = list.find(
+            (w) => w.rootPath === ws
+        )!.projectKey;
+    });
+
+    it("GET /files?all=1 → 全量列表（含子目录，不含未触发隐藏文件）", async () => {
+        const res = await app.request(`/api/workspaces/${PK}/files?all=1`);
+        expect(res.status).toBe(200);
+        const files = (await res.json()) as Array<{ path: string }>;
+        const paths = files.map((f) => f.path);
+        expect(paths).toContain("hello.ts");
+        expect(paths).toContain("sub/n.md");
+    });
+
+    it("GET /file?path= → 内容；逃逸路径 400；二进制 400；超 1MB 400；缺失 404", async () => {
+        const ok = await app.request(
+            `/api/workspaces/${PK}/file?path=${encodeURIComponent("hello.ts")}`
+        );
+        expect(ok.status).toBe(200);
+        expect(((await ok.json()) as { content: string }).content).toBe("const a = 1;\n");
+
+        const esc = await app.request(
+            `/api/workspaces/${PK}/file?path=${encodeURIComponent("../../etc/passwd")}`
+        );
+        expect(esc.status).toBe(400);
+
+        const bin = await app.request(
+            `/api/workspaces/${PK}/file?path=${encodeURIComponent("big.bin")}`
+        );
+        expect(bin.status).toBe(400);
+        expect(((await bin.json()) as { statusMessage: string }).statusMessage).toBe("binary file");
+
+        const huge = await app.request(
+            `/api/workspaces/${PK}/file?path=${encodeURIComponent("huge.txt")}`
+        );
+        expect(huge.status).toBe(400);
+        expect(((await huge.json()) as { statusMessage: string }).statusMessage).toContain("1MB");
+
+        const missing = await app.request(
+            `/api/workspaces/${PK}/file?path=${encodeURIComponent("nope.txt")}`
+        );
+        expect(missing.status).toBe(404);
+    });
+
+    it("GET /snapshots/:id/diff → 非法 id 400；不存在快照 400", async () => {
+        const bad = await app.request(
+            `/api/workspaces/${PK}/snapshots/xx/diff`
+        );
+        expect(bad.status).toBe(400);
+        const missing = await app.request(
+            `/api/workspaces/${PK}/snapshots/deadbeef/diff`
+        );
+        expect(missing.status).toBe(400);
+        expect(((await missing.json()) as { statusMessage: string }).statusMessage).toContain("不存在");
+    });
+});
