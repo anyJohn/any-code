@@ -272,6 +272,8 @@ export default function SettingsPage() {
                             addProvider={addProvider}
                             removeProvider={removeProvider}
                         />
+                {status === "ready" && tab === "tools" && (
+                    <>
                         <ToolsCard
                             tools={tools}
                             toolOn={toolOn}
