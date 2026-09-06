@@ -15,7 +15,8 @@
         "typecheck": "tsc --noEmit",
         "build:mac": "npm run stage && npm run build:main && electron-builder --config electron-builder.config.js --mac --arm64",
         "build:mac:x64": "npm run stage && npm run build:main && electron-builder --config electron-builder.config.js --mac --x64",
-        "build:mac:universal": "npm run stage && npm run build:main && electron-builder --config electron-builder.config.js --mac --universal"
+        "build:mac:universal": "npm run stage && npm run build:main && electron-builder --config electron-builder.config.js --mac --universal",
+        "test": "npm run typecheck && npm run build:main"
     },
     "dependencies": {
         "@any-code/server": "workspace:*"

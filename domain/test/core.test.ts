@@ -104,6 +104,41 @@ describe("agentLoop（core.ts）", () => {
         expect(res.stopReason).toBe("completed");
     });
 
+    it("FR-28 在途 LLM 调用被 abort 打断 → stopped（abort 经 signal 传入 callLLM）", async () => {
+        const ac = new AbortController();
+        let observedSignal: AbortSignal | undefined;
+        // callLLM(messages, opts, signal, ...)：signal 是第 3 个位置参数
+        vi.mocked(callLLM).mockImplementationOnce(
+            (function (_m, _o, sig: AbortSignal | undefined) {
+                observedSignal = sig;
+                // 挂起模拟在途请求；确认进入调用后，模拟用户在 LLM 在途时点停止
+                return new Promise((_resolve, reject) => {
+                    sig?.addEventListener("abort", () => {
+                        const e = new Error("Request was aborted.");
+                        e.name = "AbortError";
+                        reject(e);
+                    });
+                    setTimeout(() => ac.abort(), 10);
+                });
+            }) as never
+        );
+
+        const ctx = mkCtx(ac.signal);
+        const res = await agentLoop(
+            "task",
+            [],
+            30,
+            undefined,
+            undefined,
+            ctx,
+            []
+        );
+
+        expect(observedSignal).toBe(ac.signal); // stop 的 signal 真正传进 callLLM
+        expect(res.result).toBe("[stopped]");
+        expect(res.stopReason).toBe("stopped");
+    });
+
     it("AC-003 signal aborted → 不再调 callLLM，返回 [stopped]", async () => {
         const ac = new AbortController();
         ac.abort();

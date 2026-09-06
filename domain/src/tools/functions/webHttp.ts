@@ -7,12 +7,16 @@ import { Config } from "../../config";
  */
 
 /** 超时感知的 https GET/POST。返回 { status, text, contentType }；超时抛 AbortError。 */
+import { fetch as undiciFetch } from "undici";
+
 export async function fetchWithTimeout(
     url: string,
     init: { method?: string; headers?: Record<string, string>; body?: string } = {},
     timeoutMs = 15_000
 ): Promise<{ status: number; text: string; contentType: string }> {
-    const res = await fetch(url, {
+    // 用 npm undici 的 fetch（而非 node 内置）——netProxy 的全局 dispatcher 与测试
+    // MockAgent 都注册在 npm undici 上；node 内置 fetch 不读该 dispatcher（实测穿透）
+    const res = await undiciFetch(url, {
         method: init.method,
         headers: init.headers,
         body: init.body,
