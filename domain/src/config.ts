@@ -1,5 +1,12 @@
-import { join } from "node:path";
-import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { join, dirname, basename } from "node:path";
+import {
+    existsSync,
+    readFileSync,
+    mkdirSync,
+    writeFileSync,
+    readdirSync,
+    unlinkSync,
+} from "node:fs";
 import * as yaml from "js-yaml";
 import OpenAI from "openai";
 import { globalConfigDir } from "./workspace";
@@ -403,20 +410,8 @@ export class Config {
     }
 
     /** 校验 + 写回 ~/.anycode/config.yaml（js-yaml dump）。覆盖前先备份原配置到 config.yaml.bak，供误配置回滚。 */
-    static save(data: ConfigShape): void {
-        const file = globalConfigFile();
-        // 备份原配置（若存在）→ config.yaml.bak，覆盖前的安全网
-        if (existsSync(file)) {
-            try {
-                writeFileSync(
-                    file + ".bak",
-                    readFileSync(file, "utf-8"),
-                    "utf-8"
-                );
-            } catch {
-                // 备份失败不阻断保存
-            }
-        }
+    static save(data: ConfigShape): void {        const file = globalConfigFile();
+        backupConfig(file);
         const providers = normalize(data.providers ?? {});
         const errors: string[] = [];
         const def = data.default ?? Object.keys(providers)[0];
@@ -469,6 +464,49 @@ export class Config {
             }),
             "utf-8"
         );
+    }
+
+    /**
+     * 原文写回 config.yaml（RR 设置优化：YAML 编辑器用）——保留用户输入的
+     * 注释与格式，仅做 YAML 可解析校验；覆盖前备份到 config.yaml.bak。
+     */
+    static saveRaw(yamlText: string): void {
+        const parsed = yaml.load(yamlText);
+        if (parsed === null || typeof parsed !== "object") {
+            throw new Error("YAML 内容不是有效的配置对象");
+        }
+        const file = globalConfigFile();
+        backupConfig(file);
+        mkdirSync(globalConfigDir(), { recursive: true });
+        writeFileSync(file, yamlText, "utf-8");
+    }
+
+
+    /** 读 config.yaml 原文（YAML 编辑器用；文件不存在返回 null）。 */
+    static loadRaw(): string | null {
+        const file = globalConfigFile();
+        if (!existsSync(file)) return null;
+        return readFileSync(file, "utf-8");
+    }
+}
+
+/** 时间戳备份（保留最近 10 份）+ 滚动 .bak。单独函数供 save/saveRaw 共用。 */
+function backupConfig(file: string): void {
+    if (!existsSync(file)) return;
+    try {
+        const content = readFileSync(file, "utf-8");
+        // 滚动 .bak：保存前的最近一份
+        writeFileSync(file + ".bak", content, "utf-8");
+        // 时间戳链：连续保存不再互相覆盖；保留最近 10 份
+        const stamped = `${file}.${new Date().toISOString().replace(/[:.]/g, "-")}.bak`;
+        writeFileSync(stamped, content, "utf-8");
+        const dir = dirname(file);
+        const olds = readdirSync(dir)
+            .filter((f) => f.startsWith(basename(file) + ".") && f.endsWith(".bak"))
+            .sort();
+        while (olds.length > 10) unlinkSync(join(dir, olds.shift()!));
+    } catch {
+        // 备份失败不阻断保存
     }
 }
 

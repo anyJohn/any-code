@@ -917,6 +917,32 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         }
     });
 
+    // config.yaml 原文读写（RR 设置优化：YAML 编辑器弹窗）。GET 含真实 apiKey——
+    // 仅本机 127.0.0.1 UI 使用；POST 校验可解析后备份原文件再原样写入（保留注释/格式）。
+    app.get("/api/config/raw", (c) => {
+        const yaml = Config.loadRaw();
+        if (yaml === null) return c.json({ statusMessage: "config not found" }, 404);
+        return c.json({ yaml });
+    });
+
+    app.post("/api/config/raw", async (c) => {
+        let body: { yaml?: string } = {};
+        try {
+            body = (await c.req.json()) as { yaml?: string };
+        } catch {
+            return c.json({ statusMessage: "invalid json body" }, 400);
+        }
+        const text = body?.yaml;
+        if (typeof text !== "string" || !text.trim())
+            return c.json({ statusMessage: "yaml required" }, 400);
+        try {
+            Config.saveRaw(text);
+            return c.json({ statusMessage: "saved" });
+        } catch (e) {
+            return c.json({ statusMessage: (e as Error).message }, 400);
+        }
+    });
+
     app.patch("/api/config", async (c) => {
         let body: { default?: string; modelId?: string; language?: string };
         try {

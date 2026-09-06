@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useT } from "@/i18n";
 import { Button } from "@/components/ui/button";
@@ -21,12 +21,17 @@ import { ProvidersCard } from "./settings/ProvidersCard";
 import { ToolsCard } from "./settings/ToolsCard";
 import { McpCard } from "./settings/McpCard";
 import { PermissionsCard } from "./settings/PermissionsCard";
+import { YamlEditorModal } from "@/components/YamlEditorModal";
+import { cn } from "@/lib/utils";
 
 /**
  * 设置页：全局配置 ~/.anycode/config.yaml 图形化编辑，热生效。
- * 卡片顺序：默认提供方 → 模型提供方 → 内置能力 → MCP 服务。
+ * 三 tab（RR 设置优化 2026-09-06）：模型 | 工具与权限 | 集成。
+ * 自动保存：配置态变化防抖 800ms 静默保存（校验失败/加载中跳过，失败 toast）；
+ * 右上角"编辑 config.yaml"弹窗支持高亮编辑原文。
  * 数据在页面层统一持有，各卡片只收 props 渲染（见 settings/ 目录）。
  */
+type SettingsTab = "models" | "tools" | "integrations";
 export default function SettingsPage() {
     const { t } = useT();
     const [providers, setProviders] = useState<ProviderForm[]>([]);
@@ -55,6 +60,11 @@ export default function SettingsPage() {
     const [permMode, setPermMode] = useState<"standard" | "accept_edits" | "trusted">("standard");
     const [permRules, setPermRules] = useState<PermissionRuleForm[]>([]);
     const [permDanger, setPermDanger] = useState<string[]>([]);
+    const [tab, setTab] = useState<SettingsTab>("models");
+    const [yamlOpen, setYamlOpen] = useState(false);
+
+    const reloadConfig = () => setLoadTick((k) => k + 1);
+    const [loadTick, setLoadTick] = useState(0);
 
     useEffect(() => {
         setStatus("loading");
@@ -90,7 +100,30 @@ export default function SettingsPage() {
             }
             setStatus("ready");
         });
-    }, []);
+    }, [loadTick]);
+
+    // 自动保存（RR 设置优化）：配置态变化防抖 800ms 静默保存。
+    // 加载后首跳过（loadTick 触发的重载由 dirtyRef 门禁）；名称校验失败/加载中不存。
+    const dirtyRef = useRef(false);
+    const loadedTickRef = useRef(0);
+    useEffect(() => {
+        if (status !== "ready") {
+            loadedTickRef.current = loadTick;
+            return;
+        }
+        if (loadedTickRef.current !== loadTick) {
+            loadedTickRef.current = loadTick;
+            return;
+        }
+        if (Object.values(nameError).some(Boolean)) return;
+        if (!dirtyRef.current) {
+            dirtyRef.current = true; // ready 后的首次运行不算 dirty
+            return;
+        }
+        const timer = setTimeout(() => void save(true), 800);
+        return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [providers, def, mcp, toolCfg, toolOn, permMode, permRules, permDanger, status, loadTick]);
 
     const patchProvider = (i: number, patch: Partial<ProviderForm>) =>
         setProviders((p) =>
@@ -130,7 +163,7 @@ export default function SettingsPage() {
     const toggleTool = (name: string, v: boolean) =>
         setToolOn((on) => ({ ...on, [name]: v }));
 
-    const save = async () => {
+    const save = async (silent = false) => {
         setSaving(true);
         const body = toConfigShape(providers, def, mcp, toolCfg, toolOn, {
             mode: permMode,
@@ -144,7 +177,7 @@ export default function SettingsPage() {
                 body: JSON.stringify(body),
             });
             if (res.ok) {
-                toast.success(t("settings.savedNextConversation"));
+                if (!silent) toast.success(t("settings.savedNextConversation"));
             } else {
                 let text = t("settings.saveFailed");
                 try {
@@ -176,13 +209,45 @@ export default function SettingsPage() {
                             {t("settings.subtitle")}
                         </span>
                     </div>
-                    <Button
-                        className="shrink-0"
-                        onClick={save}
-                        disabled={saving || status !== "ready"}
-                    >
-                        {saving ? t("settings.saving") : t("common.save")}
-                    </Button>
+                    <div className="shrink-0 flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            className="shrink-0"
+                            onClick={() => setYamlOpen(true)}
+                        >
+                            {t("settings.editYaml")}
+                        </Button>
+                        <Button
+                            className="shrink-0"
+                            onClick={() => void save()}
+                            disabled={saving || status !== "ready"}
+                        >
+                            {saving ? t("settings.saving") : t("common.save")}
+                        </Button>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-1">
+                    {(
+                        [
+                            ["models", t("settings.tabModels")],
+                            ["tools", t("settings.tabTools")],
+                            ["integrations", t("settings.tabIntegrations")],
+                        ] as const
+                    ).map(([key, label]) => (
+                        <button
+                            key={key}
+                            onClick={() => setTab(key)}
+                            className={cn(
+                                "inline-flex items-center rounded-md px-2.5 py-1 text-xs transition-colors",
+                                tab === key
+                                    ? "bg-accent text-foreground"
+                                    : "text-muted-foreground hover:bg-accent/60"
+                            )}
+                        >
+                            {label}
+                        </button>
+                    ))}
                 </div>
 
                 {status === "loading" && (
@@ -196,7 +261,7 @@ export default function SettingsPage() {
                     </p>
                 )}
 
-                {status === "ready" && (
+                {status === "ready" && tab === "models" && (
                     <>
                         <DefaultProviderCard
                             def={def}
@@ -222,12 +287,6 @@ export default function SettingsPage() {
                             toolCfg={toolCfg}
                             patchCfg={patchToolCfg}
                         />
-                        <McpCard
-                            mcp={mcp}
-                            patchMcp={patchMcp}
-                            addMcp={addMcp}
-                            removeMcp={removeMcp}
-                        />
                         <PermissionsCard
                             mode={permMode}
                             rules={permRules}
@@ -237,6 +296,22 @@ export default function SettingsPage() {
                             onDangerPatterns={setPermDanger}
                         />
                     </>
+                )}
+                {status === "ready" && tab === "integrations" && (
+                    <>
+                        <McpCard
+                            mcp={mcp}
+                            patchMcp={patchMcp}
+                            addMcp={addMcp}
+                            removeMcp={removeMcp}
+                        />
+                    </>
+                )}
+                {yamlOpen && (
+                    <YamlEditorModal
+                        onClose={() => setYamlOpen(false)}
+                        onSaved={reloadConfig}
+                    />
                 )}
             </div>
         </div>
