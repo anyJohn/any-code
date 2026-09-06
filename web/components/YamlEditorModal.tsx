@@ -5,7 +5,6 @@ import hljs from "highlight.js/lib/common";
 import { apiJson } from "@/lib/api";
 import { useT } from "@/i18n";
 import { X } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 /**
  * config.yaml 编辑弹窗（RR 设置优化）：hljs yaml 高亮 overlay + 透明 textarea。
@@ -23,6 +22,7 @@ export function YamlEditorModal({
     const [error, setError] = useState("");
     const [saving, setSaving] = useState(false);
     const preRef = useRef<HTMLPreElement>(null);
+    const gutterRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -46,6 +46,16 @@ export function YamlEditorModal({
             return "";
         }
     }, [yaml]);
+
+    /** textarea 是唯一滚动源——同步高亮层与行号栏 */
+    const syncScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
+        const { scrollTop, scrollLeft } = e.currentTarget;
+        if (preRef.current) {
+            preRef.current.scrollTop = scrollTop;
+            preRef.current.scrollLeft = scrollLeft;
+        }
+        if (gutterRef.current) gutterRef.current.scrollTop = scrollTop;
+    };
 
     const confirm = async () => {
         setSaving(true);
@@ -85,39 +95,42 @@ export function YamlEditorModal({
                     </button>
                 </div>
 
-                <div className="flex-1 min-h-0 overflow-auto relative font-mono text-xs leading-5">
+                <div className="flex-1 min-h-0 overflow-hidden flex bg-muted/40">
                     {yaml === null ? (
                         <div className="p-4 text-sm text-muted-foreground">
                             {error || t("common.loading")}
                         </div>
                     ) : (
-                        <div className="relative min-h-full">
-                            <pre
-                                ref={preRef}
+                        <>
+                            {/* 行号栏：与代码区同行高，滚动随 textarea 同步 */}
+                            <div
+                                ref={gutterRef}
                                 aria-hidden
-                                className={cn(
-                                    "absolute inset-0 pointer-events-none overflow-hidden p-3 m-0 whitespace-pre-wrap break-all",
-                                    error && "opacity-60"
-                                )}
-                                dangerouslySetInnerHTML={{ __html: html }}
-                            />
-                            <textarea
-                                value={yaml ?? ""}
-                                onChange={(e) => {
-                                    setYaml(e.target.value);
-                                    setError("");
-                                }}
-                                onScroll={(e) => {
-                                    if (preRef.current)
-                                        preRef.current.scrollTop = e.currentTarget.scrollTop;
-                                }}
-                                spellCheck={false}
-                                className={cn(
-                                    "relative w-full min-h-full resize-none bg-transparent p-3 m-0 outline-none whitespace-pre-wrap break-all",
-                                    "text-transparent caret-foreground selection:bg-primary/30"
-                                )}
-                            />
-                        </div>
+                                className="shrink-0 w-12 overflow-hidden select-none bg-muted/70 text-muted-foreground text-right font-mono text-xs leading-5 py-3 border-r border-border"
+                            >
+                                {(yaml ?? "").split("\n").map((_, i) => (
+                                    <div key={i}>{i + 1}</div>
+                                ))}
+                            </div>
+                            <div className="relative flex-1 min-w-0">
+                                <pre
+                                    ref={preRef}
+                                    aria-hidden
+                                    className="absolute inset-0 m-0 overflow-hidden p-3 font-mono text-xs leading-5 text-foreground whitespace-pre"
+                                    dangerouslySetInnerHTML={{ __html: html }}
+                                />
+                                <textarea
+                                    value={yaml ?? ""}
+                                    onChange={(e) => {
+                                        setYaml(e.target.value);
+                                        setError("");
+                                    }}
+                                    onScroll={syncScroll}
+                                    spellCheck={false}
+                                    className="absolute inset-0 resize-none bg-transparent p-3 font-mono text-xs leading-5 text-transparent caret-foreground outline-none whitespace-pre overflow-auto selection:bg-primary/30"
+                                />
+                            </div>
+                        </>
                     )}
                 </div>
 
