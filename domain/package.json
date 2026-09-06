@@ -17,7 +17,8 @@
         "dev": "tsx src/cliExample.ts",
         "build": "node esbuild.config.js",
         "start": "node dist/cliExample.mjs",
-        "test": "vitest run"
+        "test": "vitest run",
+        "eval": "tsx eval/runner.mts"
     },
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.30.0",
