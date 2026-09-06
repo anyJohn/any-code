@@ -209,22 +209,14 @@ export default function SettingsPage() {
                             {t("settings.subtitle")}
                         </span>
                     </div>
-                    <div className="shrink-0 flex items-center gap-2">
-                        <Button
-                            variant="outline"
-                            className="shrink-0"
-                            onClick={() => setYamlOpen(true)}
-                        >
-                            {t("settings.editYaml")}
-                        </Button>
-                        <Button
-                            className="shrink-0"
-                            onClick={() => void save()}
-                            disabled={saving || status !== "ready"}
-                        >
-                            {saving ? t("settings.saving") : t("common.save")}
-                        </Button>
-                    </div>
+                    {/* 自动保存（防抖 800ms）——无手动保存按钮；YAML 编辑为显式确认流 */}
+                    <Button
+                        variant="outline"
+                        className="shrink-0"
+                        onClick={() => setYamlOpen(true)}
+                    >
+                        {t("settings.editYaml")}
+                    </Button>
                 </div>
 
                 <div className="flex items-center gap-1">
