@@ -37,8 +37,8 @@ jobs:
       - name: Pack core tar（布局镜像 ~/.anycode/app + rg）
         run: |
           STAGE=$(mktemp -d)
-          mkdir -p $STAGE/web $STAGE/server/dist $STAGE/build
-          cp -r web/dist/* $STAGE/web/dist/
+          mkdir -p $STAGE/web/dist $STAGE/server/dist $STAGE/build
+          cp -r web/dist/. $STAGE/web/dist/
           cp server/dist/server.mjs $STAGE/server/dist/
           cp build/launcher.mjs build/versions.env $STAGE/build/
           cp rg-out/rg $STAGE/rg
