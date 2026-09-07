@@ -6,6 +6,7 @@ import { randomBytes } from "node:crypto";
 import type { ToolContext } from "../../context";
 import type { ToolResult } from "../index";
 import { bashCandidates } from "../../shell";
+import { killTree, detachedIfPosix } from "../../processKill";
 
 interface ExecuteBashArgs {
     command: string;
@@ -155,6 +156,7 @@ export const executeBashFunc = async (
                 cwd,
                 signal: ctx.signal,
                 windowsHide: true,
+                ...detachedIfPosix,
             });
         } catch (err) {
             finish({ content: `Error: ${(err as Error).message}`, data: { exitCode: null } });
@@ -162,7 +164,7 @@ export const executeBashFunc = async (
         }
 
         timer = setTimeout(() => {
-            child.kill("SIGTERM");
+            killTree(child);
         }, resolveTimeoutMs(args.timeout_ms));
 
         const onChunk = (chunk: Buffer, stream: "stdout" | "stderr") => {

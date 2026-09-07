@@ -31,7 +31,8 @@ describe("JobRegistry（FR-13）", () => {
 
     it("kill 终止运行中任务", async () => {
         const id = registry.launch("/bin/sh", ["-c", "sleep 30"], process.cwd());
-        await new Promise((r) => setTimeout(r, 100));
+        // CI 慢环境：等 spawn 完成（pid 就绪）再 kill，否则 killTree 早退
+        await vi.waitFor(() => expect(registry.get(id)!.pid).toBeTruthy());
         expect(registry.kill(id)).toBe(true);
         await vi.waitFor(() => expect(registry.get(id)!.done).toBe(true));
     });

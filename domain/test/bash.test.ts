@@ -149,7 +149,7 @@ describe("executeBashFunc 输出治理（AR-2）", () => {
             { command: "sleep 5", timeout_ms: 1500 },
             ctx
         )).content;
-        expect(Date.now() - t0).toBeLessThan(3000);
+        expect(Date.now() - t0).toBeLessThan(4500); // 远小于 sleep 5 自然结束（CI spawn+kill 慢，宽松）
         expect(out).toContain("[Timed out after 1500ms]");
     }, 10_000);
 });

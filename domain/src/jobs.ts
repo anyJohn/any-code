@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { killTree, detachedIfPosix } from "./processKill";
 
 /**
  * bash 后台任务注册表（FR-13）：per-agent 生命周期（destroy 时 killAll）。
@@ -16,6 +17,8 @@ export interface BashJob {
     done: boolean;
     exitCode: number | null;
     startedAt: number;
+    /** 子进程 pid（spawn 即有；job_output 展示与测试定位用） */
+    pid: number | undefined;
 }
 
 const OUTPUT_CAP = 200_000;
@@ -26,7 +29,7 @@ export class JobRegistry {
     /** 后台启动命令；返回 job id。 */
     launch(binary: string, args: string[], cwd: string): string {
         const id = randomBytes(4).toString("hex");
-        const child = spawn(binary, args, { cwd, windowsHide: true });
+        const child = spawn(binary, args, { cwd, windowsHide: true, ...detachedIfPosix });
         const job: BashJob & { child: ChildProcess } = {
             id,
             command: args[args.length - 1] ?? "",
@@ -35,6 +38,7 @@ export class JobRegistry {
             done: false,
             exitCode: null,
             startedAt: Date.now(),
+            pid: child.pid,
             child,
         };
         const onChunk = (c: Buffer) => {
@@ -77,14 +81,14 @@ export class JobRegistry {
     kill(id: string): boolean {
         const j = this.jobs.get(id);
         if (!j || j.done) return j ? true : false;
-        j.child.kill("SIGTERM");
+        killTree(j.child);
         return true;
     }
 
     /** agent 销毁时终止全部后台任务（不留孤儿进程）。 */
     killAll(): void {
         for (const j of this.jobs.values()) {
-            if (!j.done) j.child.kill("SIGTERM");
+            if (!j.done) killTree(j.child);
         }
     }
 }
