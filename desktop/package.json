@@ -19,7 +19,8 @@
         "test": "npm run typecheck && npm run build:main"
     },
     "dependencies": {
-        "@any-code/server": "workspace:*"
+        "@any-code/server": "workspace:*",
+        "electron-updater": "^6.3.9"
     },
     "devDependencies": {
         "@vscode/ripgrep-darwin-arm64": "1.18.0",

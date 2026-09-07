@@ -8,6 +8,13 @@
  */
 module.exports = {
     appId: "ai.anycode.desktop",
+    // FR-27：Releases 发布源（electron-updater / --publish 用）。无签名——Win SmartScreen
+    // 与 macOS Gatekeeper 会告警，待证书凭据后补 signing/notarization 配置。
+    publish: {
+        provider: "github",
+        owner: "anyJohn",
+        repo: "any-code",
+    },
     productName: "AnyCode",
     executableName: "anycode", // 避免 @any-code/desktop 派生出含 @ 的可执行名
     directories: {

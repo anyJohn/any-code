@@ -1,0 +1,53 @@
+# FR-27：打 tag v* → 三平台桌面安装包 → GitHub Releases（electron-builder --publish）。
+# 无代码签名（证书凭据待补）——Win SmartScreen / macOS Gatekeeper 会告警。
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.8.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # 桌面打包前置：web dist（extraResources.web-dist）+ domain/server 打包产物
+      - name: Build workspace (web + server bundle)
+        run: |
+          pnpm --filter @any-code/web build
+          pnpm --filter @any-code/server build
+
+      - name: Stage desktop resources
+        run: npm run stage
+        working-directory: desktop
+
+      - name: Build desktop main
+        run: npm run build:main
+        working-directory: desktop
+
+      # electron-builder --publish：构建 AppImage/NSIS/zip 并上传到 GitHub Releases
+      - name: Build & publish installer
+        run: npx electron-builder --config electron-builder.config.js --publish always
+        working-directory: desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

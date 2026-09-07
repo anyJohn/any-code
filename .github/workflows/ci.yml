@@ -1,0 +1,44 @@
+# FR-27：推送/PR 即跑全仓 typecheck + test + build。
+# desktop 只跑 build:main（electron-builder 打包属 Release 流，见 release.yml）。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.8.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck（domain/server/web）
+        run: |
+          cd domain && npx tsc --noEmit
+          cd ../server && npx tsc --noEmit
+          cd ../web && pnpm typecheck
+
+      - name: Test（全仓，含 tui/desktop 冒烟）
+        run: pnpm -r test
+
+      - name: Build（desktop 仅 main 进程打包）
+        run: |
+          pnpm -r --filter '!@any-code/desktop' build
+          cd desktop && npm run build:main

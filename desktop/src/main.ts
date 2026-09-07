@@ -151,7 +151,24 @@ async function boot() {
     });
 }
 
-app.whenReady().then(boot);
+// 桌面自动更新（FR-27）：仅打包态启用（dev 无 publish 源）；检查静默，下载后提示安装。
+// 无网络/无 Releases 源时静默失败——不影响正常启动。
+app.whenReady().then(() => {
+    boot();
+    if (app.isPackaged) {
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { autoUpdater } = require("electron-updater");
+            autoUpdater.autoDownload = true;
+            autoUpdater.on("update-downloaded", () => {
+                autoUpdater.quitAndInstall();
+            });
+            autoUpdater.checkForUpdates().catch(() => {});
+        } catch {
+            // electron-updater 缺失/不可用 → 跳过（不阻断启动）
+        }
+    }
+});
 
 app.on("window-all-closed", () => {
     // 关窗 = 无后台残留（SPEC-029 B-002 / I-002）：非 mac 直接退出。
