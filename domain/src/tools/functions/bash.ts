@@ -14,6 +14,8 @@ interface ExecuteBashArgs {
     timeout_ms?: number;
     /** 后台执行（FR-13）：立即返回 job id，输出经 job_output 工具查询、job_kill 终止 */
     run_in_background?: boolean;
+    /** 一句意图（SPEC-038 面板标题；模型按 schema 附带） */
+    intent?: string;
 }
 
 /** 默认超时；模型可用 timeout_ms 覆盖（硬上限 600s）。AR-2 */
@@ -23,6 +25,20 @@ const BASH_MAX_TIMEOUT_MS = 600_000;
 /** 输出双限（AR-2）：行数 / 字节，超限保留头部 + 截断标记 + spill 文件路径。 */
 const OUTPUT_MAX_LINES = 2000;
 const OUTPUT_MAX_BYTES = 40_000;
+
+/**
+ * 后台符逃逸检测（SPEC-038）：`cmd &` / nohup 绕过 JobRegistry——输出黑洞 +
+ * 面板不可见 + 无人回收。窄匹配（strip 引号后）：尾部 `&`、nohup 前缀、`& disown`。
+ * 命中 → 拒绝执行，引导模型改用 run_in_background 参数。
+ */
+function detectBackgroundEscape(command: string): string | null {
+    // 去掉单/双引号包裹的内容（URL query 的 & 不算后台符）
+    const stripped = command.replace(/"[^"]*"|'[^']*'/g, '""').trim();
+    if (/^nohup\s/.test(stripped) || /^setsid\s/.test(stripped)) return "nohup/setsid";
+    if (/\s&\s*disown\b/.test(stripped)) return "& disown";
+    if (/&\s*$/.test(stripped)) return "尾部的 &";
+    return null;
+}
 
 /**
  * 超限输出落盘（pi/Claude Code 同构）：全量写临时文件，截断标记给出路径，
@@ -125,6 +141,22 @@ export const executeBashFunc = async (
             resolve(value);
         };
 
+        // SPEC-038：后台符逃逸拒绝——后台必须走 run_in_background（进注册表、面板可见可终止）
+        if (args.run_in_background !== true) {
+            const escape = detectBackgroundEscape(args.command ?? "");
+            if (escape) {
+                finish({
+                    content: `Error: 检测到 shell 后台符（${escape}）。需要后台运行时，请改用 run_in_background 参数——任务会进入可查询（job_output）、可终止（job_kill）的注册表，用户面板也可见。直接用 & 会留下无人回收的孤儿进程且输出丢失。`,
+                });
+                return;
+            }
+        }
+
+        const intent =
+            typeof args.intent === "string" && args.intent.trim()
+                ? args.intent.trim().slice(0, 60)
+                : undefined;
+
         // FR-13 后台执行：注册 job 立即返回（不占 120s 超时、不阻塞 loop）
         if (args.run_in_background) {
             if (!ctx.jobs) {
@@ -133,7 +165,7 @@ export const executeBashFunc = async (
             }
             try {
                 const { binary, cwd } = resolveShell(workspace.rootPath, ctx.gitBashPath);
-                const id = ctx.jobs.launch(binary, ["-c", args.command], cwd);
+                const id = ctx.jobs.launch(binary, ["-c", args.command], cwd, intent);
                 finish({
                     content:
                         `后台任务已启动：job_id=${id}\n` +

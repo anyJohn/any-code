@@ -61,6 +61,8 @@ interface AnyAgentOptions {
     service?: SessionService;
     /** agent 定义（instruction + tools）。默认 mainAgent。 */
     definition?: AgentDefinition;
+    /** 工作区级后台任务注册表（SPEC-038 桌模型）：跨会话共享；缺省自建（测试/CLI）。 */
+    jobs?: JobRegistry;
     /** 额外工具（追加到 definition.tools 之后，如自定义 AgentTool）。 */
     extraTools?: Tool[];
 }
@@ -89,8 +91,8 @@ class AnyAgent {
     private permissionAllowOnce = new Set<string>();
     // 工作区快照服务（AR-4）：per-agent，写类工具执行前自动快照
     private snapshots: ReturnType<typeof createSnapshotService>;
-    // bash 后台任务注册表（FR-13）：per-agent，destroy 时 killAll
-    private jobRegistry = new JobRegistry();
+    // bash 后台任务注册表（SPEC-038 桌模型）：工作区级注入，跨会话共享
+    private jobRegistry: JobRegistry;
     // 项目扩展（AR-16）：自定义工具 + 生命周期钩子
     private extensionTools: Tool[] = [];
     private extensionHooks: ExtensionHooks = {};
@@ -112,6 +114,7 @@ class AnyAgent {
             this.workspace.ignoredPatterns,
             this.config?.gitBashPath
         );
+        this.jobRegistry = opts.jobs ?? new JobRegistry();
         this.projectKey = projectKeyOf(this.workspace.rootPath);
         this.definition = opts.definition ?? mainAgent;
         this.tools = [...this.definition.tools, ...(opts.extraTools ?? [])];
@@ -309,8 +312,8 @@ class AnyAgent {
         // MCP 连接清理（per-agent）：kill stdio 子进程 / 关 SSE 连接
         this.mcpCleanup?.().catch(() => {});
         this.mcpCleanup = null;
-        // FR-13：终止全部后台任务（不留孤儿进程）
-        this.jobRegistry.killAll();
+        // SPEC-038 桌模型：后台任务是工作区资产，会话销毁不再杀
+        //（任务跟注册表走，server 退出时统一清理）
     }
 
     submit(task: string) {

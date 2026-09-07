@@ -35,6 +35,18 @@ import {
     workspaceConfigDir,
 } from "@any-code/domain";
 import { runningSessions, runningWorkspaces } from "./singleFlight.js";
+import { JobRegistry } from "@any-code/domain";
+
+// SPEC-038 桌模型：后台任务注册表按工作区共享（跨会话可见）；server 退出统一杀
+const workspaceJobs = new Map<string, JobRegistry>();
+function getWorkspaceJobs(projectKey: string): JobRegistry {
+    let r = workspaceJobs.get(projectKey);
+    if (!r) {
+        r = new JobRegistry();
+        workspaceJobs.set(projectKey, r);
+    }
+    return r;
+}
 import { getAgentManager, TERMINAL, type StreamFrame } from "./agentManager.js";
 
 /** 解析拉取/测试模型的凭据：表单 apiKey 留空=保留原值 → 用 config.yaml 已存 key（providerName 匹配）。 */
@@ -469,7 +481,7 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
                     // 兜底 try/catch：create 失败（坏 config 等）必须释放槽位并返错误帧
                     let agent: AnyAgent;
                     try {
-                        agent = await AnyAgent.create({ rootPath: workspacePath, sessionId });
+                        agent = await AnyAgent.create({ rootPath: workspacePath, sessionId, jobs: getWorkspaceJobs(wsKey) });
                     } catch (e) {
                         release();
                         runningSessions().delete(sessionId);
@@ -1055,6 +1067,22 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         }
     });
 
+    // ==================== jobs (SPEC-038) ====================
+    app.get("/api/workspaces/:projectKey/jobs", (c) => {
+        const projectKey = c.req.param("projectKey");
+        const registry = workspaceJobs.get(projectKey);
+        if (!registry) return c.json([]);
+        return c.json(registry.list());
+    });
+
+    app.post("/api/workspaces/:projectKey/jobs/:jobId/kill", (c) => {
+        const registry = workspaceJobs.get(c.req.param("projectKey"));
+        if (!registry) return c.json({ statusMessage: "job not found" }, 404);
+        const ok = registry.kill(c.req.param("jobId"));
+        if (!ok) return c.json({ statusMessage: "job not found" }, 404);
+        return c.json({ statusMessage: "killed" });
+    });
+
     // ==================== snapshots（AR-4 快照与回滚） ====================
     // 快照存于 ~/.anycode/snapshots/<projectKey>/（shadow-git，项目目录零污染）。
     app.get("/api/workspaces/:projectKey/snapshots", async (c) => {
@@ -1284,6 +1312,7 @@ export async function start(opts: {
     // FR-30 B-007：进程退出统一清理运行中 agent（不留孤儿 LLM 流 / bash / MCP 子进程）
     const shutdown = (signal: string) => {
         getAgentManager().stopAll();
+        for (const r of workspaceJobs.values()) r.killAll();
         try {
             server.close();
         } catch {

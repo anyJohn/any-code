@@ -12,7 +12,8 @@ const executeBashSchema: ChatCompletionTool = {
             properties: {
                 command: {
                     type: "string",
-                    description: "The bash command to execute",
+                    description:
+                        "The bash command to execute. Do NOT use shell background operators (&, nohup, disown) — for long-running tasks use the run_in_background parameter instead.",
                 },
                 intent: {
                     type: "string",

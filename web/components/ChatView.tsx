@@ -20,12 +20,15 @@ import { ChangesTab } from "./ChangesTab";
 import { FilesTab } from "./FilesTab";
 import { FilePreviewModal } from "./FilePreviewModal";
 import { TodoPanel } from "./TodoPanel";
+import { RuntimeTab } from "./RuntimeTab";
+import type { JobInfo } from "./RuntimeTab";
 import { useT } from "@/i18n";
 import { MessagesSquare, GitCompare, FolderOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Cpu } from "lucide-react";
 
-/** ChatView 主区三 tab（SPEC-036 DEC-124）：聊天（默认）/ 变更 / 文件 */
-type MainTab = "chat" | "changes" | "files";
+/** ChatView 主区四 tab（SPEC-036 DEC-124 + 评审定稿）：聊天/变更/文件/运行 */
+type MainTab = "chat" | "changes" | "files" | "runtime";
 
 /**
  * ChatView —— 聊天主视图容器：组合 MessageList / InputBox / StatusBar，
@@ -161,10 +164,36 @@ export function ChatView({
         submit(message);
     };
 
-    const TABS: { key: MainTab; icon: React.ReactNode; label: string }[] = [
+    const [runtimeCount, setRuntimeCount] = useState(0);
+    const [jobs, setJobs] = useState<JobInfo[]>([]);
+    const [jobsTick, setJobsTick] = useState(0);
+    const refreshJobs = useCallback(() => setJobsTick((k) => k + 1), []);
+    useEffect(() => {
+        if (!projectKey) {
+            setJobs([]);
+            return;
+        }
+        let cancelled = false;
+        const poll = async () => {
+            if (document.visibilityState !== "visible") return;
+            const list = await apiJson<JobInfo[]>(`/api/workspaces/${projectKey}/jobs`);
+            if (!cancelled && Array.isArray(list)) {
+                setJobs(list);
+                setRuntimeCount(list.filter((j) => !j.done).length);
+            }
+        };
+        void poll();
+        const timer = setInterval(() => void poll(), 3000);
+        return () => {
+            cancelled = true;
+            clearInterval(timer);
+        };
+    }, [projectKey, jobsTick]);
+    const TABS: { key: MainTab; icon: React.ReactNode; label: string; badge?: number }[] = [
         { key: "chat", icon: <MessagesSquare className="size-3.5" />, label: t("tab.chat") },
         { key: "changes", icon: <GitCompare className="size-3.5" />, label: t("tab.changes") },
         { key: "files", icon: <FolderOpen className="size-3.5" />, label: t("tab.files") },
+        { key: "runtime", icon: <Cpu className="size-3.5" />, label: t("tab.runtime"), badge: runtimeCount },
     ];
 
     return (
@@ -184,6 +213,11 @@ export function ChatView({
                     >
                         {x.icon}
                         {x.label}
+                        {!!x.badge && (
+                            <span className="inline-flex items-center rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 px-1.5 text-[10px] font-medium tabular-nums">
+                                {x.badge}
+                            </span>
+                        )}
                     </button>
                 ))}
             </div>
@@ -221,6 +255,9 @@ export function ChatView({
             {tab === "changes" && projectKey && <ChangesTab projectKey={projectKey} />}
             {tab === "files" && projectKey && (
                 <FilesTab projectKey={projectKey} onOpenFile={setPreviewPath} />
+            )}
+            {tab === "runtime" && projectKey && (
+                <RuntimeTab jobs={jobs} onKilled={refreshJobs} projectKey={projectKey} />
             )}
 
             {command.compacting && (
