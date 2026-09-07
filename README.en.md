@@ -10,6 +10,20 @@ A lightweight **local AI coding agent**: it runs on your machine — reading cod
 
 ## Install
 
+### Desktop app (recommended — download & run)
+
+Grab the installer for your platform from [Releases](https://github.com/anyJohn/any-code/releases/latest):
+
+| Platform | File |
+| --- | --- |
+| Windows | `AnyCode-Setup-x.x.x.exe` |
+| macOS (Apple Silicon) | `AnyCode-x.x.x-arm64-mac.zip` (unzip to get the .app) |
+| Linux | `AnyCode-x.x.x.AppImage` (`chmod +x`, then run) |
+
+The desktop app updates itself automatically when a new version is released. Unsigned builds: Windows may show a SmartScreen warning (choose "Run anyway"); on macOS right-click → Open.
+
+### Command-line install (web mode, no desktop app)
+
 Linux (bash / zsh / fish):
 
 ```bash
@@ -22,7 +36,7 @@ Windows (PowerShell):
 iwr -useb https://raw.githubusercontent.com/anyJohn/any-code/main/build/install.ps1 | iex
 ```
 
-Open a **new terminal** and run `anycode web` — the browser opens `http://127.0.0.1:3000` automatically. See [build/README.md](./build/README.md) for details; other commands: `anycode update` / `uninstall` / `help`.
+The script downloads a prebuilt bundle from Releases first (installs in a couple of minutes) and falls back to building from source on failure. Behind Chinese networks: set `ANYCODE_MIRROR=cn` to use mirrors. Open a **new terminal** and run `anycode web` — the browser opens `http://127.0.0.1:3000` automatically. See [build/README.md](./build/README.md) for details; other commands: `anycode update` / `uninstall` / `help`.
 
 ## Quick Start
 

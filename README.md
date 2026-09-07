@@ -10,6 +10,20 @@
 
 ## 安装
 
+### 桌面应用（推荐，下载即用）
+
+从 [Releases](https://github.com/anyJohn/any-code/releases/latest) 下载对应平台安装包：
+
+| 平台 | 文件 |
+| --- | --- |
+| Windows | `AnyCode-Setup-x.x.x.exe` |
+| macOS（Apple Silicon） | `AnyCode-x.x.x-arm64-mac.zip`（解压出 .app） |
+| Linux | `AnyCode-x.x.x.AppImage`（`chmod +x` 后直接运行） |
+
+桌面应用内置自动更新（有新版本时自动下载并安装）。未签名版本首次运行时：Windows 可能提示 SmartScreen（选"仍要运行"），macOS 需右键 → 打开。
+
+### 命令行安装（Web 模式，不装桌面应用）
+
 Linux（bash / zsh / fish）：
 
 ```bash
@@ -22,7 +36,7 @@ Windows（PowerShell）：
 iwr -useb https://raw.githubusercontent.com/anyJohn/any-code/main/build/install.ps1 | iex
 ```
 
-装完打开**新终端**运行 `anycode web`，浏览器自动打开 `http://127.0.0.1:3000`。安装细节见 [build/README.md](./build/README.md)；其他命令：`anycode update` / `uninstall` / `help`。
+脚本优先从 Releases 下载预编译产物（一两分钟装完），失败自动回退源码构建；中国网络可加环境变量 `ANYCODE_MIRROR=cn` 走镜像。装完打开**新终端**运行 `anycode web`，浏览器自动打开 `http://127.0.0.1:3000`。安装细节见 [build/README.md](./build/README.md)；其他命令：`anycode update` / `uninstall` / `help`。
 
 ## 快速使用
 
