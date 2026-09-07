@@ -394,3 +394,47 @@ describe("POST /api/sessions/:sessionId/truncate（SPEC-036 B-013）", () => {
         expect(missing.status).toBe(404);
     });
 });
+
+// SPEC-037：会话级权限模式路由
+describe("POST/GET /api/sessions/:id/permission-mode（SPEC-037）", () => {
+    const app = createApp();
+    let sessionId = "";
+    let home = "";
+    const origHome = process.env.HOME;
+
+    beforeAll(async () => {
+        home = fs.mkdtempSync(path.join(os.tmpdir(), "anycode-permmode-"));
+        process.env.HOME = home;
+        const service = new SessionService();
+        const s = await service.create("p-perm", "t");
+        sessionId = s.id;
+    });
+    afterAll(() => {
+        process.env.HOME = origHome;
+        fs.rmSync(home, { recursive: true, force: true });
+    });
+
+    it("默认读全局 fallback；设置 trusted 后持久化；非法 mode 400", async () => {
+        const g1 = await app.request(`/api/sessions/${sessionId}/permission-mode`);
+        expect(g1.status).toBe(200);
+        // 隔离 HOME 无 config → Config.load 会建默认（standard）
+        expect(((await g1.json()) as { mode: string }).mode).toBe("standard");
+
+        const post = await app.request(`/api/sessions/${sessionId}/permission-mode`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ mode: "trusted" }),
+        });
+        expect(post.status).toBe(200);
+
+        const g2 = await app.request(`/api/sessions/${sessionId}/permission-mode`);
+        expect(((await g2.json()) as { mode: string }).mode).toBe("trusted");
+
+        const bad = await app.request(`/api/sessions/${sessionId}/permission-mode`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ mode: "root" }),
+        });
+        expect(bad.status).toBe(400);
+    });
+});

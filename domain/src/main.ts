@@ -523,7 +523,8 @@ class AnyAgent {
                 .filter(Boolean)
         );
         return {
-            mode: cfg.mode,
+            // SPEC-037：会话级权限模式优先（无则跟随全局默认）
+            mode: this.session?.permissionMode ?? cfg.mode,
             rules: [...cfg.rules, ...projectRules],
             dangerPatterns: cfg.dangerPatterns,
             readOnlyTools,

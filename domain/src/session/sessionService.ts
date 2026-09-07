@@ -1,4 +1,5 @@
 import { ChatMessage, AgentEvent } from "../type";
+import type { PermissionMode } from "../permissions";
 import {
     Session,
     SessionKey,
@@ -11,6 +12,7 @@ import {
     metaEntry,
     messageToEntry,
     sysFpMetaEntry,
+    permissionModeMetaEntry,
     titleMetaEntry,
     touchMetaEntry,
     usageMetaEntry,
@@ -88,6 +90,14 @@ export class SessionService {
         fp: SystemFingerprint
     ): Promise<void> {
         await this.store.append(key, [sysFpMetaEntry(fp)]);
+    }
+
+    /** SPEC-037：设置会话级权限模式（append meta，末条为准） */
+    async setPermissionMode(
+        key: SessionKey,
+        mode: PermissionMode
+    ): Promise<void> {
+        await this.store.append(key, [permissionModeMetaEntry(mode)]);
     }
 
     /** 更新标题：追加一条新 meta（entriesToSession 取末条 meta 为准） */

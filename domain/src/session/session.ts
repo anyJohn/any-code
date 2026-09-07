@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { ChatMessage, AgentEvent } from "../type";
+import type { PermissionMode } from "../permissions";
 
 /**
  * Session 模块 - 类型 + 纯函数（无 IO，可被任何存储后端复用）
@@ -17,6 +18,8 @@ export interface Session {
     usage?: SessionUsage;
     /** AR-23：最近一次请求的 system prompt 指纹 */
     sysfp?: SystemFingerprint;
+    /** SPEC-037：会话级权限模式（缺省 = 跟随全局默认） */
+    permissionMode?: PermissionMode;
 }
 
 export interface SessionKey {
@@ -34,6 +37,8 @@ export type SessionEntry =
           usage?: UsageDelta;
           /** AR-23：system prompt 指纹（动态装配内容不入盘，留哈希作审计锚点；末条为准） */
           sysfp?: SystemFingerprint;
+          /** SPEC-037：会话级权限模式（末条为准；缺省 = 跟随全局 permissions.mode） */
+          permissionMode?: PermissionMode;
       }
     | { kind: "message"; message: ChatMessage }
     | { kind: "event"; event: AgentEvent };
@@ -69,6 +74,8 @@ export interface SessionMeta {
     usage?: SessionUsage;
     /** AR-23：最近一次请求的 system prompt 指纹（无记录则缺省） */
     sysfp?: SystemFingerprint;
+    /** SPEC-037：会话级权限模式（缺省 = 跟随全局默认） */
+    permissionMode?: PermissionMode;
 }
 
 export const DEFAULT_TITLE = "New Session";
@@ -114,6 +121,11 @@ export function touchMetaEntry(): SessionEntry {
 /** FR-22：用量增量 meta（与 Usage 事件同批落盘；updatedAt 顺带刷新） */
 export function usageMetaEntry(delta: UsageDelta): SessionEntry {
     return { kind: "meta", updatedAt: Date.now(), usage: delta };
+}
+
+/** SPEC-037：会话权限模式 meta（切换时写一条；末条为准） */
+export function permissionModeMetaEntry(mode: PermissionMode): SessionEntry {
+    return { kind: "meta", updatedAt: Date.now(), permissionMode: mode };
 }
 
 /** AR-23：system prompt 指纹 meta（每 run 装配结果变化时写一条；updatedAt 顺带刷新） */
@@ -169,6 +181,7 @@ function summarizeMetas(metas: MetaEntry[]): {
     title: string;
     createdAt: number;
     updatedAt: number;
+    permissionMode?: PermissionMode;
 } {
     if (metas.length === 0) {
         const now = Date.now();
@@ -183,7 +196,15 @@ function summarizeMetas(metas: MetaEntry[]): {
             break;
         }
     }
-    return { title: title ?? DEFAULT_TITLE, createdAt, updatedAt };
+    // SPEC-037：会话权限模式（末条为准）
+    let permissionMode: PermissionMode | undefined;
+    for (let i = metas.length - 1; i >= 0; i--) {
+        if (metas[i].permissionMode) {
+            permissionMode = metas[i].permissionMode;
+            break;
+        }
+    }
+    return { title: title ?? DEFAULT_TITLE, createdAt, updatedAt, permissionMode };
 }
 
 /** AR-23：取最近一次 system prompt 指纹（末条为准）。无记录返回 undefined。 */
@@ -199,7 +220,7 @@ export function entriesToSession(id: string, entries: SessionEntry[]): Session {
     const metas = entries.filter(isMeta);
     const messages = entries.filter(isMessage).map((e) => e.message);
     const events = entries.filter(isEvent).map((e) => e.event);
-    const { title, createdAt, updatedAt } = summarizeMetas(metas);
+    const { title, createdAt, updatedAt, permissionMode } = summarizeMetas(metas);
     return {
         id,
         title,
@@ -207,6 +228,7 @@ export function entriesToSession(id: string, entries: SessionEntry[]): Session {
         events,
         createdAt,
         updatedAt,
+        permissionMode,
         usage: foldUsage(metas), // FR-22
         sysfp: lastSysFp(metas), // AR-23
     };
@@ -219,12 +241,13 @@ export function metaOf(
 ): SessionMeta | null {
     const metas = entries.filter(isMeta);
     if (metas.length === 0) return null;
-    const { title, createdAt, updatedAt } = summarizeMetas(metas);
+    const { title, createdAt, updatedAt, permissionMode } = summarizeMetas(metas);
     return {
         id,
         title,
         createdAt,
         updatedAt,
+        permissionMode,
         usage: foldUsage(metas), // FR-22
         sysfp: lastSysFp(metas), // AR-23
     };

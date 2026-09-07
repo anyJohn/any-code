@@ -708,6 +708,32 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         });
     });
 
+    // 会话级权限模式（SPEC-037）：GET 读当前（无 → 全局默认）；POST 持久化
+    app.get("/api/sessions/:sessionId/permission-mode", async (c) => {
+        const service = new SessionService();
+        const found = await service.findSession(c.req.param("sessionId"));
+        if (!found) return c.json({ statusMessage: "session not found" }, 404);
+        const fallback = Config.load().permissions.mode ?? "standard";
+        return c.json({ mode: found.session.permissionMode ?? fallback });
+    });
+
+    app.post("/api/sessions/:sessionId/permission-mode", async (c) => {
+        let body: { mode?: string } = {};
+        try {
+            body = await c.req.json();
+        } catch {
+            return c.json({ statusMessage: "invalid json body" }, 400);
+        }
+        const mode = body?.mode;
+        if (mode !== "standard" && mode !== "accept_edits" && mode !== "trusted")
+            return c.json({ statusMessage: "mode 需为 standard/accept_edits/trusted" }, 400);
+        const service = new SessionService();
+        const found = await service.findSession(c.req.param("sessionId"));
+        if (!found) return c.json({ statusMessage: "session not found" }, 404);
+        await service.setPermissionMode(found.key, mode);
+        return c.json({ statusMessage: "saved" });
+    });
+
     // 截断会话到前 keep 条 user 消息（SPEC-036 B-013 编辑重发）：其后消息/事件删除。
     // 运行中会话拒绝（409）；文件状态不自动回滚——用户可配合快照回滚（/snapshots）。
     app.post("/api/sessions/:sessionId/truncate", async (c) => {

@@ -99,6 +99,31 @@ export function ChatView({
     const [highlight, setHighlight] = useState(0);
     const [tab, setTab] = useState<MainTab>("chat");
     const [previewPath, setPreviewPath] = useState<string | null>(null);
+    // SPEC-037：会话级权限模式（null = 跟随全局默认）
+    const [permMode, setPermMode] = useState<string | null>(null);
+    useEffect(() => {
+        if (!currentSessionId) {
+            setPermMode(null);
+            return;
+        }
+        let cancelled = false;
+        void apiJson<{ mode: string }>(`/api/sessions/${currentSessionId}/permission-mode`)
+            .then((d) => {
+                if (!cancelled && d?.mode) setPermMode(d.mode);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [currentSessionId]);
+
+    const switchPermMode = (mode: string) => {
+        setPermMode(mode);
+        void apiJson(`/api/sessions/${currentSessionId}/permission-mode`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ mode }),
+        });
+    };
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const didInit = useRef(false);
@@ -185,6 +210,20 @@ export function ChatView({
                         {x.label}
                     </button>
                 ))}
+                {/* 会话级权限模式下拉（SPEC-037）：新会话（无 id）不显示 */}
+                {currentSessionId && (
+                    <select
+                        value={permMode ?? ""}
+                        onChange={(e) => switchPermMode(e.target.value)}
+                        title={t("perm.sessionMode")}
+                        className="ml-auto text-xs rounded-md border border-input bg-background px-1.5 py-1 text-muted-foreground"
+                    >
+                        <option value="">{t("perm.default")}</option>
+                        <option value="standard">{t("perm.standard")}</option>
+                        <option value="accept_edits">{t("perm.acceptEdits")}</option>
+                        <option value="trusted">{t("perm.trusted")}</option>
+                    </select>
+                )}
             </div>
 
             {tab === "chat" && (
