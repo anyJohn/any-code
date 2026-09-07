@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import type { CommandItem } from "@/hooks/useCommand";
 import type { FileEntry } from "@/hooks/useFileReference";
 import { ModelPicker } from "./ModelPicker";
+import { PermissionPicker } from "./PermissionPicker";
 import { useT } from "@/i18n";
 
 interface InputBoxProps {
@@ -37,6 +38,8 @@ interface InputBoxProps {
     compacting?: boolean;
     // 未匹配指令的 Enter 路径
     runRawCommand: (rawDraft: string) => void;
+    /** 当前会话 id（SPEC-037 权限 pill 用；新会话 null 不显示） */
+    sessionId?: string | null;
 }
 
 /**
@@ -66,6 +69,7 @@ export function InputBox({
     projectKey,
     onModelSwitched,
     compacting,
+    sessionId,
 }: InputBoxProps) {
     const { t } = useT();
     // 压缩占用会话：发送必 409——输入禁用 + 占位文案，别让用户白打
@@ -297,23 +301,26 @@ export function InputBox({
                                 disabled={pending}
                                 onSwitched={() => onModelSwitched?.()}
                             />
-                            {pending ? (
-                                <Button
-                                    variant="destructive"
-                                    size="sm"
-                                    onClick={stop}
-                                >
-                                    {t("inputBox.stop")}
-                                </Button>
-                            ) : (
-                                <Button
-                                    size="sm"
-                                    onClick={send}
-                                    disabled={compacting}
-                                >
-                                    {t("inputBox.send")}
-                                </Button>
-                            )}
+                            <div className="flex items-center gap-1.5">
+                                <PermissionPicker sessionId={sessionId ?? null} />
+                                {pending ? (
+                                    <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        onClick={stop}
+                                    >
+                                        {t("inputBox.stop")}
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        size="sm"
+                                        onClick={send}
+                                        disabled={compacting}
+                                    >
+                                        {t("inputBox.send")}
+                                    </Button>
+                                )}
+                            </div>
                     </div>
                 </div>
             </div>
