@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { AgentEvent } from "@/lib/sseEvents";
 import { Pencil, Check, X } from "lucide-react";
 import { CopyButton } from "./MarkdownRenderer";
@@ -63,6 +63,27 @@ export function MessageList({
     scrollRef,
     onEditUserMessage,
 }: MessageListProps) {
+    // 聚合消息（用户需求 2026-09-07）：默认 = 历史回合收起、最新回合展开（流式观战）；
+    // 用户点摘要行显式切换（Map<index, collapsed>，覆盖默认；index 稳定——events 只 append）。
+    const [turnOverride, setTurnOverride] = useState<Map<number, boolean>>(new Map());
+    const toggleTurn = (i: number) =>
+        setTurnOverride((prev) => {
+            const next = new Map(prev);
+            const cur = next.has(i)
+                ? next.get(i)!
+                : i === lastTurnIdxRef.current
+                  ? false
+                  : true;
+            next.set(i, !cur);
+            return next;
+        });
+    const lastTurnIdxRef = useRef(-1);
+    lastTurnIdxRef.current = (() => {
+        for (let k = renderItems.length - 1; k >= 0; k--) {
+            if (renderItems[k].kind === "turn") return k;
+        }
+        return -1;
+    })();
     const { t } = useT();
     // pending 且本轮尚未产出实质内容（Assistant 文本 / 思考 / 工具）→ 显示 typing dots。
     // 一旦出现 Assistant/AssistantDelta/Thinking/Tool/ToolStart/ToolProgress 即"有反馈"→ 隐藏 dots
@@ -122,6 +143,11 @@ export function MessageList({
             <div className="w-full max-w-3xl mx-auto px-4 py-4 flex flex-col gap-2">
                 {renderItems.map((item, i) => {
                     if (item.kind === "turn") {
+                        const isLast = i === lastTurnIdxRef.current;
+                        // 默认规则：最新回合（流式中）展开，其余收起；用户显式切换覆盖
+                        const collapsed = turnOverride.has(i)
+                            ? turnOverride.get(i)!
+                            : !(pending && isLast);
                         return (
                             <TurnBlock
                                 key={`turn-${item.turnId}`}
@@ -129,6 +155,8 @@ export function MessageList({
                                 live={pending}
                                 openTools={openTools}
                                 toggleTool={toggleTool}
+                                collapsed={collapsed}
+                                onToggle={() => toggleTurn(i)}
                             />
                         );
                     }
