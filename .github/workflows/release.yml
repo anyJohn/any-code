@@ -10,6 +10,44 @@ permissions:
   contents: write
 
 jobs:
+  # anycode-core 包（FR-27 批 3）：server.mjs + web dist + launcher —— install.sh 的
+  # 预编译快路径（跳过 pnpm install/现场构建）；追加资产到同 tag 的 Release。
+  core-bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.8.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build web + server
+        run: |
+          pnpm --filter @any-code/web build
+          pnpm --filter @any-code/server build
+      - name: Vendor rg
+        run: |
+          mkdir -p rg-out
+          find node_modules/.pnpm -type f -name rg -path '*linux-x64*ripgrep*' | head -1 > rg.path
+          cp "$(cat rg.path)" rg-out/rg && chmod +x rg-out/rg
+      - name: Pack core tar（布局镜像 ~/.anycode/app + rg）
+        run: |
+          STAGE=$(mktemp -d)
+          mkdir -p $STAGE/web $STAGE/server/dist $STAGE/build
+          cp -r web/dist/* $STAGE/web/dist/
+          cp server/dist/server.mjs $STAGE/server/dist/
+          cp build/launcher.mjs build/versions.env $STAGE/build/
+          cp rg-out/rg $STAGE/rg
+          tar -czf anycode-core-linux-x64.tar.gz -C $STAGE .
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: anycode-core-linux-x64.tar.gz
+
   release:
     strategy:
       fail-fast: false

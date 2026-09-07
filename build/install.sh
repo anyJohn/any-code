@@ -88,6 +88,11 @@ gh_url() {  # $1=https://github.com/... 或 https://raw.githubusercontent.com/..
     fi
 }
 
+# download 的非致命版：失败返回非 0（预编译快路径探测用）
+download_ok() {  # $1=url  $2=outfile
+    curl -fsSL --connect-timeout 15 --max-time 300 --retry 1 "$1" -o "$2"
+}
+
 command -v curl >/dev/null 2>&1 || err "需要 curl（请先安装）"
 command -v tar >/dev/null 2>&1 || err "需要 tar（请先安装）"
 
@@ -139,9 +144,32 @@ if [ ! -x "$NODE_DIR/bin/node" ]; then
 fi
 info "node: $("$NODE_DIR/bin/node" -v)"
 
+APP="$ANYCODE_HOME/app"
+
+# ---- 1b. 预编译快路径（FR-27）：Releases 有 core 包 → 跳过 pnpm install/构建 ----
+# tar 布局镜像 $APP（web/dist + server/dist/server.mjs + build/launcher.mjs）+ rg。
+# 失败（无产物/网络）→ 走现场构建兜底（下方原流程），安装器永不因此失败。
+PREBUILT=0
+# ANYCODE_CORE_URL 覆盖：自定镜像/离线 file:// 测试；默认 Releases latest
+CORE_URL="${ANYCODE_CORE_URL:-$(gh_url "https://github.com/$ORG/$REPO/releases/latest/download/anycode-core-linux-$ARCH.tar.gz")}"
+if download_ok "$CORE_URL" "$TMP/core.tar.gz" && tar -tzf "$TMP/core.tar.gz" >/dev/null 2>&1; then
+    info "找到预编译产物（Releases latest），跳过源码构建…"
+    safe_rm "$APP"
+    mkdir -p "$APP"
+    tar -xzf "$TMP/core.tar.gz" -C "$APP"
+    RG_DIR="$ANYCODE_HOME/runtime/rg"
+    mkdir -p "$RG_DIR"
+    mv "$APP/rg" "$RG_DIR/rg" && chmod +x "$RG_DIR/rg"
+    PREBUILT=1
+else
+    info "无预编译产物（或下载失败），走现场构建兜底…"
+fi
+
 # ---- 2. pnpm standalone（绕开 corepack 0.29 验签 bug；自带 node）----
 PNPM_DIR="$ANYCODE_HOME/runtime/pnpm"
-if [ ! -x "$PNPM_DIR/pnpm" ]; then
+if [ "$PREBUILT" = "1" ]; then
+    info "快路径：pnpm 不需要（预编译产物自包含）"
+elif [ ! -x "$PNPM_DIR/pnpm" ]; then
     if ldd --version 2>&1 | head -1 | grep -qi musl; then
         PNPM_ASSET="pnpm-linux-x64-musl.tar.gz"
     else
@@ -159,8 +187,9 @@ export PATH="$PNPM_DIR:$NODE_DIR/bin:$PATH"
 info "pnpm: $(pnpm --version)"
 
 # ---- 3. 拉仓库 ----
-APP="$ANYCODE_HOME/app"
-if [ ! -f "$APP/package.json" ]; then
+if [ "$PREBUILT" = "1" ]; then
+    info "快路径：跳过拉仓库"
+elif [ ! -f "$APP/package.json" ]; then
     # REPO_TARBALL_URL 覆盖：支持自定义 fork/mirror/离线 file:// 快照。默认 GitHub codeload（可经 ANYCODE_GH_PROXY 代理）。
     DEFAULT_REPO_URL="https://github.com/$ORG/$REPO/archive/refs/heads/$BRANCH.tar.gz"
     REPO_URL="${REPO_TARBALL_URL:-$(gh_url "$DEFAULT_REPO_URL")}"
@@ -174,6 +203,9 @@ if [ ! -f "$APP/package.json" ]; then
 fi
 
 # ---- 4. 构建 ----
+if [ "$PREBUILT" = "1" ]; then
+    info "快路径：跳过构建（预编译产物已含 server/web）"
+else
 cd "$APP"
 # pnpm install 走镜像 registry（mirror on 时）：rg 等平台子包随之从镜像装，不碰 GitHub。
 # 写 .npmrc 是 pnpm 可靠读取的方式（npm_config_registry env 不一定被 pnpm 采纳）。
@@ -189,7 +221,12 @@ pnpm --filter @any-code/web build
 info "构建 server（esbuild → 自包含 server.mjs）…"
 pnpm --filter @any-code/server build
 
+fi # end 4 构建条件
+
 # ---- 4b. vendor rg / 删 build-only 依赖 ----
+if [ "$PREBUILT" = "1" ]; then
+    info "快路径：跳过 post-process（rg 已随 core 包就位）"
+else
 info "post-process..."
 # vendor rg 二进制：server bundle externalize 了 @vscode/ripgrep（原生二进制），
 # 运行时靠 launcher 注入 ANYCODE_RG_PATH 指向此处（domain ripgrep.ts 降级到此）。
@@ -203,9 +240,10 @@ if [ -n "$RG_SRC" ] && [ -f "$RG_SRC" ]; then
 else
     err "未找到 ripgrep 二进制（@vscode/ripgrep 平台包）"
 fi
-# 删 build-only node_modules（web dist 静态 + server bundle 自包含，运行时不需 node_modules；~700MB）。
+# 删 build-only node_modules（PREBUILT 时无 node_modules，safe_rm 空路径无害——safe_rm 锚定守卫）（web dist 静态 + server bundle 自包含，运行时不需 node_modules；~700MB）。
 # safe_rm 锚定守卫。保留 pnpm（~/.anycode/runtime/pnpm）：未来 anycode update 需要它重建。
 safe_rm "$APP/node_modules"
+fi
 
 # ---- 5. 注册 anycode 到 PATH (generate thin sh shim) ----
 # launcher logic in build/launcher.mjs (node); sh shim just execs private node + launcher.mjs.
