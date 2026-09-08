@@ -14,6 +14,9 @@ module.exports = {
         provider: "github",
         owner: "anyJohn",
         repo: "any-code",
+        // 直接发正式 release（默认 draft 模式与 core-bundle job 先建的正式 release
+        // 冲突——"existing type not compatible" 导致安装包全部跳过上传，v0.0.2 踩坑）
+        releaseType: "release",
     },
     productName: "AnyCode",
     executableName: "anycode", // 避免 @any-code/desktop 派生出含 @ 的可执行名
