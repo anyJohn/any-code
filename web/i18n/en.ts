@@ -62,6 +62,8 @@ export const en: Record<string, string> = {
     "runtime.hideLog": "Hide log",
     "runtime.noLog": "(no output)",
     "runtime.truncated": "Output too long — earlier content dropped",
+    "chat.skillView": "View",
+    "chat.skillHide": "Hide",
     "perm.sessionMode": "Permission mode",
     "perm.standard": "Standard",
     "perm.acceptEdits": "Accept edits",

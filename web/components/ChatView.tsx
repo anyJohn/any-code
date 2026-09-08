@@ -152,6 +152,12 @@ export function ChatView({
             if (el) el.scrollTop = el.scrollHeight;
         });
         const task = command.draft;
+        // 斜杠草稿走指令展开（发送按钮与 Enter 行为一致）
+        if (task.trim().startsWith("/")) {
+            command.setDraft("");
+            command.runRawCommand(task);
+            return;
+        }
         let message = task;
         if (fileRef.chips.length) {
             message =

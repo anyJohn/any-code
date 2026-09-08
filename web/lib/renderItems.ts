@@ -49,7 +49,8 @@ export function groupByTurn(
     const items: TurnItem[] = [];
     let cur: TurnItem | null = null;
     const flush = () => {
-        if (cur && (cur.assistant || cur.tools.length || cur.iteration)) {
+        // 仅 Iteration 的空回合不渲染（停止/权限中断只剩一行 "Iteration N"，是噪音）
+        if (cur && (cur.assistant || cur.tools.length || cur.thinking)) {
             items.push(cur);
         }
         cur = null;

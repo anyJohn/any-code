@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { CommandItem } from "@/hooks/useCommand";
@@ -75,6 +75,15 @@ export function InputBox({
     // 压缩占用会话：发送必 409——输入禁用 + 占位文案，别让用户白打
     const busy = pending || compacting;
     const taRef = useRef<HTMLTextAreaElement>(null);
+    const cmdListRef = useRef<HTMLDivElement>(null);
+
+    // 高亮项滚入可视区（键盘导航时弹层跟随）
+    useEffect(() => {
+        if (!commandOpen) return;
+        cmdListRef.current
+            ?.querySelector(`[data-cmd-idx="${highlight}"]`)
+            ?.scrollIntoView({ block: "nearest" });
+    }, [highlight, commandOpen]);
 
     // 自动增高（按内容，上限 160px 后滚动）
     useLayoutEffect(() => {
@@ -108,28 +117,54 @@ export function InputBox({
         <div className="shrink-0 w-full max-w-3xl mx-auto px-4 py-3">
             <div className="relative">
                 {commandOpen && (
-                    <div className="absolute bottom-full left-0 right-0 mb-1 rounded-lg border border-border bg-popover shadow-md max-h-60 overflow-y-auto z-10">
-                        {filtered.map((c, i) => (
-                            <button
-                                key={c.name}
-                                type="button"
-                                className={cn(
-                                    "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm",
-                                    i === highlight
-                                        ? "bg-accent"
-                                        : "hover:bg-accent/50"
-                                )}
-                                onMouseEnter={() => setHighlight(i)}
-                                onClick={() => runCommand(c.name)}
-                            >
-                                <span className="font-mono text-primary shrink-0">
-                                    /{c.name}
-                                </span>
-                                <span className="text-xs text-muted-foreground truncate">
-                                    {c.desc}
-                                </span>
-                            </button>
-                        ))}
+                    <div
+                        ref={cmdListRef}
+                        className="absolute bottom-full left-0 right-0 mb-1 rounded-lg border border-border bg-popover shadow-md max-h-60 overflow-y-auto z-10"
+                    >
+                        {(() => {
+                            // 分组：普通命令在上，技能指令在 "Skills" 标题下（用户需求 2026-09-07）
+                            const normal = filtered.filter((c) => !c.skill);
+                            const skills = filtered.filter((c) => c.skill);
+                            const indexOf = new Map(
+                                filtered.map((c, i) => [c.name, i])
+                            );
+                            const renderItem = (c: CommandItem) => {
+                                const i = indexOf.get(c.name) ?? 0;
+                                return (
+                                    <button
+                                        key={`${c.skill ? "s" : "c"}-${c.name}`}
+                                        type="button"
+                                        data-cmd-idx={i}
+                                        className={cn(
+                                            "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm",
+                                            i === highlight
+                                                ? "bg-accent"
+                                                : "hover:bg-accent/50"
+                                        )}
+                                        onMouseEnter={() => setHighlight(i)}
+                                        onClick={() => runCommand(c.name)}
+                                    >
+                                        <span className="font-mono text-primary shrink-0">
+                                            /{c.name}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground truncate">
+                                            {c.desc}
+                                        </span>
+                                    </button>
+                                );
+                            };
+                            return (
+                                <>
+                                    {normal.map(renderItem)}
+                                    {skills.length > 0 && normal.length > 0 && (
+                                        <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70 border-t border-border/60">
+                                            Skills
+                                        </div>
+                                    )}
+                                    {skills.map(renderItem)}
+                                </>
+                            );
+                        })()}
                     </div>
                 )}
                 {filePopoverOpen && (
@@ -192,6 +227,8 @@ export function InputBox({
                             className="flex-1 resize-none border-0 outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 bg-transparent text-sm leading-6 max-h-40 overflow-y-auto py-1.5"
                             onChange={(e) => setDraft(e.target.value)}
                             onKeyDown={(e) => {
+                                // IME 组合中（中文输入确认候选词的 Enter）不触发任何发送/指令
+                                if (e.nativeEvent.isComposing) return;
                                 // Alt+Enter 换行（优先，无视弹层）
                                 if (e.altKey && e.key === "Enter") {
                                     e.preventDefault();
@@ -201,14 +238,13 @@ export function InputBox({
                                 if (commandOpen) {
                                     if (e.key === "ArrowDown") {
                                         e.preventDefault();
-                                        setHighlight((h) => (h + 1) % filtered.length);
+                                        // 钳制到边界（不循环）——到底即停
+                                        setHighlight((h) => Math.min(h + 1, filtered.length - 1));
                                         return;
                                     }
                                     if (e.key === "ArrowUp") {
                                         e.preventDefault();
-                                        setHighlight(
-                                            (h) => (h - 1 + filtered.length) % filtered.length
-                                        );
+                                        setHighlight((h) => Math.max(h - 1, 0));
                                         return;
                                     }
                                     // Tab 补全指令名（填入输入框，不执行）；

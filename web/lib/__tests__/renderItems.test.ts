@@ -113,8 +113,9 @@ describe("toRenderItems (TEST-005 TC-005.4, B-003 sub-agent)", () => {
             ev("Iteration", "i2", { turnId: "t2" }),
         ];
         const items = toRenderItems(events);
-        // turn(t1) → single(Warning) → turn(t2) —— Warning 非终态，不进 TERMINAL，不结束流
-        expect(items.map((i) => i.kind)).toEqual(["turn", "single", "turn"]);
+        // turn(t1) → single(Warning) —— Warning 非终态，不结束流；
+        // 尾部仅 Iteration 的空回合（t2）不渲染
+        expect(items.map((i) => i.kind)).toEqual(["turn", "single"]);
         const w = items[1];
         if (w.kind === "single") expect(w.event.type).toBe("Warning");
     });

@@ -63,6 +63,8 @@ export const zh: Record<string, string> = {
     "runtime.hideLog": "收起日志",
     "runtime.noLog": "（无输出）",
     "runtime.truncated": "输出过长，早期内容已丢弃",
+    "chat.skillView": "查看",
+    "chat.skillHide": "收起",
     "perm.sessionMode": "权限模式",
     "perm.standard": "标准",
     "perm.acceptEdits": "编辑信任",

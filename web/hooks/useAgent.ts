@@ -128,14 +128,19 @@ export function useAgent(
                 seen.add(k);
             }
             setEvents((prev) => {
-                // 去重：server 的 User 事件与乐观插入的 user 气泡重复（同 message），跳过
-                if (
-                    e.type === "User" &&
-                    prev.length > 0 &&
-                    prev[prev.length - 1].type === "User" &&
-                    prev[prev.length - 1].message === e.message
-                ) {
-                    return prev;
+                // server 的 User 回显与乐观气泡同文则跳过。匹配 id=local-* 而非相邻
+                // （create 阶段事件可能插在中间），忽略首尾空白（server 会 trim 任务）
+                if (e.type === "User") {
+                    const msg = e.message?.trim();
+                    const hit =
+                        msg !== undefined &&
+                        prev.some(
+                            (p) =>
+                                p.type === "User" &&
+                                p.id.startsWith("local") &&
+                                p.message?.trim() === msg
+                        );
+                    if (hit) return prev;
                 }
                 return [
                     ...prev,
@@ -248,55 +253,63 @@ export function useAgent(
         []
     );
 
+    // 同步提交闸门：pending 是异步 state，拦不住同帧重入（双 Enter/IME 连发）
+    const submitGateRef = useRef(false);
+
     const submit = useCallback(
         async (task: string) => {
-            if (!task.trim() || pending) return;
-            setPending(true);
+            if (!task.trim() || pending || submitGateRef.current) return;
+            submitGateRef.current = true;
+            try {
+                setPending(true);
 
-            // 两步法：新对话先建 session
-            let sid = currentSessionId;
-            if (!sid) {
-                try {
-                    const cr = await fetch("/api/sessions", {
-                        method: "POST",
-                        headers: { "content-type": "application/json" },
-                        body: JSON.stringify({ workspacePath: rootPath }),
-                    });
-                    if (!cr.ok) {
+                // 两步法：新对话先建 session
+                let sid = currentSessionId;
+                if (!sid) {
+                    try {
+                        const cr = await fetch("/api/sessions", {
+                            method: "POST",
+                            headers: { "content-type": "application/json" },
+                            body: JSON.stringify({ workspacePath: rootPath }),
+                        });
+                        if (!cr.ok) {
+                            setPending(false);
+                            return;
+                        }
+                        const created = (await cr.json()) as { sessionId: string };
+                        sid = created.sessionId;
+                        setCurrentSessionId(sid);
+                        // replaceState 不触发路由重渲染（保留在途流），刷新后能落到 /chat/{sid}
+                        window.history.replaceState(null, "", `/chat/${sid}`);
+                    } catch {
                         setPending(false);
                         return;
                     }
-                    const created = (await cr.json()) as { sessionId: string };
-                    sid = created.sessionId;
-                    setCurrentSessionId(sid);
-                    // replaceState 不触发路由重渲染（保留在途流），刷新后能落到 /chat/{sid}
-                    window.history.replaceState(null, "", `/chat/${sid}`);
-                } catch {
-                    setPending(false);
-                    return;
                 }
+
+                // 乐观插入用户消息气泡（右对齐）：不等 SSE 往返，立刻显示
+                setEvents((prev) => [
+                    ...prev,
+                    {
+                        id: nextId("local"),
+                        timestamp: Date.now(),
+                        type: "User",
+                        message: task,
+                    },
+                ]);
+
+                const ac = new AbortController();
+                abortRef.current = ac;
+                lastSeqRef.current = -1;
+                await pump(sid, `/api/sessions/${sid}/run`, {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ task, workspacePath: rootPath }),
+                }, ac);
+                abortRef.current = null;
+            } finally {
+                submitGateRef.current = false;
             }
-
-            // 乐观插入用户消息气泡（右对齐）：不等 SSE 往返，立刻显示
-            setEvents((prev) => [
-                ...prev,
-                {
-                    id: nextId("local"),
-                    timestamp: Date.now(),
-                    type: "User",
-                    message: task,
-                },
-            ]);
-
-            const ac = new AbortController();
-            abortRef.current = ac;
-            lastSeqRef.current = -1;
-            await pump(sid, `/api/sessions/${sid}/run`, {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ task, workspacePath: rootPath }),
-            }, ac);
-            abortRef.current = null;
         },
         [currentSessionId, rootPath, pending, pump]
     );

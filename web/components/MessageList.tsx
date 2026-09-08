@@ -150,7 +150,8 @@ export function MessageList({
                             : !(pending && isLast);
                         return (
                             <TurnBlock
-                                key={`turn-${item.turnId}`}
+                                // turnId 不唯一（sub-agent 块可把同回合切成多段），加 startIdx
+                                key={`turn-${item.startIdx ?? i}-${item.turnId}`}
                                 item={item}
                                 live={pending}
                                 openTools={openTools}
@@ -163,7 +164,7 @@ export function MessageList({
                     if (item.kind === "subagent") {
                         return (
                             <SubagentBlock
-                                key={`sub-${item.runId}`}
+                                key={`sub-${item.startIdx ?? i}-${item.runId}`}
                                 runId={item.runId}
                                 author={item.author}
                                 events={item.events}
@@ -329,6 +330,17 @@ function UserBubble({
     const { t } = useT();
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState(event.message);
+    const [showSkillBody, setShowSkillBody] = useState(false);
+
+    // 技能调用标记（首行 "/name args"，斜杠指令程序化 submit）：渲染为徽标 + 参数，正文可展开
+    const nl = event.message.indexOf("\n");
+    const skillMatch = event.message
+        .slice(0, nl === -1 ? undefined : nl)
+        .trim()
+        .match(/^\/([\w-]+)(?:\s+([\s\S]+))?$/);
+    const skillName = skillMatch?.[1];
+    const skillArgs = skillMatch?.[2]?.trim();
+    const skillBody = skillName ? (nl === -1 ? "" : event.message.slice(nl + 1).trim()) : "";
 
     if (editing) {
         return (
@@ -365,6 +377,34 @@ function UserBubble({
                             <Check className="size-3.5" />
                         </button>
                     </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (skillName && !editing) {
+        return (
+            <div key={event.id} className="flex justify-end py-2 group/msg">
+                <div className="max-w-[80%] flex flex-col items-end gap-0.5">
+                    <div className="rounded-2xl rounded-br-sm bg-primary/15 px-3 py-1.5 text-xs inline-flex items-center gap-1.5 max-w-full">
+                    <span className="font-mono text-primary shrink-0">/{skillName}</span>
+                    {skillArgs && (
+                        <span className="text-foreground whitespace-pre-wrap break-words min-w-0">
+                            {skillArgs}
+                        </span>
+                    )}
+                    <button
+                        onClick={() => setShowSkillBody((v) => !v)}
+                        className="text-muted-foreground hover:text-foreground underline shrink-0"
+                    >
+                        {showSkillBody ? t("chat.skillHide") : t("chat.skillView")}
+                    </button>
+                </div>
+                    {showSkillBody && (
+                        <div className="max-h-40 overflow-auto rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs whitespace-pre-wrap break-words max-w-full">
+                            {skillBody}
+                        </div>
+                    )}
                 </div>
             </div>
         );

@@ -241,6 +241,22 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         });
     });
 
+    // 技能目录（SPEC-037 后续：/skill_name 斜杠指令）——name + description
+    app.get("/api/workspaces/:projectKey/skills", (c) => {
+        const workspace = resolveWorkspace(c.req.param("projectKey"));
+        if (!workspace) return c.json({ statusMessage: "workspace not found" }, 404);
+        try {
+            const skills = [...resolveSkills(workspace).values()].map((s) => ({
+                name: s.name,
+                description: s.description,
+                content: s.content,
+            }));
+            return c.json(skills);
+        } catch {
+            return c.json([]);
+        }
+    });
+
     app.get("/api/workspaces/:projectKey/commands", (c) => {
         const projectKey = c.req.param("projectKey");
         const workspace = resolveWorkspace(projectKey);

@@ -7,6 +7,8 @@ export interface CommandItem {
     name: string;
     desc: string;
     body?: string;
+    /** true = 技能指令（/skill_name，弹层分组在 Skills 标题下） */
+    skill?: boolean;
 }
 
 // desc 存 i18n key（command.*）：useCommand 内经 t() 渲染成当前语言文案
@@ -40,6 +42,7 @@ export function useCommand({ appendSystem, submit, projectKey, rootPath, current
     const navigate = useNavigate();
     const { t } = useT();
     const [customCommands, setCustomCommands] = useState<CommandItem[]>([]);
+    const [skillCommands, setSkillCommands] = useState<CommandItem[]>([]);
     const [draft, setDraft] = useState("");
     // /compact 进行中（调摘要 LLM 数秒）：驱动进度条（阶段 + 流式已生成计数）
     const [compacting, setCompacting] = useState(false);
@@ -64,13 +67,36 @@ export function useCommand({ appendSystem, submit, projectKey, rootPath, current
         };
     }, [projectKey]);
 
+    // 已安装技能以 /<name> 暴露为斜杠指令，desc = 技能描述
+    useEffect(() => {
+        if (!projectKey) return;
+        let cancelled = false;
+        apiJson<{ name: string; description: string; content: string }[]>(
+            `/api/workspaces/${projectKey}/skills`
+        ).then((list) => {
+            if (cancelled) return;
+            setSkillCommands(
+                (list ?? []).map((s) => ({
+                    name: s.name,
+                    desc: s.description,
+                    body: s.content,
+                    skill: true,
+                }))
+            );
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [projectKey]);
+
     // desc 是 i18n key：统一在此经 t() 翻译成当前语言（命令弹层 filtered 与 /help 共用）
     const commandList = useMemo<CommandItem[]>(
         () => [
             ...BUILTIN_COMMANDS.map((c) => ({ ...c, desc: t(c.desc) })),
             ...customCommands.map((c) => ({ ...c, desc: t(c.desc) })),
+            ...skillCommands,
         ],
-        [t, customCommands]
+        [t, customCommands, skillCommands]
     );
 
     const commandMode = draft.startsWith("/");
@@ -227,6 +253,16 @@ export function useCommand({ appendSystem, submit, projectKey, rootPath, current
                     return;
                 }
                 default: {
+                    // 技能指令：正文展开注入 + 参数追加（业界 /skill 语义）
+                    const skill = skillCommands.find((c) => c.name === name);
+                    if (skill && skill.body != null) {
+                        // 首行 "/name args" 是渲染标记（UserBubble 显示徽标）；
+                        // trim：server 会 trim 任务，须与回显一致（去重依赖）
+                        submit(
+                            `/${name}${args ? ` ${args}` : ""}\n\n${skill.body}`.trim()
+                        );
+                        return;
+                    }
                     const custom = customCommands.find((c) => c.name === name);
                     if (custom && custom.body != null) {
                         submit(custom.body + (args ? "\n" + args : ""));
@@ -241,6 +277,8 @@ export function useCommand({ appendSystem, submit, projectKey, rootPath, current
             navigate,
             projectKey,
             rootPath,
+            skillCommands,
+            submit,
             currentSessionId,
             customCommands,
             submit,

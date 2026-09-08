@@ -36,16 +36,22 @@ export function CopyButton({ text, className }: { text: string; className?: stri
     );
 }
 
-/** 代码块：语言标签 + 复制按钮 + 横向滚动（SPEC-036 B-001/B-004）。 */
+/** 代码块：语言标签 + 复制按钮 + 横向滚动（SPEC-036 B-001/B-004）。
+ *  pre 的 children 是 react-markdown 给的 <code> 元素，须解包取其 props 再渲染——
+ *  否则嵌套裸 code 会被排版插件的行内代码样式命中，亮色主题下浅字浅底不可读。 */
 const CodeBlock = memo(function CodeBlock({
-    className,
     children,
 }: {
     className?: string;
     children?: React.ReactNode;
 }) {
-    const lang = /language-(\w+)/.exec(className ?? "")?.[1];
-    const raw = extractText(children);
+    const codeEl = Array.isArray(children) ? children[0] : children;
+    const codeProps =
+        codeEl && typeof codeEl === "object" && "props" in codeEl
+            ? (codeEl as { props: { className?: string; children?: React.ReactNode } }).props
+            : undefined;
+    const lang = /language-(\w+)/.exec(codeProps?.className ?? "")?.[1];
+    const raw = extractText(codeProps?.children);
     return (
         <div className="group/code relative my-3">
             <div className="flex items-center justify-between rounded-t-md border border-zinc-800 bg-zinc-900 px-3 py-1">
@@ -55,8 +61,10 @@ const CodeBlock = memo(function CodeBlock({
                     className="p-1 rounded hover:bg-zinc-800 text-zinc-400"
                 />
             </div>
-            <pre className="rounded-t-none border border-t-0 border-zinc-800 bg-zinc-950 overflow-x-auto p-3 text-xs leading-relaxed text-zinc-100 [&>code]:bg-transparent [&>code]:!px-0 [&>code]:!py-0">
-                <code className={`${className ?? ""} hljs-dark`.trim()}>{children}</code>
+            <pre className="!m-0 rounded-t-none border border-t-0 border-zinc-800 bg-zinc-950 overflow-x-auto p-3 text-xs leading-relaxed text-zinc-100 [&>code]:bg-transparent [&>code]:!px-0 [&>code]:!py-0">
+                <code className={`hljs-dark ${codeProps?.className ?? ""}`.trim()}>
+                    {codeProps?.children}
+                </code>
             </pre>
         </div>
     );
