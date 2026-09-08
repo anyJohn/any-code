@@ -134,11 +134,18 @@ export async function agentLoop(
         // 同一回合的 ITERATION/ASSISTANT/TOOL 事件共用 turnId,
         // 前端据此把 "assistant 文本 + 紧随的工具调用" 组成块状展示。
         const turnId = randomUUID();
-        ctx.eventStream.submit({
-            type: "Iteration",
-            message: `Iteration ${i + 1}/${maxIter}`,
-            turnId,
-        });
+        // ITERATION 惰性发射：推迟到本回合首个实质事件（delta/思考/参数心跳/正文/工具）
+        // 才发——abort 在吐字前、超限重试（i-=1 重走循环）等情况不再产生空回合
+        let iterationSent = false;
+        const ensureIteration = () => {
+            if (iterationSent) return;
+            iterationSent = true;
+            ctx.eventStream.submit({
+                type: "Iteration",
+                message: `Iteration ${i + 1}/${maxIter}`,
+                turnId,
+            });
+        };
         // AR-23：运行时断言——进入请求的非 system 消息必须已确认落盘。
         // 破坏只告警不阻断（审计信号，非安全闸）；每 run 至多一次防刷屏。
         if (ctx.logInvariant && !ctx.logInvariant.warned) {
@@ -159,29 +166,35 @@ export async function agentLoop(
                 ctx.signal,
                 // 流式 delta：每段 text 到达即发 ASSISTANT_DELTA（实时态，不入盘）。
                 // 非流式 provider 不调 onDelta，无 delta 事件。
-                (delta) =>
+                (delta) => {
+                    ensureIteration();
                     ctx.eventStream.submit({
                         type: "AssistantDelta",
                         message: delta,
                         turnId,
-                    }),
+                    });
+                },
                 ctx.llm,
                 // 思考内容（reasoning_content）：部分模型支持，发 THINKING 事件
-                (delta) =>
+                (delta) => {
+                    ensureIteration();
                     ctx.eventStream.submit({
                         type: "Thinking",
                         message: delta,
                         turnId,
-                    }),
+                    });
+                },
                 // tool_call arguments 流式心跳：每 2KB 发 TOOL_ARG_PROGRESS（只 bytes+name），
                 // 避免 LLM 流式输出大 write content 时事件流静默冻屏。SPEC-022 B-002 / DEC-076
-                (info) =>
+                (info) => {
+                    ensureIteration();
                     ctx.eventStream.submit({
                         type: "ToolArgProgress",
                         message: info.name ?? "tool",
                         data: { bytes: info.bytes, name: info.name },
                         turnId,
-                    }),
+                    });
+                },
                 // 重试可见性（AR-1）：Warning durable 事件，前端 amber 行展示
                 (info) =>
                     ctx.eventStream.submit({
@@ -224,6 +237,7 @@ export async function agentLoop(
         // abort 截断：callLLM 返回已累积的截断 message（仅 content），定稿落盘后返回 stopped
         if (ctx.signal.aborted) {
             if (msg?.content) {
+                ensureIteration(); // 截断有正文也算实质回合（否则 delta 已发过，无副作用）
                 messages.push(msg);
                 await onMessage?.(msg);
                 ctx.eventStream.submit({
@@ -236,6 +250,7 @@ export async function agentLoop(
         }
         messages.push(msg);
         await onMessage?.(msg);
+        ensureIteration(); // 非流式/无 delta 时保证 ITERATION 先于本回合实质事件
         if (msg.content) {
             ctx.eventStream.submit({
                 type: "Assistant",
