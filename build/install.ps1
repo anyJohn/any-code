@@ -31,6 +31,7 @@ function Safe-Remove($p) {
 
 function Info($m) { Write-Host ">> $m" }
 function Die($m) { Write-Host "!! anycode install failed: $m" -ForegroundColor Red; exit 1 }
+function Warn($m) { Write-Host "!! $m" -ForegroundColor Yellow }
 
 # ===== Mirror detection (auto=timezone CN, privacy-friendly, no IP service; ANYCODE_MIRROR=cn|none override) =====
 function Test-CnTz {
@@ -127,16 +128,39 @@ if (-not (Test-Path (Join-Path $NodeDir 'node.exe'))) {
 $env:PATH = "$NodeDir;$env:PATH"
 Info "node: $(node -v)"
 
-# ---- 2. busybox-w32 (agent bash tool; single ~700KB exe = sh + coreutils, no extraction) ----
-# only sh+coreutils (~1MB) -- enough for the agent's bash tool, no full git distribution.
+# ---- 2. agent bash tool ----
+# primary: MinGit (git-for-windows) -- usr/bin/sh.exe IS bash (POSIX mode) with a full GNU
+# toolchain (grep --include / sed -i / ssh all work; busybox lacked them, user feedback).
+# fallback: busybox-w32 (~1MB, crippled toolchain) when MinGit download fails.
+$MinGitVer = '2.47.1'
+$MinGitDir = Join-Path $AnycodeHome 'runtime\PortableGit'
+$MinGitSh = Join-Path $MinGitDir 'usr\bin\sh.exe'
 $BusyboxDir = Join-Path $AnycodeHome 'runtime\busybox'
-$ShExe = Join-Path $BusyboxDir 'sh.exe'
-if (-not (Test-Path $ShExe)) {
-    Safe-Remove $BusyboxDir
-    $null = New-Item -ItemType Directory -Force -Path $BusyboxDir
-    Invoke-WebRequest-WithRetry -Url 'https://frippery.org/files/busybox/busybox64.exe' -OutFile $ShExe
-    if (-not (Test-Path $ShExe)) { Die "busybox-w32 download failed" }
+$BusyboxSh = Join-Path $BusyboxDir 'sh.exe'
+if (-not (Test-Path $MinGitSh)) {
+    Safe-Remove $MinGitDir
+    $null = New-Item -ItemType Directory -Force -Path $MinGitDir
+    $MinGitZip = Join-Path $Tmp 'mingit.zip'
+    $MinGitUrl = "https://github.com/git-for-windows/git/releases/download/v$MinGitVer.windows.1/MinGit-$MinGitVer-64-bit.zip"
+    Info "pull MinGit $MinGitVer (~45MB, full GNU toolchain for the bash tool)..."
+    Invoke-WebRequest-WithRetry -Url (Get-GhUrl $MinGitUrl) -OutFile $MinGitZip
+    if (-not (Test-Path $MinGitZip)) { Warn "MinGit download failed - falling back to busybox" }
+    else {
+        Expand-Archive -Path $MinGitZip -DestinationPath $MinGitDir -Force
+        Safe-Remove $MinGitZip
+    }
 }
+if (-not (Test-Path $MinGitSh)) {
+    Warn "using busybox-w32 as the bash tool (limited toolchain)"
+    if (-not (Test-Path $BusyboxSh)) {
+        Safe-Remove $BusyboxDir
+        $null = New-Item -ItemType Directory -Force -Path $BusyboxDir
+        Invoke-WebRequest-WithRetry -Url 'https://frippery.org/files/busybox/busybox64.exe' -OutFile $BusyboxSh
+        if (-not (Test-Path $BusyboxSh)) { Die "busybox-w32 download failed" }
+    }
+}
+# agent bash = MinGit sh when available, else busybox
+$ShExe = if (Test-Path $MinGitSh) { $MinGitSh } else { $BusyboxSh }
 
 # ---- 3. repo ----
 $App = Join-Path $AnycodeHome 'app'

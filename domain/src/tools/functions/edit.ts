@@ -31,23 +31,11 @@ export const editFunc = async (
             await fs.readFile(filePath)
         );
 
-        if (!content.includes(oldString)) {
-            return { content: `Error: oldString not found in file. Cannot perform replacement.` };
-        }
-
-        const occurrences = (
-            content.match(
-                new RegExp(
-                    oldString.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-                    "g"
-                )
-            ) || []
-        ).length;
-
-        if (occurrences > 1) {
-            return {
-                content: `Error: oldString appears ${occurrences} times in the file. Please make the oldString more specific to match only once.`,
-            };
+        // CRLF 归一化：Windows 项目文件普遍是 CRLF，模型给的 oldString 几乎总是 LF——
+        // 不归一化则匹配必失败（Windows 上 edit 不可用的根因）。写回时还原 CRLF。
+        const edit = applyEdit(content, oldString, newString);
+        if (!edit.ok) {
+            return { content: `Error: ${edit.error}` };
         }
 
         const stalenessWarn = stalenessWarning(
@@ -56,10 +44,9 @@ export const editFunc = async (
             "编辑"
         );
 
-        const newContent = content.replace(oldString, newString);
         await fs.writeFile(
             filePath,
-            encoding === "gbk" ? iconv.encode(newContent, "gbk") : Buffer.from(newContent, "utf8"),
+            encoding === "gbk" ? iconv.encode(edit.content, "gbk") : Buffer.from(edit.content, "utf8"),
         );
         recordMtime(ctx.fileState, filePath);
 
@@ -74,3 +61,39 @@ export const editFunc = async (
         return { content: `Error: ${String(error)}` };
     }
 };
+
+/**
+ * 编辑核心（纯函数，可单测）：
+ * - CRLF 文件先把内容与 old/new 归一化为 LF 再匹配替换，写回前还原 CRLF——
+ *   Windows 项目文件普遍 CRLF，模型给的 oldString 几乎总是 LF（不归一化必失败）；
+ * - 唯一性校验照旧：0 次或多次命中都报错。
+ */
+export function applyEdit(
+    content: string,
+    oldString: string,
+    newString: string
+): { ok: boolean; content: string; crlf: boolean; error?: string } {
+    const crlf = content.includes("\r\n");
+    const norm = (t: string) => (crlf ? t.replace(/\r\n/g, "\n") : t);
+    const body = norm(content);
+    const oldN = norm(oldString);
+    const newN = norm(newString);
+
+    if (!body.includes(oldN)) {
+        return { ok: false, content, crlf, error: "oldString not found in file. Cannot perform replacement." };
+    }
+    const occurrences = (
+        body.match(new RegExp(oldN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) || []
+    ).length;
+    if (occurrences > 1) {
+        return {
+            ok: false,
+            content,
+            crlf,
+            error: "oldString appears " + occurrences + " times in the file. Please make the oldString more specific to match only once.",
+        };
+    }
+    let result = body.replace(oldN, newN);
+    if (crlf) result = result.replace(/\n/g, "\r\n");
+    return { ok: true, content: result, crlf };
+}

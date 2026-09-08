@@ -12,16 +12,22 @@ import { globalConfigDir } from "./workspace";
 export const SYSTEM_GIT_BASH = "C:\\Program Files\\Git\\bin\\bash.exe";
 
 /**
- * Windows bash 候选序：ANYCODE_BASH_PATH（桌面/launcher 注入，同 ANYCODE_RG_PATH 模式）
- * → config.gitBashPath（install.ps1 写入）→ 安装器下发的 busybox-w32 → 系统 Git for Windows。
- * 存在性过滤后取首个。
+ * Windows bash 候选序（bugfix 2026-09-08：busybox 工具链残缺——grep --include/sed -i/ssh
+ * 全缺，User 反馈 #22/25）。改为优先完整 GNU 工具链：
+ * 1. config.gitBashPath（install.ps1 现写 MinGit 的 usr/bin/sh.exe；若仍指向旧 busybox 则跳过，
+ *    交给后面的 busybox 候选兜底）
+ * 2. 系统 Git for Windows（多数 Windows 开发机已装）
+ * 3. ANYCODE_BASH_PATH（桌面/launcher 注入的 busybox，无 Git 时的兜底）
+ * 4. 安装器 runtime busybox
  */
 export function bashCandidates(gitBashPath?: string): string[] {
+    const busyboxLike = (p?: string) => !!p && p.toLowerCase().includes("busybox");
+    const configBash = !busyboxLike(gitBashPath) ? gitBashPath : undefined;
     return [
-        process.env.ANYCODE_BASH_PATH,
-        gitBashPath,
-        join(globalConfigDir(), "runtime", "busybox", "sh.exe"),
+        configBash,
         SYSTEM_GIT_BASH,
+        process.env.ANYCODE_BASH_PATH,
+        join(globalConfigDir(), "runtime", "busybox", "sh.exe"),
     ].filter((x): x is string => !!x && existsSync(x));
 }
 
@@ -48,6 +54,7 @@ export function resolveShellKind(gitBashPath?: string): ShellKind {
     if (!binary) return "none";
     const lower = binary.toLowerCase();
     if (lower.includes("busybox")) return "busybox";
-    if (lower.includes("git") || lower.includes("bash")) return "git-bash";
+    // MinGit 只带 usr/bin/sh.exe（实为 bash POSIX 模式 + 完整 GNU 工具链），也算 git-bash
+    if (lower.includes("git") || lower.includes("bash") || lower.includes("portablegit")) return "git-bash";
     return "unknown";
 }
