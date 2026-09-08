@@ -288,11 +288,20 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         const ignored = c.req.query("ignored") === "1";
         const args = ["--files"];
         if (ignored) args.push("--no-ignore", "--hidden");
-        const { stdout } = await runRipgrep(args, { cwd: workspace.rootPath });
+        // 目录不存在（僵尸工作区）/ rg 失败要显式报错——吞掉会让文件 tab 静默显示为空
+        if (!existsSync(workspace.rootPath)) {
+            return c.json({ statusMessage: `工作区目录不存在：${workspace.rootPath}` }, 400);
+        }
+        const { stdout, stderr, code } = await runRipgrep(args, { cwd: workspace.rootPath });
+        if (code === null || code === 2) {
+            return c.json({ statusMessage: stderr.trim() || "ripgrep 执行失败" }, 400);
+        }
         const allList = stdout
             .split("\n")
             .map((l) => l.trim())
             .filter(Boolean)
+            // Windows 上 rg 输出反斜杠路径——统一成 /，前端建树按 / 切分
+            .map((p) => p.replace(/\\/g, "/"))
             .map((p) => ({ path: p, name: basename(p) }));
         const out = q
             ? allList

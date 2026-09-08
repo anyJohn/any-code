@@ -3,10 +3,9 @@
  * 拷贝 web/dist（静态 SPA）+ rg（linux+win 平台二进制）+ busybox（win）→ desktop/resources/。
  * 由 `pnpm build` 先跑，然后 electron-builder 把 resources/ 打进 extraResources。
  */
-import { cpSync, mkdirSync, existsSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, existsSync, rmSync, writeFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execSync } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", ".."); // repo root
@@ -24,16 +23,33 @@ function copy(src, dst) {
     return true;
 }
 
-/** 用 find 定位 ripgrep 平台二进制（跟 install.sh 一样；isolated 下 require.resolve 找不到传递依赖）。
- *  pkgPart 匹配 pnpm 目录里的包名片段（如 'ripgrep-darwin-arm64'），bin 是包内二进制名。 */
+/** 定位 ripgrep 平台二进制（isolated pnpm 布局下 require.resolve 找不到传递依赖）。
+ *  纯 Node 实现——不要用 shell `find`：Windows runner 的 find.exe 语法不兼容，
+ *  会导致所有平台二进制静默 skip（v0.0.2 Windows 安装包缺 rg 的根因）。 */
 function findRg(pkgPart, bin) {
-    try {
-        return execSync(
-            `find "${NODE_MODULES}" -path "*${pkgPart}*/bin/${bin}" -type f 2>/dev/null | head -1`,
-        ).toString().trim();
-    } catch {
-        return "";
+    // 直接依赖路径（desktop devDep → node_modules/@vscode/ripgrep-*，pnpm 下是 symlink）
+    const direct = join(NODE_MODULES, "@vscode", pkgPart, "bin", bin);
+    if (existsSync(direct)) return direct;
+    // 兜底：遍历 node_modules 找任意布局下的 @vscode/<pkgPart>/bin/<bin>
+    const stack = [NODE_MODULES];
+    const want = join("@vscode", pkgPart, "bin", bin);
+    while (stack.length) {
+        const dir = stack.pop();
+        let entries;
+        try {
+            entries = readdirSync(dir, { withFileTypes: true });
+        } catch {
+            continue;
+        }
+        for (const e of entries) {
+            const p = join(dir, e.name);
+            if (e.isDirectory()) stack.push(p);
+            else if (e.isFile() && p.replaceAll("\\", "/").endsWith(want.replaceAll("\\", "/")))
+                return p;
+        }
+        if (stack.length > 5000) break; // 防御：异常深的树
     }
+    return "";
 }
 
 console.log(">> staging desktop resources →", RESOURCES);
