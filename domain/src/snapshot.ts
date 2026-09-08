@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { createStreamDecoder } from "./textDecode";
 import fs from "node:fs";
 import path from "node:path";
 import { globalConfigDir } from "./workspace";
@@ -79,6 +80,11 @@ function gitEnv(): Record<string, string> {
     };
 }
 
+// 实际使用的 git 二进制：createSnapshotService 的 git() 注入 resolveGitPath 结果。
+// runGit 硬编码 "git" 会在 Windows（git 不在系统 PATH、靠 gitHint 定位）全量静默失败——
+// available() 报可用而每条命令 ENOENT，变更 tab 永远为空（bugfix 2026-09-08）。
+let runBin = "git";
+
 /** 异步 git 调用（不阻塞事件循环）；cwd 显式锚定，pathspec 不随进程 cwd 漂移。 */
 function runGit(
     args: string[],
@@ -86,20 +92,24 @@ function runGit(
     opts: { workTree?: string; cwd?: string }
 ): Promise<{ ok: boolean; out: string }> {
     const full = [
+        // 中文文件名不转八进制转义（Windows/中文仓库变更列表可读）
+        "-c", "core.quotepath=false",
         "--git-dir", gitDir,
         ...(opts.workTree ? ["--work-tree", opts.workTree] : []),
         ...args,
     ];
     return new Promise((resolve) => {
-        const child = spawn("git", full, {
+        const child = spawn(runBin, full, {
             env: gitEnv(),
             cwd: opts.cwd,
             windowsHide: true,
         });
         let out = "";
         const timer = setTimeout(() => child.kill("SIGKILL"), GIT_TIMEOUT_MS);
-        child.stdout?.on("data", (c: Buffer) => (out += c.toString()));
-        child.stderr?.on("data", (c: Buffer) => (out += c.toString()));
+        // GBK 兜底解码：diff/patch 内含原文件字节（Windows 下可能是 cp936）
+        const dec = createStreamDecoder();
+        child.stdout?.on("data", (c: Buffer) => (out += dec.decode(c)));
+        child.stderr?.on("data", (c: Buffer) => (out += dec.decode(c)));
         child.on("error", () => {
             clearTimeout(timer);
             resolve({ ok: false, out });
@@ -171,6 +181,7 @@ export function createSnapshotService(
     const git = (): string | null => {
         const p = resolveGitPath(gitHint);
         if (!p) warnGitUnavailableOnce();
+        else runBin = p;
         return p;
     };
 
@@ -184,7 +195,7 @@ export function createSnapshotService(
                 // 尚未初始化：git init <repoRoot>（不能带 --git-dir——目录此时还不存在）
                 const r = await new Promise<{ ok: boolean; out: string }>((resolve) => {
                     // 不能设 cwd=repoRoot（此时还不存在，spawn 会 ENOENT）
-                    const c = spawn("git", ["init", "--quiet", repoRoot], {
+                    const c = spawn(runBin, ["init", "--quiet", repoRoot], {
                         env: gitEnv(),
                         windowsHide: true,
                     });
