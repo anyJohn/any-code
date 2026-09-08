@@ -7,6 +7,7 @@ import type { ToolContext } from "../../context";
 import type { ToolResult } from "../index";
 import { bashCandidates } from "../../shell";
 import { killTree, detachedIfPosix } from "../../processKill";
+import { createStreamDecoder } from "../../textDecode";
 
 interface ExecuteBashArgs {
     command: string;
@@ -199,8 +200,11 @@ export const executeBashFunc = async (
             killTree(child);
         }, resolveTimeoutMs(args.timeout_ms));
 
+        // GBK 兜底解码（Windows 中文系统控制台工具输出 cp936，UTF-8 硬解乱码）
+        const decOut = createStreamDecoder();
+        const decErr = createStreamDecoder();
         const onChunk = (chunk: Buffer, stream: "stdout" | "stderr") => {
-            const text = chunk.toString();
+            const text = stream === "stdout" ? decOut.decode(chunk) : decErr.decode(chunk);
             if (stream === "stdout") stdout += text;
             else stderr += text;
             // 流式上抛每个 chunk（TOOL_PROGRESS），前端实时见输出

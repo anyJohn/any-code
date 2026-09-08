@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { killTree, detachedIfPosix } from "./processKill";
+import { createStreamDecoder } from "./textDecode";
 
 /** 完成任务：面板保留窗口 / 内部可查询 LRU 上限（SPEC-038） */
 export const DONE_RETENTION_MS = 60_000;
@@ -55,15 +56,18 @@ export class JobRegistry {
             pid: child.pid,
             child,
         };
-        const onChunk = (c: Buffer) => {
-            job.output += c.toString();
+        // GBK 兜底解码（Windows 中文系统控制台工具输出 cp936，UTF-8 硬解乱码）
+        const decOut = createStreamDecoder();
+        const decErr = createStreamDecoder();
+        const onChunk = (c: Buffer, src: "out" | "err") => {
+            job.output += src === "out" ? decOut.decode(c) : decErr.decode(c);
             if (job.output.length > OUTPUT_CAP) {
                 job.output = "…[earlier output dropped]\n" + job.output.slice(-OUTPUT_CAP);
                 job.truncated = true;
             }
         };
-        child.stdout?.on("data", onChunk);
-        child.stderr?.on("data", onChunk);
+        child.stdout?.on("data", (c: Buffer) => onChunk(c, "out"));
+        child.stderr?.on("data", (c: Buffer) => onChunk(c, "err"));
         child.on("close", (code) => {
             job.done = true;
             job.exitCode = code;

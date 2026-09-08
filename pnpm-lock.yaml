@@ -69,6 +69,9 @@ importers:
       '@vscode/ripgrep':
         specifier: ^1.18.0
         version: 1.18.0
+      iconv-lite:
+        specifier: 0.7.3
+        version: 0.7.3
       js-yaml:
         specifier: ^5.3.0
         version: 5.3.0
