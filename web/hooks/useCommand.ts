@@ -21,7 +21,19 @@ export const BUILTIN_COMMANDS: CommandItem[] = [
     { name: "sessions", desc: "command.sessionsDesc" },
     { name: "compact", desc: "command.compactDesc" },
     { name: "rewind", desc: "command.rewindDesc" },
+    { name: "init", desc: "command.initDesc" },
 ];
+
+// /init 的任务文本：让 agent 分析代码库生成 <root>/AGENTS.md（规则加载已支持，即刻生效）
+const INIT_TASK = [
+    "请分析这个代码库，为 agent 协作生成 AGENTS.md 规则文件，写入当前工作区根目录。",
+    "内容包含：",
+    "1. 项目概述（一句话说清是什么）",
+    "2. 常用命令（构建 / 测试 / 类型检查 / 运行，逐条给出可复制执行的命令）",
+    "3. 架构要点（关键模块与数据流，简明）",
+    "4. 代码约定（语言风格、命名、目录规则、提交规范等，以现有代码为准归纳）",
+    "要求：只写当前事实，不写修订记录；已有 AGENTS.md 则在其基础上补充完善，不要盲目覆盖。",
+].join("\n");
 
 interface UseCommandDeps {
     appendSystem: (msg: string) => void;
@@ -133,6 +145,9 @@ export function useCommand({ appendSystem, submit, projectKey, rootPath, current
                 case "rewind":
                     if (openSnapshots) openSnapshots();
                     else appendSystem(t("command.rewindUnsupported"));
+                    return;
+                case "init":
+                    submit(INIT_TASK);
                     return;
                 case "help":
                     appendSystem(buildHelpText());

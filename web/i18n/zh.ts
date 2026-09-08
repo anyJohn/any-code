@@ -86,6 +86,7 @@ export const zh: Record<string, string> = {
     "command.noSessions": "暂无会话",
     "command.noWorkspace": "未选择工作区",
     "command.rewindDesc": "回滚到工作区快照",
+    "command.initDesc": "分析代码库生成 AGENTS.md 项目规则",
     "command.rewindUnsupported": "当前会话不支持快照回滚",
     "command.sessionList": "会话列表:",
     "command.sessionsDesc": "列出最近会话",

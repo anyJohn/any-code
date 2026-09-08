@@ -129,7 +129,12 @@ export function StatusBar({
 
     return (
         <div className="shrink-0 border-t border-border px-4 py-1.5 text-xs text-muted-foreground flex items-center gap-3 max-w-3xl mx-auto w-full">
-            <span className="truncate font-mono min-w-0">{modelLabel}</span>
+            <span
+                className="truncate font-mono min-w-0 max-w-48 shrink"
+                title={modelLabel}
+            >
+                {modelLabel}
+            </span>
             <div
                 className="flex items-center gap-1.5 min-w-0"
                 title={`${promptTokens} / ${ctxWindow}`}

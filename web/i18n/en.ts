@@ -85,6 +85,7 @@ export const en: Record<string, string> = {
     "command.noSessions": "No sessions",
     "command.noWorkspace": "No workspace selected",
     "command.rewindDesc": "Roll workspace back to a snapshot",
+    "command.initDesc": "Analyze the codebase and generate AGENTS.md project rules",
     "command.rewindUnsupported": "Snapshot rollback not supported in this session",
     "command.sessionList": "Sessions:",
     "command.sessionsDesc": "List recent sessions",
