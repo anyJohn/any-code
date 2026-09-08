@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import { statSync } from "node:fs";
 import type { ToolContext } from "../../context";
 import { resolvePath } from "../../workspace";
+import { decodeFileText } from "../../textDecode";
 
 interface ReadArgs {
     filePath: string;
@@ -17,7 +18,7 @@ export const readFunc = async (
     try {
         const { offset = 0, limit = 8000 } = args;
         const filePath = resolvePath(workspace, args.filePath);
-        const content = await fs.readFile(filePath, "utf-8");
+        const content = decodeFileText(await fs.readFile(filePath)).text;
 
         // 记录 mtime 供 write/edit staleness 校验（SPEC-022 B-006）。整文件读才记，
         // 偏移读（offset>0）不记基线（partial 读后整写本就该警告）。

@@ -23,3 +23,21 @@ export function createStreamDecoder() {
         },
     };
 }
+
+/**
+ * 文件文本解码（read / edit 用——读的是用户项目里的任意编码文件）。
+ * UTF-8 优先；检出 U+FFFD（非法序列）时按 GBK 重解、取替换符更少的结果。
+ * 返回实际使用的编码——edit 写回时按原编码 re-encode（否则 GBK 文件被编辑一次就变 UTF-8）。
+ */
+export function decodeFileText(buf: Buffer): {
+    text: string;
+    encoding: "utf8" | "gbk";
+} {
+    const utf8 = buf.toString("utf8"); // node utf8 非致命，非法序列→U+FFFD
+    if (!utf8.includes("�")) return { text: utf8, encoding: "utf8" };
+    const gbk = iconv.decode(buf, "gbk");
+    const bad = (s: string) => (s.match(/�/g) ?? []).length;
+    return bad(gbk) < bad(utf8)
+        ? { text: gbk, encoding: "gbk" }
+        : { text: utf8, encoding: "utf8" };
+}

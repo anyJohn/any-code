@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import iconv from "iconv-lite";
-import { createStreamDecoder } from "../src/textDecode";
+import { createStreamDecoder, decodeFileText } from "../src/textDecode";
 
 describe("createStreamDecoder（Windows 控制台 GBK 输出兜底）", () => {
     it("UTF-8 中文正常解码", () => {
@@ -24,5 +24,18 @@ describe("createStreamDecoder（Windows 控制台 GBK 输出兜底）", () => {
     it("纯 ASCII 不受影响", () => {
         const d = createStreamDecoder();
         expect(d.decode(Buffer.from("ls -la\nerror 1"))).toBe("ls -la\nerror 1");
+    });
+});
+
+describe("decodeFileText（read/edit 文件编码兜底）", () => {
+    it("UTF-8 文件：utf8 解码", () => {
+        const r = decodeFileText(Buffer.from("# 标题\n内容", "utf8"));
+        expect(r).toEqual({ text: "# 标题\n内容", encoding: "utf8" });
+    });
+
+    it("GBK 文件：回退 gbk 解码并标注编码", () => {
+        const r = decodeFileText(iconv.encode("package 主程序", "gbk"));
+        expect(r.text).toBe("package 主程序");
+        expect(r.encoding).toBe("gbk");
     });
 });

@@ -2,6 +2,8 @@ import fs from "fs/promises";
 import type { ToolContext } from "../../context";
 import type { ToolResult } from "../index";
 import { resolvePath } from "../../workspace";
+import { decodeFileText } from "../../textDecode";
+import iconv from "iconv-lite";
 import { stalenessWarning, recordMtime } from "./fileState";
 
 interface EditFileArgs {
@@ -24,7 +26,10 @@ export const editFunc = async (
         const filePath =
             (args as { __absFilePath?: string }).__absFilePath ??
             resolvePath(workspace, args.filePath);
-        const content = await fs.readFile(filePath, "utf-8");
+        // 按文件实际编码解码（GBK 兜底），写回时保持原编码
+        const { text: content, encoding } = decodeFileText(
+            await fs.readFile(filePath)
+        );
 
         if (!content.includes(oldString)) {
             return { content: `Error: oldString not found in file. Cannot perform replacement.` };
@@ -52,7 +57,10 @@ export const editFunc = async (
         );
 
         const newContent = content.replace(oldString, newString);
-        await fs.writeFile(filePath, newContent, "utf-8");
+        await fs.writeFile(
+            filePath,
+            encoding === "gbk" ? iconv.encode(newContent, "gbk") : Buffer.from(newContent, "utf8"),
+        );
         recordMtime(ctx.fileState, filePath);
 
         return {
