@@ -21,3 +21,5 @@ export * from "./snapshot";
 export * from "./extensions";
 export * from "./jobs";
 export * from "./providers/anthropic";
+
+export { bashCandidates, resolveShellKind, type ShellKind } from "./shell";

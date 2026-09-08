@@ -36,6 +36,7 @@ type SettingsTab = "general" | "models" | "tools" | "integrations";
 export default function SettingsPage() {
     const { t, languagePref, setLanguage } = useT();
     const { theme, setTheme } = useTheme();
+    const [shell, setShell] = useState<{ kind: string; path: string | null } | null>(null);
     const [providers, setProviders] = useState<ProviderForm[]>([]);
     const [def, setDef] = useState("");
     const [mcp, setMcp] = useState<McpForm[]>([]);
@@ -86,6 +87,7 @@ export default function SettingsPage() {
             setNameCommitted(
                 Object.fromEntries(ps.map((p, i) => [i, p.name.trim()]))
             );
+            setShell(res.shell ?? null);
             setDef(d);
             setMcp(ms);
             const perm = res.permissions;
@@ -339,6 +341,26 @@ export default function SettingsPage() {
                                 <option value="dark">{t("settings.themeDark")}</option>
                             </select>
                         </div>
+                        {shell && (shell.kind === "busybox" || shell.kind === "none") && (
+                            <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                                <span className="text-xs text-amber-600 dark:text-amber-400">
+                                    {t("settings.busyboxWarn")}{" "}
+                                    <a
+                                        href="https://git-scm.com/downloads/win"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="underline"
+                                    >
+                                        git-scm.com/downloads/win
+                                    </a>
+                                </span>
+                            </div>
+                        )}
+                        {shell && (
+                            <div className="text-xs text-muted-foreground font-mono truncate" title={shell.path ?? ""}>
+                                bash: {shell.kind} · {shell.path ?? "-"}
+                            </div>
+                        )}
                     </div>
                 )}
                 {yamlOpen && (

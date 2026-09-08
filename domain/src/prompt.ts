@@ -96,7 +96,15 @@ export function shellNote(kind: ShellKind): string {
         return "\n\n# Shell\nThe bash tool runs on **busybox** (Windows, POSIX subset).";
     }
     if (kind === "git-bash") {
-        return "\n\n# Shell\nThe bash tool runs on **Git Bash** (Windows).";
+        // MSYS 路径语义坑（借鉴成熟 agent 的提示实践）：native 工具不吃 /c/... 转换
+        return (
+            "\n\n# Shell\n" +
+            "The bash tool runs on **Git Bash / MSYS** (Windows). POSIX syntax works " +
+            "(ls, $HOME, &&, |, single quotes). MSYS-style paths like /c/Users/... work " +
+            "for bash builtins, but native Windows programs (git, node, python) do NOT " +
+            "get MSYS path conversion — pass them C:/Users/... forward-slash native paths. " +
+            "PowerShell/cmd builtins (Get-ChildItem, $env:FOO) do not exist here."
+        );
     }
     if (kind === "mac-sh") {
         return "\n\n# Shell\nThe bash tool runs on **macOS /bin/sh** (bash 3.2 POSIX mode, BSD userland).";

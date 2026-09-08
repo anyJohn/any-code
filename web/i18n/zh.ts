@@ -225,6 +225,7 @@ export const zh: Record<string, string> = {
     "settings.themeSystem": "跟随系统",
     "settings.themeLight": "浅色",
     "settings.themeDark": "深色",
+    "settings.busyboxWarn": "当前 bash 工具链是 busybox（受限：无 ssh、grep/sed 不完整）。安装 Git for Windows 即自动获得完整工具链：",
     "settings.editYaml": "编辑 config.yaml",
     "yaml.title": "编辑 config.yaml",
     "yaml.confirm": "确认保存",

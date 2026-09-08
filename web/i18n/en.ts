@@ -224,6 +224,7 @@ export const en: Record<string, string> = {
     "settings.themeSystem": "System",
     "settings.themeLight": "Light",
     "settings.themeDark": "Dark",
+    "settings.busyboxWarn": "The bash tool runs on busybox (limited: no ssh, incomplete grep/sed). Install Git for Windows to get the full toolchain automatically:",
     "settings.editYaml": "Edit config.yaml",
     "yaml.title": "Edit config.yaml",
     "yaml.confirm": "Confirm & Save",

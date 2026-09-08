@@ -34,6 +34,8 @@ import {
     type Workspace,
     WorkspaceRegistry,
     workspaceConfigDir,
+  bashCandidates,
+  resolveShellKind,
 } from "@any-code/domain";
 import { runningSessions, runningWorkspaces } from "./singleFlight.js";
 import { JobRegistry } from "@any-code/domain";
@@ -823,6 +825,11 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
     app.get("/api/config", (c) => {
         try {
             const cfg = Config.load();
+            const shellStatus = (hint?: string) => {
+                const kind = resolveShellKind(hint);
+                const binary = bashCandidates(hint)[0];
+                return { kind, path: binary ?? null };
+            };
             const providers: Record<string, unknown> = {};
             for (const [name, p] of Object.entries(cfg.providers)) {
                 providers[name] = { ...p, apiKey: maskApiKey(p.apiKey) };
@@ -845,6 +852,8 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
                 pricing: cfg.pricing,
                 proxy: cfg.proxy,
                 noProxy: cfg.noProxy,
+                // bash 工具链状态（设置页「通用」展示；busybox = 工具链残缺，提示装 Git）
+                shell: shellStatus(cfg.gitBashPath),
             });
         } catch {
             return c.json({ providers: {}, default: undefined, mcp: {} });

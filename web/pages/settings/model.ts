@@ -23,6 +23,8 @@ export interface ConfigResponse {
     >;
     default?: string;
     mcp: Record<string, Record<string, unknown>>;
+    /** bash 工具链状态（设置页「通用」展示；busybox = 残缺工具链，提示装 Git）。 */
+    shell?: { kind: string; path: string | null };
     /** 通用工具目录（用户决策 2026-09-03：全量工具 + config.tools 开关态）。 */
     tools?: {
         catalog: ToolCatalogItem[];
