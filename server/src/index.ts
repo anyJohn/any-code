@@ -16,6 +16,7 @@ import {
     switchDefaultModel,
     switchDefaultProvider,
     setUiLanguage,
+    setUiTheme,
     projectKeyOf,
     resolveContextWindow,
     resolveInteraction,
@@ -1007,12 +1008,13 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
     });
 
     app.patch("/api/config", async (c) => {
-        let body: { default?: string; modelId?: string; language?: string };
+        let body: { default?: string; modelId?: string; language?: string; theme?: string };
         try {
             body = (await c.req.json()) as {
                 default?: string;
                 modelId?: string;
                 language?: string;
+                theme?: string;
             };
         } catch {
             return c.json({ statusMessage: "invalid json body" }, 400);
@@ -1033,7 +1035,12 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
             if (!r.ok) return c.json({ statusMessage: r.message }, 400);
             return c.json({ statusMessage: "switched" });
         }
-        return c.json({ statusMessage: "需要 default / modelId / language 之一" }, 400);
+        if (body.theme !== undefined) {
+            const r = setUiTheme(body.theme);
+            if (!r.ok) return c.json({ statusMessage: r.message }, 400);
+            return c.json({ statusMessage: "switched" });
+        }
+        return c.json({ statusMessage: "需要 default / modelId / language / theme 之一" }, 400);
     });
 
     // 裁决"永久允许/拒绝"落盘（SPEC-032 B-006）：单独小路由——避免 web 走整表单

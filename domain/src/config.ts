@@ -214,8 +214,8 @@ export interface ConfigShape {
     permissions?: PermissionsConfig;
     /** server 并发运行上限（FR-30 / SPEC-033 DEC-102）：缺省 3，0 = 不限。 */
     maxConcurrentRuns?: number;
-    /** 界面偏好（FR-29）：language = 界面语言（缺省跟随系统语言）。 */
-    ui?: { language?: "zh" | "en" };
+    /** 界面偏好（FR-29）：language = 界面语言（缺省跟随系统语言）；theme = 外观三态（缺省跟随系统）。 */
+    ui?: { language?: "zh" | "en"; theme?: UiTheme };
     /** 模型单价（FR-22）：美元 / 每 1M tokens。缺省不配 → 界面只显 tokens 不显费用。 */
     pricing?: Record<string, ModelPricing>;
     /** 全局出网代理（用户决策 2026-09-03）：所有联网操作（LLM / web 工具 / MCP SSE）统一走此代理。 */
@@ -304,8 +304,8 @@ export class Config {
     permissions: Required<PermissionsConfig>;
     /** server 并发运行上限（FR-30）：缺省 3，0 = 不限。server 侧消费，domain 仅承载。 */
     maxConcurrentRuns: number;
-    /** 界面偏好（FR-29）：language 缺省 undefined = 跟随系统语言。 */
-    ui: { language?: "zh" | "en" };
+    /** 界面偏好（FR-29）：language / theme 缺省 undefined = 跟随系统。 */
+    ui: { language?: "zh" | "en"; theme?: UiTheme };
     /** 模型单价（FR-22）：缺省空表 → 界面只显 tokens。 */
     pricing: Record<string, ModelPricing>;
     /** 记忆注入（SPEC-035）：maxChars = 注入截断窗口，缺省 4000。 */
@@ -321,7 +321,7 @@ export class Config {
         tools: Record<string, ToolConfigEntry>,
         permissions: Required<PermissionsConfig>,
         maxConcurrentRuns: number,
-        ui: { language?: "zh" | "en" },
+        ui: { language?: "zh" | "en"; theme?: UiTheme },
         pricing: Record<string, ModelPricing>,
         memory: { maxChars: number }
     ) {
@@ -519,10 +519,24 @@ function normalizeMaxConcurrentRuns(v?: number): number {
     return Math.floor(v);
 }
 
-/** ui 段归一化（FR-29）：language 仅接受 zh/en，其余视为未设置（跟随系统语言）。 */
-function normalizeUi(v?: { language?: "zh" | "en" }): { language?: "zh" | "en" } {
+/** 外观三态（暗黑模式）：light / dark / system（跟随系统）。 */
+export type UiTheme = "light" | "dark" | "system";
+
+function isUiTheme(v: unknown): v is UiTheme {
+    return v === "light" || v === "dark" || v === "system";
+}
+
+/** ui 段归一化（FR-29）：language 仅接受 zh/en；theme 仅接受 light/dark/system，其余视为未设置（跟随系统）。 */
+function normalizeUi(v?: { language?: "zh" | "en"; theme?: UiTheme }): {
+    language?: "zh" | "en";
+    theme?: UiTheme;
+} {
     const language = v?.language === "zh" || v?.language === "en" ? v.language : undefined;
-    return language ? { language } : {};
+    const theme = isUiTheme(v?.theme) ? v.theme : undefined;
+    return {
+        ...(language ? { language } : {}),
+        ...(theme ? { theme } : {}),
+    };
 }
 
 /** memory 段归一化（SPEC-035 B-004）：maxChars 正整数，缺省 4000（原硬编码窗口值）。 */
@@ -578,13 +592,25 @@ export function switchDefaultModel(modelId: string): SwitchResult {
     return { ok: true, message: modelId };
 }
 
-/** 设置界面语言（FR-29，全字段回写）。仅接受 zh/en。 */
-export function setUiLanguage(language: string): SwitchResult {
-    if (language !== "zh" && language !== "en") {
-        return { ok: false, message: "language 仅支持 zh / en" };
+/** 设置外观主题（暗黑模式）。仅接受 light/dark/system。 */
+export function setUiTheme(theme: string): SwitchResult {
+    if (!isUiTheme(theme)) {
+        return { ok: false, message: "theme 仅支持 light / dark / system" };
     }
     const cfg = Config.load();
-    cfg.ui = { ...cfg.ui, language };
+    cfg.ui = { ...cfg.ui, theme };
+    saveFull(cfg);
+    return { ok: true, message: theme };
+}
+
+/** 设置界面语言（FR-29，全字段回写）。接受 zh/en；system = 清除显式配置（跟随系统）。 */
+export function setUiLanguage(language: string): SwitchResult {
+    if (language !== "zh" && language !== "en" && language !== "system") {
+        return { ok: false, message: "language 仅支持 zh / en / system" };
+    }
+    const cfg = Config.load();
+    const { language: _dropped, ...rest } = cfg.ui;
+    cfg.ui = language === "system" ? rest : { ...cfg.ui, language };
     saveFull(cfg);
     return { ok: true, message: language };
 }

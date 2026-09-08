@@ -20,6 +20,8 @@ import { en } from "./en";
  */
 
 export type Language = "zh" | "en";
+/** 语言偏好：system = 跟随系统语言（language 由 navigator 判定解析）。 */
+export type LanguagePref = Language | "system";
 
 const DICTS: Record<Language, Record<string, string>> = { zh, en };
 const STORAGE_KEY = "anycode:lang";
@@ -34,10 +36,10 @@ function systemLanguage(): Language {
     }
 }
 
-function cachedLanguage(): Language | null {
+function cachedLanguage(): LanguagePref | null {
     try {
         const saved = localStorage.getItem(STORAGE_KEY);
-        return saved === "en" || saved === "zh" ? saved : null;
+        return saved === "en" || saved === "zh" || saved === "system" ? saved : null;
     } catch {
         return null;
     }
@@ -57,13 +59,16 @@ function translate(lang: Language): TFn {
 
 interface LanguageContextValue {
     language: Language;
-    setLanguage: (l: Language) => void;
+    /** 原始偏好（含 system）——设置页回显用 */
+    languagePref: LanguagePref;
+    setLanguage: (l: LanguagePref) => void;
     t: TFn;
 }
 
 // 缺省值 = zh 直通：未包 Provider 的测试/边缘渲染仍得到与旧文案一致的中文输出
 const DefaultValue: LanguageContextValue = {
     language: "zh",
+    languagePref: "system",
     setLanguage: () => {},
     t: translate("zh"),
 };
@@ -71,9 +76,10 @@ const DefaultValue: LanguageContextValue = {
 const LanguageContext = createContext<LanguageContextValue>(DefaultValue);
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-    const [language, setLang] = useState<Language>(
-        () => cachedLanguage() ?? systemLanguage()
+    const [languagePref, setPref] = useState<LanguagePref>(
+        () => cachedLanguage() ?? "system"
     );
+    const language: Language = languagePref === "system" ? systemLanguage() : languagePref;
 
     // 服务端 config.ui.language 为准（跨端同一偏好）；无配置保持系统语言判定
     useEffect(() => {
@@ -82,6 +88,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
                 const cfg = (await (await fetch("/api/config")).json()) as {
                     ui?: { language?: Language };
                 };
+                // 仅显式配置才覆盖本地（未配置 = 不动本地，避免覆盖缓存/用户刚做的切换）
                 const lang = cfg?.ui?.language;
                 if (lang === "zh" || lang === "en") {
                     try {
@@ -89,7 +96,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
                     } catch {
                         // 存储不可用忽略
                     }
-                    setLang((prev) => (prev === lang ? prev : lang));
+                    setPref((prev) => (prev === lang ? prev : lang));
                 }
             } catch {
                 // 服务端不可达：保持本地判定
@@ -97,8 +104,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
         })();
     }, []);
 
-    const setLanguage = useCallback((l: Language) => {
-        setLang(l);
+    const setLanguage = useCallback((l: LanguagePref) => {
+        setPref(l);
         try {
             localStorage.setItem(STORAGE_KEY, l);
         } catch {
@@ -114,8 +121,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
     const t = useMemo(() => translate(language), [language]);
     const value = useMemo(
-        () => ({ language, setLanguage, t }),
-        [language, setLanguage, t]
+        () => ({ language, languagePref, setLanguage, t }),
+        [language, languagePref, setLanguage, t]
     );
     return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }

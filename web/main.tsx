@@ -8,6 +8,7 @@ import { App } from "@/App";
 import { TitleBar } from "@/components/TitleBar";
 import { isElectron } from "@/lib/electron";
 import { LanguageProvider } from "@/i18n";
+import { ThemeProvider } from "@/theme";
 import "highlight.js/styles/github.css"; // hljs 亮色主题为默认；暗色覆盖见 globals.css（先于 globals 引入，让后者可覆盖）
 import "@/globals.css";
 
@@ -19,12 +20,14 @@ createRoot(document.getElementById("root")!).render(
         <BrowserRouter>
             <ReduxProvider store={store}>
                 <LanguageProvider>
+                    <ThemeProvider>
                     <div className="h-screen flex flex-col app-shell-bg">
                         {isElectron() && <TitleBar />}
                         <AppShell>
                             <App />
                         </AppShell>
                     </div>
+                    </ThemeProvider>
                 </LanguageProvider>
             </ReduxProvider>
         </BrowserRouter>

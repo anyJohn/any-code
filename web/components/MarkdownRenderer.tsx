@@ -54,17 +54,16 @@ const CodeBlock = memo(function CodeBlock({
     const raw = extractText(codeProps?.children);
     return (
         <div className="group/code relative my-3">
-            <div className="flex items-center justify-between rounded-t-md border border-zinc-800 bg-zinc-900 px-3 py-1">
-                <span className="text-xs text-zinc-400">{lang ?? "text"}</span>
+            <div className="flex items-center justify-between rounded-t-md border border-[var(--codeblock-border)] bg-[var(--codeblock-header-bg)] px-3 py-1">
+                <span className="text-xs text-[var(--codeblock-header-text)]">{lang ?? "text"}</span>
                 <CopyButton
                     text={raw}
-                    className="p-1 rounded hover:bg-zinc-800 text-zinc-400"
+                    className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 text-[var(--codeblock-header-text)]"
                 />
             </div>
-            <pre className="!m-0 rounded-t-none border border-t-0 border-zinc-800 bg-zinc-950 overflow-x-auto p-3 text-xs leading-relaxed text-zinc-100 [&>code]:bg-transparent [&>code]:!px-0 [&>code]:!py-0">
-                <code className={`hljs-dark ${codeProps?.className ?? ""}`.trim()}>
-                    {codeProps?.children}
-                </code>
+            <pre className="!m-0 rounded-t-none border border-t-0 border-[var(--codeblock-border)] bg-[var(--codeblock-bg)] overflow-x-auto p-3 text-xs leading-relaxed text-[var(--codeblock-text)] [&>code]:bg-transparent [&>code]:!px-0 [&>code]:!py-0">
+                {/* 不加 hljs-dark：亮色用 github.css 默认，暗色由 .dark .hljs 覆盖（globals.css） */}
+                <code className={codeProps?.className ?? ""}>{codeProps?.children}</code>
             </pre>
         </div>
     );

@@ -3,6 +3,49 @@
 > 界面统一遵循本规范；新增界面先读此文件。规范与代码冲突时，以规范为准修代码。
 > 生成端审美遵循 `web-design-guidelines` 技能（Vercel，排版/留白/颜色/反 AI 味）。
 
+## 主题与配色（暗黑模式定稿）
+
+三态：浅色 / 深色 / 跟随系统（`config.yaml ui.theme`；跟随系统 = 桌面 nativeTheme、浏览器 prefers-color-scheme）。实现在 `web/theme.tsx`（ThemeProvider）+ `web/globals.css`（`.dark` 类策略）。
+
+**色彩来源（定稿小样，`docs/theme-samples/`）：暗色 = 小样 B（Monokai Pro），亮色 = 小样 E（其亮色姊妹版）。** 两版共用品牌靛蓝主色与 Monokai 色相点缀，亮暗切换观感连续。
+
+### 亮色 token（小样 E）
+
+| token | 值 | 用途 |
+| --- | --- | --- |
+| background | `#F6F5F2` | 页面底（暖白） |
+| card / popover | `#FFFFFF` | 卡片、浮层 |
+| sidebar / muted / secondary / accent | `#ECEAE4` | 侧栏、次级面、hover |
+| foreground | `#2C2A2E` | 正文 |
+| muted-foreground | `#8A858C` | 次要文字 |
+| border / input | `#E0DDD6` | 描边、输入框 |
+| destructive | `#E11D6E` | 危险/报错 |
+| primary | 品牌靛蓝 `#6178FD`（`--brand`） | 主操作，亮暗一致 |
+
+### 暗色 token（小样 B）
+
+| token | 值 | 用途 |
+| --- | --- | --- |
+| background | `#221F22` | 页面底（暖紫灰，禁用纯黑） |
+| sidebar | `#1B191B` | 侧栏（比主底更深一档） |
+| card / popover | `#2D2A2E` | 卡片、气泡、浮层 |
+| secondary / muted | `#363338` | 次级面 |
+| accent | `#3A363C` | hover 态 |
+| foreground | `#FCFCFA` | 正文 |
+| muted-foreground | `#939293` | 次要文字 |
+| border / input | `#423F42` | 描边、输入框（实色，不用半透明白） |
+| destructive | `#FF6188`（Monokai 粉） | 危险/报错 |
+| primary | 品牌靛蓝 `#6178FD` | 主操作 |
+
+状态色（两主题同相，组件按需取用）：成功 `#A9DC76` / 进行中 `#FFD866`（暗）`#B08514`（亮）/ 危险 `#FF6188`（暗）`#E11D6E`（亮）。chart-1..5 = 绿/黄/紫/橙/粉。
+
+### 规则
+
+1. **组件颜色一律走主题 token**（`bg-background` / `text-muted-foreground` / `border-border` …），禁止硬编码 `zinc-*` / `gray-*` / `bg-white` / `text-black`；例外仅限：遮罩层（`bg-black/50`）、hover 上的纯白图标。
+2. **代码块跟随主题**：亮色 GitHub Light 风格（`--codeblock-*` 变量，`#F6F8FA` 底），暗色深底（`#1B191B`，比卡片更深一档）；语法高亮亮色走 github.css、暗色走 `.dark .hljs` 覆盖——**不要给代码加恒暗类**。
+3. **层级靠亮度差**：暗色下 页面 < 卡片 < hover 三档（`#221F22 → #2D2A2E → #3A363C`），亮色下同理；不要用阴影堆层级。
+4. 新增 UI 若需新颜色，先扩 token 再使用，不在组件里写魔法值。
+
 ## 折叠/展开（Accordion）
 
 可折叠区块（文件 diff、目录树、面板分组等）统一交互：

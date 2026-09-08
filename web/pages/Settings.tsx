@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { useT } from "@/i18n";
+import { useT, type LanguagePref } from "@/i18n";
+import { useTheme, type Theme } from "@/theme";
 import { Button } from "@/components/ui/button";
 import { apiJson } from "@/lib/api";
 import {
@@ -31,9 +32,10 @@ import { cn } from "@/lib/utils";
  * 右上角"编辑 config.yaml"弹窗支持高亮编辑原文。
  * 数据在页面层统一持有，各卡片只收 props 渲染（见 settings/ 目录）。
  */
-type SettingsTab = "models" | "tools" | "integrations";
+type SettingsTab = "general" | "models" | "tools" | "integrations";
 export default function SettingsPage() {
-    const { t } = useT();
+    const { t, languagePref, setLanguage } = useT();
+    const { theme, setTheme } = useTheme();
     const [providers, setProviders] = useState<ProviderForm[]>([]);
     const [def, setDef] = useState("");
     const [mcp, setMcp] = useState<McpForm[]>([]);
@@ -60,7 +62,7 @@ export default function SettingsPage() {
     const [permMode, setPermMode] = useState<"standard" | "accept_edits" | "trusted">("standard");
     const [permRules, setPermRules] = useState<PermissionRuleForm[]>([]);
     const [permDanger, setPermDanger] = useState<string[]>([]);
-    const [tab, setTab] = useState<SettingsTab>("models");
+    const [tab, setTab] = useState<SettingsTab>("general");
     const [yamlOpen, setYamlOpen] = useState(false);
 
     const reloadConfig = () => setLoadTick((k) => k + 1);
@@ -222,6 +224,7 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-1">
                     {(
                         [
+                            ["general", t("settings.tabGeneral")],
                             ["models", t("settings.tabModels")],
                             ["tools", t("settings.tabTools")],
                             ["integrations", t("settings.tabIntegrations")],
@@ -302,6 +305,41 @@ export default function SettingsPage() {
                             removeMcp={removeMcp}
                         />
                     </>
+                )}
+                {status === "ready" && tab === "general" && (
+                    <div className="rounded-lg border border-border p-4 flex flex-col gap-5">
+                        <h2 className="text-sm font-semibold">{t("settings.generalTitle")}</h2>
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="flex flex-col gap-0.5">
+                                <span className="text-sm">{t("settings.languageLabel")}</span>
+                                <span className="text-xs text-muted-foreground">{t("settings.languageHint")}</span>
+                            </div>
+                            <select
+                                value={languagePref}
+                                onChange={(e) => setLanguage(e.target.value as LanguagePref)}
+                                className="text-sm rounded-md border border-input bg-background px-2 py-1.5 outline-none focus:ring-1 focus:ring-ring"
+                            >
+                                <option value="system">{t("settings.langSystem")}</option>
+                                <option value="zh">{t("settings.langZh")}</option>
+                                <option value="en">{t("settings.langEn")}</option>
+                            </select>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="flex flex-col gap-0.5">
+                                <span className="text-sm">{t("settings.themeLabel")}</span>
+                                <span className="text-xs text-muted-foreground">{t("settings.themeHint")}</span>
+                            </div>
+                            <select
+                                value={theme}
+                                onChange={(e) => setTheme(e.target.value as Theme)}
+                                className="text-sm rounded-md border border-input bg-background px-2 py-1.5 outline-none focus:ring-1 focus:ring-ring"
+                            >
+                                <option value="system">{t("settings.themeSystem")}</option>
+                                <option value="light">{t("settings.themeLight")}</option>
+                                <option value="dark">{t("settings.themeDark")}</option>
+                            </select>
+                        </div>
+                    </div>
                 )}
                 {yamlOpen && (
                     <YamlEditorModal

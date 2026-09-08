@@ -48,77 +48,91 @@
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
+    /* 亮色主题 = 小样 E（Monokai Pro 亮色姊妹版，DesignSpec「主题与配色」）。 */
+    --background: #f6f5f2;
+    --foreground: #2c2a2e;
     /* 品牌色：取自 anycode.svg 的 #6178fd（oklch 精确换算）。light/dark 一致。 */
     --brand: oklch(0.6253 0.1981 272.043);
     --brand-foreground: oklch(0.985 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
+    --card: #ffffff;
+    --card-foreground: #2c2a2e;
+    --popover: #ffffff;
+    --popover-foreground: #2c2a2e;
+    --secondary: #eceae4;
+    --secondary-foreground: #2c2a2e;
+    --muted: #eceae4;
+    --muted-foreground: #8a858c;
+    --accent: #eceae4;
+    --accent-foreground: #2c2a2e;
+    --destructive: #e11d6e;
+    --border: #e0ddd6;
+    --input: #e0ddd6;
     /* primary / ring / sidebar-primary 走品牌靛蓝（与 logo 一致）。 */
     --primary: var(--brand);
     --primary-foreground: var(--brand-foreground);
     --ring: oklch(0.6253 0.15 272.043);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
+    --chart-1: #a9dc76;
+    --chart-2: #ffd866;
+    --chart-3: #ab9df2;
+    --chart-4: #fc9867;
+    --chart-5: #ff6188;
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar: #eceae4;
+    --sidebar-foreground: #2c2a2e;
     --sidebar-primary: var(--brand);
     --sidebar-primary-foreground: var(--brand-foreground);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-accent: #e4e1da;
+    --sidebar-accent-foreground: #2c2a2e;
+    --sidebar-border: #e0ddd6;
     --sidebar-ring: oklch(0.708 0 0);
 }
 
+/* 代码块配色（跟随主题）：亮色 GitHub Light 风格，暗色 zinc 系（原恒暗观感） */
+:root {
+    --codeblock-bg: #f6f8fa;
+    --codeblock-border: #d0d7de;
+    --codeblock-header-bg: #eaeef2;
+    --codeblock-header-text: #57606a;
+    --codeblock-text: #24292e;
+}
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: var(--brand);
-    --primary-foreground: var(--brand-foreground);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
+    --codeblock-bg: #1b191b;
+    --codeblock-border: #423f42;
+    --codeblock-header-bg: #2a272b;
+    --codeblock-header-text: #939293;
+    --codeblock-text: #fcfcfa;
+}
+
+.dark {
+    /* 暗色主题 = 小样 B（Monokai Pro，DesignSpec「主题与配色」）。 */
+    --background: #221f22;
+    --foreground: #fcfcfa;
+    --card: #2d2a2e;
+    --card-foreground: #fcfcfa;
+    --popover: #2d2a2e;
+    --popover-foreground: #fcfcfa;
+    --secondary: #363338;
+    --secondary-foreground: #fcfcfa;
+    --muted: #363338;
+    --muted-foreground: #939293;
+    --accent: #3a363c;
+    --accent-foreground: #fcfcfa;
+    --destructive: #ff6188;
+    --border: #423f42;
+    --input: #423f42;
     --ring: oklch(0.6253 0.15 272.043);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
+    --chart-1: #a9dc76;
+    --chart-2: #ffd866;
+    --chart-3: #ab9df2;
+    --chart-4: #fc9867;
+    --chart-5: #ff6188;
+    --sidebar: #1b191b;
+    --sidebar-foreground: #fcfcfa;
     --sidebar-primary: var(--brand);
     --sidebar-primary-foreground: var(--brand-foreground);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-accent: #2d2a2e;
+    --sidebar-accent-foreground: #fcfcfa;
+    --sidebar-border: #363338;
     --sidebar-ring: oklch(0.556 0 0);
 }
 

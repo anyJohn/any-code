@@ -19,12 +19,12 @@ import {
     DropdownMenuSeparator,
     DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { Plus, FolderOpen, Languages, MessageSquare, ChevronUp, PanelLeft, X } from "lucide-react";
+import { Plus, FolderOpen, MessageSquare, ChevronUp, PanelLeft, X } from "lucide-react";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { Logo } from "./Logo";
 import { apiJson } from "@/lib/api";
 import type { WorkspaceWithSessions } from "@/lib/sseEvents";
-import { useT, type Language } from "@/i18n";
+import { useT } from "@/i18n";
 
 interface RecentSession {
     projectKey: string;
@@ -50,16 +50,13 @@ export function AppTopbar({
     const { workspaces } = useAppSelector(selectWorkspace);
     const dispatch = useAppDispatch();
     const navigate = useNavigate();
-    const { language, setLanguage, t } = useT();
+    const { t } = useT();
     const [pickerOpen, setPickerOpen] = useState(false);
     const [addError, setAddError] = useState("");
     const [recent, setRecent] = useState<RecentSession[]>([]);
     const [menuOpen, setMenuOpen] = useState(false);
 
     // 一键切换（FR-29）：本地即时生效 + localStorage + PATCH config 持久化（Provider 内处理）
-    const toggleLanguage = () =>
-        setLanguage((language === "zh" ? "en" : "zh") as Language);
-
     useEffect(() => {
         dispatch(refreshWorkspaces());
     }, [dispatch]);
@@ -175,18 +172,6 @@ export function AppTopbar({
                     {addError}
                 </span>
             )}
-
-            {/* 语言切换（FR-29）：显目标语言 */}
-            <Button
-                variant="ghost"
-                size="sm"
-                className="ml-auto shrink-0 gap-1.5 px-2"
-                title={t("topbar.switchLanguage")}
-                onClick={toggleLanguage}
-            >
-                <Languages className="size-4" />
-                <span className="text-xs">{language === "zh" ? "EN" : "中文"}</span>
-            </Button>
 
             <DirectoryPicker
                 open={pickerOpen}
