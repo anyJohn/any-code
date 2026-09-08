@@ -101,7 +101,7 @@
   - `/help` 帮助
   - 重命名 Session：侧栏 inline 编辑（已实现，非 slash 指令）
   - `@` 引用文件
-  - Skill 注入 Command（todo）
+  - Skill 指令（已实现）：已安装技能以 `/<name>` 斜杠指令暴露（弹层 Skills 分组），正文展开注入 + 参数追加
   - `/rename` (todo)
 - Rule
   - 支持 `.anycode` 目录下的 AGENTS.md 规则文件（已实现，additive + 同目录 override，FE-022）
@@ -116,15 +116,21 @@
 ## Web Features
 
 - 布局 AppShell：圆角卡片浮于 app 底色（品牌靛蓝顶光晕），侧栏可拖拽调宽 + 折叠（持久化）
-- 侧栏 AppSidebar：工作区 Collapsible 列表 + 会话列表；跨工作区搜索；添加 / 删除工作区、新建 / 删除 / 重命名会话（inline）；设置入口
+- 侧栏 AppSidebar：工作区 Collapsible 列表（默认展开）+ 会话列表；跨工作区搜索；添加 / 删除工作区、新建 / 删除 / 重命名会话（inline）；设置入口
 - 顶栏 AppTopbar：当前工作区 + 切换下拉（最近工作区）+ 添加工作区
 - 首页 Home：品牌 hero（logo + tagline）+ 当前工作区会话列表 / 空状态引导
 - 聊天 Chat：流式事件按 turn 块状渲染——thinking / tool / assistant / usage / compact / error / warning；用户气泡；空状态引导
+- 聚合消息：回合过程折叠为摘要行（思考时长 + 工具计数 + 错误标记），回答常显；历史回合收起、最新回合流式展开，点击摘要行开合
 - 工具调用 ToolRow：默认折叠显摘要，展开看参数与 result；活动工具卡片显实时执行 / 参数生成进度
 - sub-agent SubagentBlock：sub-agent 事件分组渲染（author / runId 打标）
 - 交互 InteractionModal：`ask_question` 工具向 human 提问 / 选择
 - 权限裁决 PermissionModal：危险操作执行前弹窗（允许一次 / 永久允许含范围勾选 / 拒绝）；Settings 工具权限卡（模式三档 + 全局/项目规则增删 + 危险基线增删）
-- 输入 InputBox：slash 命令补全、`@` 文件引用、上下文压缩 indeterminate 进度条、停止 / 发送
+- 会话权限 pill PermissionPicker：输入框发送键左侧，彩色盾牌标识三档模式；会话级覆盖，未设置回落全局默认，持久化于 session meta（SPEC-037）
+- 变更 tab ChangesTab：快照下拉 + 高亮完整命令条 + 按文件手风琴看 diff，命令条/高亮跟随明暗主题
+- 文件 tab FilesTab：全量文件树 + 搜索 + gitignore 显隐开关，点文件开 preview modal
+- 运行 tab RuntimeTab：工作区级后台进程中心（SPEC-038）——进程卡片（状态点 / 意图标题 / 完整命令 / 来源会话 / 时长 / 日志展开 / 二次确认停止），运行中数角标
+- 输入 InputBox：slash 命令补全（内置 + 自定义 + Skills 分组，键盘导航）、`@` 文件引用、上下文压缩 indeterminate 进度条、随内容自动增高（上限 10 行后滚动）、IME 组合输入守卫、停止 / 发送
+- 技能斜杠指令：已安装技能以 `/<name>` 暴露（弹层 Skills 分组），执行即技能正文展开注入 + 参数追加；用户气泡渲染为技能徽标（/name + 参数，正文可展开查看）
 - 状态栏 StatusBar：模型 / Provider、上下文用量进度、Skill 数、MCP 数
 - 设置 Settings：`config.yaml` 图形化编辑，卡片可折叠（默认提供方 → 模型提供方 → 工具 → MCP 服务）；工具开关卡用 Switch（全量工具目录）、web_search 行内 provider（ddg/tavily/bing）+ API Key、browser_navigate 行内 cdpUrl；Provider 支持**拉取模型**（GET /models 填充列表）/ **测试模型**（ping 测可用性 + 首字延迟，✓/✗ 徽标）/ **选择模型**（可用者设默认），参考 LLM_Proxy；热生效
 - 品牌识别：Logo（badge / glyph 双变体）+ 品牌靛蓝主题（`--primary`）+ favicon；选中色 / 细滚动条

@@ -85,12 +85,12 @@ export function InputBox({
             ?.scrollIntoView({ block: "nearest" });
     }, [highlight, commandOpen]);
 
-    // 自动增高（按内容，上限 160px 后滚动）
+    // 自动增高（按内容，上限 240px（10 行）后滚动）
     useLayoutEffect(() => {
         const ta = taRef.current;
         if (!ta) return;
         ta.style.height = "auto";
-        ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
+        ta.style.height = `${Math.min(ta.scrollHeight, 240)}px`;
     }, [draft]);
 
     // 在光标处插入换行（Alt+Enter，textarea 默认对 Alt+Enter 不插换行）
@@ -109,7 +109,7 @@ export function InputBox({
             const pos = start + 1;
             ta.setSelectionRange(pos, pos);
             ta.style.height = "auto";
-            ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
+            ta.style.height = `${Math.min(ta.scrollHeight, 240)}px`;
         });
     };
 
@@ -224,7 +224,7 @@ export function InputBox({
                             disabled={pending}
                             rows={1}
                             placeholder={t("inputBox.placeholder")}
-                            className="flex-1 resize-none border-0 outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 bg-transparent text-sm leading-6 max-h-40 overflow-y-auto py-1.5"
+                            className="resize-none border-0 outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 bg-transparent text-sm leading-6 max-h-60 overflow-y-auto py-1.5"
                             onChange={(e) => setDraft(e.target.value)}
                             onKeyDown={(e) => {
                                 // IME 组合中（中文输入确认候选词的 Enter）不触发任何发送/指令

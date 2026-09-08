@@ -166,7 +166,8 @@ export function AppSidebar({
     };
 
     const onToggle = (w: WorkspaceMeta) => {
-        const willOpen = !openKeys[w.projectKey];
+        // 默认展开（未显式关过即视为开）：点击把"默认开"翻成显式关
+        const willOpen = openKeys[w.projectKey] === false;
         dispatch(setSelected(w));
         setOpenKeys((p) => ({ ...p, [w.projectKey]: willOpen }));
     };
@@ -499,7 +500,7 @@ export function AppSidebar({
                         {workspaces.map((w) => (
                         <Collapsible
                             key={w.projectKey}
-                            open={!!openKeys[w.projectKey]}
+                            open={openKeys[w.projectKey] !== false}
                             onOpenChange={() => onToggle(w)}
                         >
                             <div
