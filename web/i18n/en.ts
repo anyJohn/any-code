@@ -69,6 +69,7 @@ export const en: Record<string, string> = {
     "perm.acceptEdits": "Accept edits",
     "perm.trusted": "Trusted",
     "chatView.compacting": "Compacting context…",
+    "chatView.jumpBottom": "Scroll to bottom",
     "command.compactProgressPersisting": "Persisting session…",
     "command.compactProgressPreparing": "Preparing compaction…",
     "command.compactProgressSummarizing": "Summarizing · {tokens} tokens generated",

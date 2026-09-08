@@ -70,6 +70,7 @@ export const zh: Record<string, string> = {
     "perm.acceptEdits": "编辑信任",
     "perm.trusted": "完全信任",
     "chatView.compacting": "正在压缩上下文…",
+    "chatView.jumpBottom": "滚动到底部",
     "command.compactProgressPersisting": "写入会话…",
     "command.compactProgressPreparing": "准备压缩…",
     "command.compactProgressSummarizing": "摘要生成中 · 已生成 {tokens} tokens",

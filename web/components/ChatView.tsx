@@ -23,7 +23,7 @@ import { TodoPanel } from "./TodoPanel";
 import { RuntimeTab } from "./RuntimeTab";
 import type { JobInfo } from "./RuntimeTab";
 import { useT } from "@/i18n";
-import { MessagesSquare, GitCompare, FolderOpen } from "lucide-react";
+import { MessagesSquare, GitCompare, FolderOpen, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Cpu } from "lucide-react";
 
@@ -101,6 +101,20 @@ export function ChatView({
     const [openSubs, setOpenSubs] = useState<Record<string, boolean>>({});
     const [highlight, setHighlight] = useState(0);
     const [tab, setTab] = useState<MainTab>("chat");
+    // 各 tab 滚动位置记忆（bugfix：切 tab 回聊天总在消息头部）
+    const scrollMemo = useRef<Record<string, number>>({});
+    const [showJump, setShowJump] = useState(false);
+    const switchTab = (next: MainTab) => {
+        const el = scrollRef.current;
+        if (el && tab === "chat") scrollMemo.current.chat = el.scrollTop;
+        setTab(next);
+        if (next === "chat") {
+            requestAnimationFrame(() => {
+                const el2 = scrollRef.current;
+                if (el2) el2.scrollTop = scrollMemo.current.chat ?? el2.scrollHeight;
+            });
+        }
+    };
     const [previewPath, setPreviewPath] = useState<string | null>(null);
 
 
@@ -209,7 +223,7 @@ export function ChatView({
                 {TABS.map((x) => (
                     <button
                         key={x.key}
-                        onClick={() => setTab(x.key)}
+                        onClick={() => switchTab(x.key)}
                         className={cn(
                             "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors",
                             tab === x.key
@@ -229,7 +243,7 @@ export function ChatView({
             </div>
 
             {tab === "chat" && (
-                <>
+                <div className="relative flex-1 min-h-0 flex flex-col">
                     <TodoPanel events={events} />
                     <MessageList
                         renderItems={renderItems}
@@ -241,6 +255,13 @@ export function ChatView({
                         toggleSub={toggleSub}
                         scrollRef={scrollRef}
                         onLayoutEffect={() => {}}
+                        onScroll={() => {
+                            const el = scrollRef.current;
+                            if (!el) return;
+                            setShowJump(
+                                el.scrollHeight - el.scrollTop - el.clientHeight > 400
+                            );
+                        }}
                         onEditUserMessage={(ordinal, text) => {
                             void (async () => {
                                 const res = await apiJson<
@@ -256,7 +277,21 @@ export function ChatView({
                             })();
                         }}
                     />
-                </>
+                    {/* 距底超过一屏才显示（todo #13） */}
+                    {showJump && (
+                        <button
+                            onClick={() => {
+                                const el = scrollRef.current;
+                                if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+                                setShowJump(false);
+                            }}
+                            title={t("chatView.jumpBottom")}
+                            className="absolute bottom-3 right-5 z-10 rounded-full border border-border bg-background shadow-md p-2 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                        >
+                            <ArrowDown className="size-4" />
+                        </button>
+                    )}
+                </div>
             )}
             {tab === "changes" && projectKey && <ChangesTab projectKey={projectKey} />}
             {tab === "files" && projectKey && (

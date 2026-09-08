@@ -44,6 +44,8 @@ interface MessageListProps {
     toggleSub: (id: string) => void;
     scrollRef: React.RefObject<HTMLDivElement | null>;
     onLayoutEffect: () => void;
+    /** 滚动回调（父组件驱动"滚到底"悬浮按钮显隐） */
+    onScroll?: () => void;
     /** 编辑用户消息重发（B-013）：ordinal=第几条 user 消息（0-based），text=编辑后文本 */
     onEditUserMessage: (ordinal: number, text: string) => void;
 }
@@ -61,6 +63,7 @@ export function MessageList({
     toggleTool,
     toggleSub,
     scrollRef,
+    onScroll,
     onEditUserMessage,
 }: MessageListProps) {
     // 聚合消息（用户需求 2026-09-07）：默认 = 历史回合收起、最新回合展开（流式观战）；
@@ -139,7 +142,7 @@ export function MessageList({
     })();
 
     return (
-        <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
+        <div ref={scrollRef} onScroll={onScroll} className="flex-1 min-h-0 overflow-y-auto">
             <div className="w-full max-w-3xl mx-auto px-4 py-4 flex flex-col gap-2">
                 {renderItems.map((item, i) => {
                     if (item.kind === "turn") {
