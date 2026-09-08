@@ -135,6 +135,7 @@
 - 状态栏 StatusBar：模型 / Provider、上下文用量进度、Skill 数、MCP 数
 - 设置 Settings：`config.yaml` 图形化编辑，卡片可折叠（默认提供方 → 模型提供方 → 工具 → MCP 服务）；工具开关卡用 Switch（全量工具目录）、web_search 行内 provider（ddg/tavily/bing）+ API Key、browser_navigate 行内 cdpUrl；Provider 支持**拉取模型**（GET /models 填充列表）/ **测试模型**（ping 测可用性 + 首字延迟，✓/✗ 徽标）/ **选择模型**（可用者设默认），参考 LLM_Proxy；热生效
 - 品牌识别：Logo（badge / glyph 双变体）+ 品牌靛蓝主题（`--primary`）+ favicon；选中色 / 细滚动条
+- 暗黑模式三态：浅色 / 深色 / 跟随系统（`config.yaml ui.theme`，ThemeProvider + `.dark` 类策略）；暗色 = Monokai Pro 系、亮色 = 其亮色姊妹版（DesignSpec「主题与配色」定稿），品牌靛蓝主色亮暗一致；代码块跟随主题（亮 GitHub Light / 暗深底）；设置页「通用」tab 收口语言 + 外观（顶栏语言切换按钮移除）
 - Markdown 渲染（prose）+ 代码块
 - 历史持久化重放：durable 事件日志作 reload 真值，退役反推重建（SPEC-030）
 - 桌面端 TitleBar：无边框窗口内置控件（仅 Electron 内渲染，浏览器模式无）
