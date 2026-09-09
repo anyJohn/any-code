@@ -415,8 +415,9 @@ function UserBubble({
 
     return (
         <div key={event.id} className="flex justify-end py-2 group/msg">
-            <div className="max-w-[80%] flex flex-col items-start">
-                <div className="rounded-2xl rounded-br-sm bg-primary px-3 py-1.5 text-sm text-primary-foreground whitespace-pre-wrap break-words select-text">
+            {/* min-w-0：解锁 flex item 的 min-width:auto——否则长单行的 min-content 撑破 max-w-80% */}
+            <div className="max-w-[80%] min-w-0 flex flex-col items-start">
+                <div className="max-w-full rounded-2xl rounded-br-sm bg-primary px-3 py-1.5 text-sm text-primary-foreground whitespace-pre-wrap break-words select-text">
                     {event.message}
                 </div>
                 {/* 复制 + 编辑：气泡下方左缘（用户反馈 2026-09-06） */}
