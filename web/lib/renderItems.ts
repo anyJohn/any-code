@@ -48,9 +48,13 @@ export function groupByTurn(
 ): TurnItem[] {
     const items: TurnItem[] = [];
     let cur: TurnItem | null = null;
+    // cur 的首事件下标（startIdx 按组各自记录——增量/全量算法的闭合判定按事件下标对账，
+    // 共享 buffer 起始下标会让同一组在 closed/tail 各出现一次 = 双气泡，2026-09-09）
+    let curStart = 0;
     const flush = () => {
         // 仅 Iteration 的空回合不渲染（停止/权限中断只剩一行 "Iteration N"，是噪音）
         if (cur && (cur.assistant || cur.tools.length || cur.thinking)) {
+            cur.startIdx = curStart;
             items.push(cur);
         }
         cur = null;
@@ -64,9 +68,11 @@ export function groupByTurn(
             t.thinkingEndedAt = e.timestamp;
         }
     };
-    for (const e of events) {
+    for (let i = 0; i < events.length; i++) {
+        const e = events[i];
         if (e.type === "Iteration") {
             flush();
+            curStart = i;
             cur = {
                 kind: "turn",
                 turnId: e.turnId ?? "",
@@ -75,13 +81,19 @@ export function groupByTurn(
             };
         } else if (e.type === "Thinking") {
             // 思考内容：累积进当前回合的 thinking 字段
-            if (!cur) cur = { kind: "turn", turnId: e.turnId ?? "", tools: [] };
+            if (!cur) {
+                curStart = i;
+                cur = { kind: "turn", turnId: e.turnId ?? "", tools: [] };
+            }
             if (cur.thinkingStartedAt === undefined) cur.thinkingStartedAt = e.timestamp;
             cur.thinking = (cur.thinking ?? "") + e.message;
         } else if (e.type === "AssistantDelta") {
             // 流式增量：累积进当前回合的 assistant 文本（实时态，不入盘）。
             // 到 ASSISTANT 定稿时由同回合替换，内容一致。
-            if (!cur) cur = { kind: "turn", turnId: e.turnId ?? "", tools: [] };
+            if (!cur) {
+                curStart = i;
+                cur = { kind: "turn", turnId: e.turnId ?? "", tools: [] };
+            }
             markThinkingDone(cur, e);
             if (!cur.assistant) {
                 cur.assistant = { ...e, type: "Assistant" } as AgentEvent;
@@ -100,6 +112,7 @@ export function groupByTurn(
                 cur.assistant = e;
             } else {
                 flush();
+                curStart = i;
                 cur = {
                     kind: "turn",
                     turnId: e.turnId ?? "",
@@ -121,7 +134,10 @@ export function groupByTurn(
             markThinkingDone(cur, e);
             continue;
         } else if (e.type === "Tool") {
-            if (!cur) cur = { kind: "turn", turnId: e.turnId ?? "", tools: [] };
+            if (!cur) {
+                curStart = i;
+                cur = { kind: "turn", turnId: e.turnId ?? "", tools: [] };
+            }
             markThinkingDone(cur, e);
             cur.tools.push(e);
         } else {
@@ -164,8 +180,9 @@ export function toRenderItems(events: AgentEvent[]): RenderItem[] {
     let sub: { runId: string; author: string; events: AgentEvent[]; startIdx: number } | null =
         null;
     const flushMain = (closeThinkingAt?: number) => {
+        // startIdx 由 groupByTurn 按组内首事件下标各自记录（此处只补 buffer 偏移）
         for (const t of groupByTurn(mainBuf, { closeThinkingAt })) {
-            t.startIdx = mainStart;
+            t.startIdx = (t.startIdx ?? 0) + mainStart;
             items.push(t);
         }
         mainBuf = [];
