@@ -288,6 +288,11 @@ async function runHandler(
     let out: string | ToolResult | undefined;
     try {
         out = await plan.tool.handler(plan.args, ctx);
+    } catch (e) {
+        // handler 异常作为工具结果喂回模型（不炸对话循环）——失败是模型可恢复的状态
+        // （换策略/重试/告知用户）；abort 透传，终态由主循环处理。
+        if (ctx.signal?.aborted) throw e;
+        out = `Error: 工具 ${plan.funcName} 执行异常：${e instanceof Error ? e.message : String(e)}`;
     } finally {
         // 清理注入的回调，避免后续 tool 复用泄漏 / 误发 progress
         if (injectProgress) ctx.emitProgress = undefined;

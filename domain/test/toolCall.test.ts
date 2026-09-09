@@ -57,6 +57,24 @@ describe("toolCall（tools/toolCall.ts）", () => {
         });
     });
 
+    it("handler 抛异常 → Error 文案作为工具结果喂回模型（不炸对话循环）；abort 透传", async () => {
+        const boom = mkTool(
+            "boomTool",
+            vi.fn().mockRejectedValue(new Error("CDP 连接失败"))
+        );
+        const result = await toolCall([mkCall("boomTool")], mkCtx(), [boom], "t1");
+        expect(result[0].role).toBe("tool");
+        expect(result[0].content).toContain("Error");
+        expect(result[0].content).toContain("CDP 连接失败");
+
+        const ac = new AbortController();
+        ac.abort();
+        const abortCtx: ToolContext = { ...mkCtx(), signal: ac.signal };
+        await expect(
+            toolCall([mkCall("boomTool")], abortCtx, [boom], "t1")
+        ).rejects.toThrow();
+    });
+
     it("AC-006 执行后提交 TOOL 事件 {name,args,result,turnId}", async () => {
         const handler = vi.fn().mockResolvedValue("tool-output");
         const tools = [mkTool("fakeTool", handler)];
