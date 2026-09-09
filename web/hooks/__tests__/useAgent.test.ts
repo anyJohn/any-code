@@ -135,8 +135,7 @@ describe("useAgent (目标C: fetch-stream + 两步建 session)", () => {
         expect(result.current.events.some((e) => e.type === "Stopped")).toBe(true);
     });
 
-    it("消费 {seq, event} 帧格式（FR-30）+ mount 重挂运行中会话", async () => {
-        const f = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    it("消费 {seq, event} 帧格式（FR-30）+ mount 重挂运行中会话", async () => {        const f = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
         f.mockImplementation(async (url: string) => {
             if (String(url).startsWith("/api/sessions/s1/stream")) {
                 const enc = new TextEncoder();
@@ -178,5 +177,64 @@ describe("useAgent (目标C: fetch-stream + 两步建 session)", () => {
             "/api/sessions/s1/stream?since=-1",
             expect.anything()
         );
+    });
+
+    it("seq 投递闸：断线重挂的重叠帧不重复入列（思考/回合块重复 bugfix）", async () => {
+        const f = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+        const frame = (seq: number, type: string, message: string) => {
+            const enc = new TextEncoder();
+            return new Response(
+                new ReadableStream<Uint8Array>({
+                    start(controller) {
+                        controller.enqueue(
+                            enc.encode(
+                                `data: ${JSON.stringify({ seq, event: { timestamp: seq, type, message } })}\n\n`
+                            ),
+                        );
+                        controller.close();
+                    },
+                }),
+                { status: 200, headers: { "content-type": "text/event-stream" } }
+            );
+        };
+        // /run 首订：seq0 Iteration 后流中断（无终态帧）→ pump 以 since=0 重挂；
+        // 重挂流重叠回放 seq0（客户端已见）再放行 seq1/seq2——重叠帧必须被丢弃
+        f.mockImplementation(async (url: string) => {
+            const u = String(url);
+            if (u.includes("/run")) return frame(0, "Iteration", "i1");
+            if (u.includes("since=0")) {
+                const enc = new TextEncoder();
+                return new Response(
+                    new ReadableStream<Uint8Array>({
+                        start(controller) {
+                            for (const [seq, type, msg] of [
+                                [0, "Iteration", "i1"],
+                                [1, "Assistant", "答"],
+                                [2, "Done", "完成"],
+                            ] as const) {
+                                controller.enqueue(
+                                    enc.encode(
+                                        `data: ${JSON.stringify({ seq, event: { timestamp: seq, type, message: msg } })}\n\n`
+                                    ),
+                                );
+                            }
+                            controller.close();
+                        },
+                    }),
+                    { status: 200, headers: { "content-type": "text/event-stream" } }
+                );
+            }
+            return new Response("{}", { status: 404 });
+        });
+        const { result } = renderHook(() => useAgent("s1", "/w", []));
+        await act(async () => {
+            result.current.submit("hi");
+        });
+        await waitFor(() => expect(result.current.pending).toBe(false));
+        const iterations = result.current.events.filter(
+            (e) => e.type === "Iteration"
+        );
+        expect(iterations).toHaveLength(1); // 重叠的 seq0 帧被 seq 闸丢弃
+        expect(result.current.events.some((e) => e.type === "Done")).toBe(true);
     });
 });

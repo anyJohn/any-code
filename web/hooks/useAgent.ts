@@ -151,11 +151,21 @@ export function useAgent(
         []
     );
 
-    /** 消费一条帧流；返回终态是否到达。seen 传入时做 attach 重放去重。 */
+    /**
+     * 消费一条帧流；返回终态是否到达。seen 传入时做 attach 重放去重。
+     * seq 投递闸（bugfix 2026-09-09 思考/回合块重复）：同一 run 的帧可能被多条流
+     * 并发投递（mount attach 与 submit pump 交叠、StrictMode 双挂载、重放窗口），
+     * 旧逻辑只有 attach 一方有快照去重且快照取自挂载时刻——窗口内的帧两方各入列一次，
+     * 渲染成两个相同回合块（如两个 "Iteration 2/150"）。per-run seq 单调，以先到者为准：
+     * seq ≤ 本 hook 已投递最大值的帧直接丢弃。seq=-1（synth 提示帧/裸事件兼容）不去重。
+     */
     const consumeStream = useCallback(
         async (body: ReadableStream<Uint8Array>, seen?: Set<string>) => {
             for await (const frame of parseSSE(body)) {
-                lastSeqRef.current = Math.max(lastSeqRef.current, frame.seq);
+                if (frame.seq >= 0) {
+                    if (frame.seq <= lastSeqRef.current) continue;
+                    lastSeqRef.current = frame.seq;
+                }
                 ingest(frame.event, seen);
                 if (TERMINAL.has(frame.event.type)) {
                     setPending(false);
@@ -224,7 +234,9 @@ export function useAgent(
                     signal: ac.signal,
                 });
                 if (!res.ok || !res.body) return; // 空闲会话：无流
-                lastSeqRef.current = -1;
+                // 不重置 lastSeqRef：若同 hook 已有流投递过帧（StrictMode 双挂载/提交后
+                // attach），重放中 seq ≤ 已投递最大值的帧由 consumeStream 的 seq 闸丢弃。
+                // 会话切换经 ChatView key 重挂载（ref 全新），无需此处清理。
                 const seen = new Set(eventsRef.current.map(eventKey));
                 setPending(true);
                 const terminal = await consumeStream(res.body, seen);
