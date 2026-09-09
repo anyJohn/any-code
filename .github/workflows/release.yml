@@ -39,7 +39,9 @@ jobs:
           STAGE=$(mktemp -d)
           mkdir -p $STAGE/web/dist $STAGE/server/dist $STAGE/build
           cp -r web/dist/. $STAGE/web/dist/
-          cp server/dist/server.mjs $STAGE/server/dist/
+          # dist 整目录：server.mjs + builtin/ + playwright-core 运行期元数据（browsers.json /
+          # package.json，bundle 内 registry init 按 packageRoot 读，缺则启动即崩，0.0.3 踩坑）
+          cp -r server/dist/. $STAGE/server/dist/
           cp build/launcher.mjs build/versions.env $STAGE/build/
           cp rg-out/rg $STAGE/rg
           tar -czf anycode-core-linux-x64.tar.gz -C $STAGE .
