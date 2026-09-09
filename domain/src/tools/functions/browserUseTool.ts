@@ -160,18 +160,24 @@ interface PageInfo {
     url: string;
     title: string;
     text: string;
+    truncated?: boolean;
+    noMatch?: boolean;
 }
 
-async function contentOf(): Promise<PageInfo> {
+async function contentOf(selector?: string): Promise<PageInfo> {
+    // selector：只取命中区域文本（RR-028 一期）；截断时带标记，模型知道内容不完整
+    const sel = typeof selector === "string" && selector.trim() ? selector.trim().replace(/'/g, "\\'") : "";
+    const expr = sel
+        ? "(() => { const el = document.querySelector('" + sel + "'); const full = el ? el.innerText : ''; return {url: location.href, title: document.title, text: full.slice(0," + TEXT_LIMIT + "), truncated: full.length > " + TEXT_LIMIT + ", noMatch: !el}; })()"
+        : "(() => { const full = document.body ? document.body.innerText : ''; return {url: location.href, title: document.title, text: full.slice(0," + TEXT_LIMIT + "), truncated: full.length > " + TEXT_LIMIT + "}; })()";
     const r = await cdp("Runtime.evaluate", {
-        expression:
-            "({url: location.href, title: document.title, text: (document.body?document.body.innerText:'').slice(0," +
-            TEXT_LIMIT +
-            ")})",
+        expression: expr,
         returnByValue: true,
     });
     const v = r.result?.value as PageInfo | undefined;
-    return v ?? { url: "", title: "", text: "" };
+    if (!v) return { url: "", title: "", text: "" };
+    if (v.noMatch) return { url: v.url, title: v.title, text: "(selector 未命中任何元素)" };
+    return v;
 }
 
 // ———— 工具（用户决策 2026-09-04：三合一为单个 browser_use，action 分派） ————
@@ -184,19 +190,27 @@ async function navigate(args: { url?: string }, ctx: ToolContext): Promise<strin
         await ensureReady(cdpUrlOf(ctx));
         await cdp("Page.navigate", { url });
         const loaded = await waitLoad(NAV_TIMEOUT_MS);
+        // 超时不报错：SPA 异步渲染不会触发 load 事件——照常返回页面状态（RR-028 #4）
         const info = await contentOf();
-        return `导航到 ${url}（load ${loaded ? "完成" : "超时(<<继续读可能不完整)"}）\n标题: ${info.title}\nURL: ${info.url}`;
+        return loaded
+            ? `导航到 ${url}（load 完成）\n标题: ${info.title}\nURL: ${info.url}`
+            : `导航到 ${url}：网络 load 超时，但页面状态如下（SPA 可能仍在异步渲染，可稍后用 content 重读）\n标题: ${info.title}\nURL: ${info.url}`;
     } catch (e) {
         return `Error: ${e instanceof Error ? e.message : String(e)}`;
     }
 }
 
-async function content(_args: unknown, ctx: ToolContext): Promise<string> {
+async function content(
+    args: { selector?: string },
+    ctx: ToolContext
+): Promise<string> {
     try {
         await ensureReady(cdpUrlOf(ctx));
-        const { url, title, text } = await contentOf();
+        const selector = typeof args?.selector === "string" ? args.selector : undefined;
+        const { url, title, text, truncated } = await contentOf(selector);
         if (!text && !url) return "(页面无内容——可能未导航或空白页)";
-        return `URL: ${url}\n标题: ${title || "(无标题)"}\n\n${text || "(无可读文本)"}`;
+        const tail = truncated ? `\n\n(内容已截断至 ${TEXT_LIMIT} 字符——用 selector 参数只取目标区域，或 eval 精读)` : "";
+        return `URL: ${url}\n标题: ${title || "(无标题)"}\n\n${text || "(无可读文本)"}${tail}`;
     } catch (e) {
         return `Error: ${e instanceof Error ? e.message : String(e)}`;
     }
@@ -207,9 +221,11 @@ async function evalJs(args: { js?: string }, ctx: ToolContext): Promise<string> 
     if (!js) return "Error: js 不能为空";
     try {
         await ensureReady(cdpUrlOf(ctx));
+        // awaitPromise：返回 Promise 时等 resolve 再序列化（否则拿到空壳，RR-028 #2）
         const r = await cdp("Runtime.evaluate", {
             expression: js,
             returnByValue: true,
+            awaitPromise: true,
         });
         if (r.exceptionDetails) {
             return `Error: 执行异常 ${r.exceptionDetails.exception?.description ?? r.exceptionDetails.text ?? ""}`;
@@ -243,7 +259,11 @@ export const browserUseTool: Tool = {
                     },
                     js: {
                         type: "string",
-                        description: "action=eval 时必填：要执行的 JavaScript 表达式/语句",
+                        description: "action=eval 时必填：要执行的 JavaScript 表达式/语句（返回 Promise 会自动 await）",
+                    },
+                    selector: {
+                        type: "string",
+                        description: "action=content 时可选：CSS 选择器，只读命中区域的文本（长页面防爆上下文）",
                     },
                 },
                 required: ["action"],
@@ -251,7 +271,7 @@ export const browserUseTool: Tool = {
         },
     },
     handler: async (rawArgs, ctx: ToolContext) => {
-        const args = rawArgs as { action?: string; url?: string; js?: string };
+        const args = rawArgs as { action?: string; url?: string; js?: string; selector?: string };
         if (args?.action === "navigate") return navigate(args, ctx);
         if (args?.action === "content") return content(args, ctx);
         if (args?.action === "eval") return evalJs(args, ctx);

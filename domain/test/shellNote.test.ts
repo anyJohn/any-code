@@ -11,10 +11,12 @@ describe("shellNote（只报环境，不指导）", () => {
         expect(n).not.toContain("mapfile");
         expect(n).not.toContain("/c/Users");
     });
-    it("git-bash：只报环境名", () => {
+    it("git-bash：环境名 + MSYS 路径语义提示（native 工具不吃 /c/... 转换）", () => {
         const n = shellNote("git-bash");
         expect(n).toContain("Git Bash");
-        expect(n).not.toContain("/c/Users");
+        // 2026-09-09 策略更新：路径映射是高频坑（用户反馈），git-bash 态要给路径语义指导
+        expect(n).toContain("/c/Users");
+        expect(n).toContain("C:/Users");
     });
     it("mac-sh：报 macOS /bin/sh + bash 3.2 + BSD userland", () => {
         const n = shellNote("mac-sh");

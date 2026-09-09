@@ -39,6 +39,26 @@ export function RuntimeTab({
     const { workspaces } = useAppSelector(selectWorkspace) as unknown as { workspaces: WorkspaceWithSessions[] };
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
     const [armed, setArmed] = useState<string | null>(null);
+    // 手动创建后台任务（用户 todo）：新建进程入口
+    const [newOpen, setNewOpen] = useState(false);
+    const [newCmd, setNewCmd] = useState("");
+    const [launching, setLaunching] = useState(false);
+    const launch = async () => {
+        if (!newCmd.trim() || launching) return;
+        setLaunching(true);
+        try {
+            await apiJson(`/api/workspaces/${projectKey}/jobs`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ command: newCmd.trim() }),
+            });
+            setNewCmd("");
+            setNewOpen(false);
+            onKilled?.();
+        } finally {
+            setLaunching(false);
+        }
+    };
 
     // sessionId → 会话标题（"来自哪个对话"）
     const titleBySession = new Map<string, string>();
@@ -59,6 +79,44 @@ export function RuntimeTab({
     return (
         <div className="h-full overflow-y-auto">
             <div className="w-full max-w-3xl mx-auto px-4 py-3 flex flex-col gap-3">
+                {/* 新建进程入口（用户 todo #10） */}
+                <div className="flex justify-end">
+                    {newOpen ? (
+                        <div className="flex items-center gap-1.5 w-full">
+                            <input
+                                value={newCmd}
+                                onChange={(e) => setNewCmd(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") void launch();
+                                    if (e.key === "Escape") setNewOpen(false);
+                                }}
+                                autoFocus
+                                placeholder={t("runtime.newPlaceholder")}
+                                className="flex-1 min-w-0 text-xs font-mono rounded-md border border-input bg-background px-2 py-1.5 outline-none focus:ring-1 focus:ring-ring"
+                            />
+                            <button
+                                onClick={() => void launch()}
+                                disabled={launching || !newCmd.trim()}
+                                className="shrink-0 rounded-md bg-primary text-primary-foreground px-2.5 py-1.5 text-xs disabled:opacity-50"
+                            >
+                                {t("runtime.launch")}
+                            </button>
+                            <button
+                                onClick={() => setNewOpen(false)}
+                                className="shrink-0 rounded-md border border-input px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-accent"
+                            >
+                                {t("common.cancel")}
+                            </button>
+                        </div>
+                    ) : (
+                        <button
+                            onClick={() => setNewOpen(true)}
+                            className="rounded-md border border-input px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                        >
+                            {t("runtime.new")}
+                        </button>
+                    )}
+                </div>
                 {jobs.length === 0 && (
                     <div className="py-16 text-center text-sm text-muted-foreground">
                         {t("runtime.empty")}

@@ -28,6 +28,9 @@ export function bashCandidates(gitBashPath?: string): string[] {
         SYSTEM_GIT_BASH,
         process.env.ANYCODE_BASH_PATH,
         join(globalConfigDir(), "runtime", "busybox", "sh.exe"),
+        // POSIX 兜底（非 Windows 平台总可用；Windows 上这两个路径不存在自然过滤）
+        "/bin/bash",
+        "/bin/sh",
     ].filter((x): x is string => !!x && existsSync(x));
 }
 
