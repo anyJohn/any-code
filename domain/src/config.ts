@@ -490,21 +490,21 @@ export class Config {
     }
 }
 
-/** 时间戳备份（保留最近 10 份）+ 滚动 .bak。单独函数供 save/saveRaw 共用。 */
+/** 时间戳备份（保留最近 3 份，用户决策 2026-09-09）+ 滚动 .bak。单独函数供 save/saveRaw 共用。 */
 function backupConfig(file: string): void {
     if (!existsSync(file)) return;
     try {
         const content = readFileSync(file, "utf-8");
         // 滚动 .bak：保存前的最近一份
         writeFileSync(file + ".bak", content, "utf-8");
-        // 时间戳链：连续保存不再互相覆盖；保留最近 10 份
+        // 时间戳链：连续保存不再互相覆盖；保留最近 3 份
         const stamped = `${file}.${new Date().toISOString().replace(/[:.]/g, "-")}.bak`;
         writeFileSync(stamped, content, "utf-8");
         const dir = dirname(file);
         const olds = readdirSync(dir)
             .filter((f) => f.startsWith(basename(file) + ".") && f.endsWith(".bak"))
             .sort();
-        while (olds.length > 10) unlinkSync(join(dir, olds.shift()!));
+        while (olds.length > 3) unlinkSync(join(dir, olds.shift()!));
     } catch {
         // 备份失败不阻断保存
     }

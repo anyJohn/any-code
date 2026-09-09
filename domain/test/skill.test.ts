@@ -79,6 +79,32 @@ describe("目录注入（B-003/B-004）", () => {
         expect(dir.name).toBe("dir-name");
         expect(dir.description).toBe("Dir Body");
     });
+
+    it("parseSkillMeta：YAML 块标量 description（>/|）完整解析（bugfix 2026-09-09，外部审查 P0）", () => {
+        // folded 块标量：正则只抓到 ">"，技能对模型不可见
+        const folded = parseSkillMeta(
+            "---\nname: cover-letter\ndescription: >\n  当用户提到求职信时触发。\n  根据岗位生成定制的 cover letter。\n---\n# body",
+            "x"
+        );
+        expect(folded.description).toBe(
+            "当用户提到求职信时触发。 根据岗位生成定制的 cover letter。"
+        );
+        // literal 块标量
+        const literal = parseSkillMeta(
+            "---\ndescription: |\n  中文润色：去 AI 味。\n---\nbody",
+            "humanizer-zh"
+        );
+        expect(literal.description).toContain("去 AI 味");
+        // 值含冒号/引号：正则会截断，js-yaml 正确解析
+        const colon = parseSkillMeta(
+            '---\ndescription: "用法: 先 use_skill 再执行"\n---\nbody',
+            "x"
+        );
+        expect(colon.description).toBe("用法: 先 use_skill 再执行");
+        // 非 YAML frontmatter：按无效处理，description 走正文截取回退（首 # 标题）
+        const weird = parseSkillMeta("---\ndescription: a: b: c\n---\n# 标题\nbody", "x");
+        expect(weird.description).toBe("标题");
+    });
 });
 
 describe("use_skill 工具（B-005 / AC-006）", () => {

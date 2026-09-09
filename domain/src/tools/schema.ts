@@ -240,7 +240,7 @@ const updateMemorySchema: ChatCompletionTool = {
     function: {
         name: ToolName.UpdateMemory,
         description:
-            "Persist information to long-term memory for future sessions, or consolidate existing memory. Use append when you learn something worth remembering across conversations (user preferences, key decisions, project conventions, durable facts); use rewrite occasionally to consolidate — rewrite the whole memory with redundant/merged/stale entries cleaned up (the current memory is already in your system prompt). Do NOT use it for transient task state or trivial chatter. Default scope is project (this workspace); use global for cross-project preferences.",
+            "Persist information to long-term memory for future sessions, or consolidate existing memory. Use append when you learn something worth remembering across conversations (user preferences, key decisions, project conventions, durable facts); use rewrite occasionally to consolidate — rewrite the whole memory with redundant/merged/stale entries cleaned up. Do NOT use it for transient task state or trivial chatter. Default scope is project (this workspace); use global for cross-project preferences.",
         parameters: {
             type: "object",
             properties: {

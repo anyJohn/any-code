@@ -76,11 +76,13 @@ export function loadMemory(workspace: Workspace, windowSize = 4000): string {
     if (!combined.trim()) return "";
 
     if (combined.length <= windowSize) {
-        return `\n# Previous context\n${combined}\n`;
+        // 末行注明"以上即当前记忆"（外部审查反馈 2026-09-09）：工具描述里的同义括号
+        // 已删——空记忆时该声明不成立，移到注入侧按需出现，避免误导模型。
+        return `\n# Previous context\n${combined}\n(The memory above is your current memory for this scope — use update_memory to amend it.)\n`;
     }
 
     const startIndex = combined.length - windowSize;
     const headerMatch = combined.lastIndexOf("## ", startIndex);
     const finalStartIndex = headerMatch !== -1 ? headerMatch : startIndex;
-    return `\n# Previous context\n${combined.slice(finalStartIndex)}\n\n`;
+    return `\n# Previous context\n${combined.slice(finalStartIndex)}\n(The memory above is your current memory for this scope — use update_memory to amend it.)\n`;
 }

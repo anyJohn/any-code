@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { join } from "node:path";
+import * as yaml from "js-yaml";
 import type { Workspace } from "./workspace";
 import { workspaceConfigDir, globalConfigDir } from "./workspace";
 
@@ -26,7 +27,13 @@ const DESC_LIMIT = 200;
 
 /**
  * 解析技能 frontmatter（--- 围栏 YAML，取 name/description）。
- * 缺省回退：name=文件名（去 .md）；description=正文首个 # 标题，再退首行。
+ * 解析用 js-yaml（bugfix 2026-09-09，外部审查反馈 P0）：正则 `^description:\s*(.+)$`
+ * 只认单行值，YAML 块标量（`description: >` 换行续写）只抓到指示符本身——技能目录里
+ * description 渲染成 ">" 或 "|"，模型无从匹配，技能对 agent 完全不可见。js-yaml
+ * 顺带正确处理值含冒号/引号的写法。frontmatter 非 YAML 可解析时按无效处理，
+ * description 走正文截取回退（首 # 标题 → 首行）——市面上就两种技能：
+ * 纯文本（无有效 frontmatter）与带 YAML frontmatter。
+ * 缺省回退：name=文件名（去 .md）。
  * 目录 description 超限截断（+…）。
  */
 export function parseSkillMeta(
@@ -40,11 +47,20 @@ export function parseSkillMeta(
     let body = content;
     const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(content);
     if (m) {
-        const fm = m[1];
-        const nm = /^name:\s*(.+)$/m.exec(fm);
-        const ds = /^description:\s*(.+)$/m.exec(fm);
-        if (nm) name = nm[1].trim();
-        if (ds) description = ds[1].trim();
+        // 首选 js-yaml：覆盖块标量（>/|）与含冒号/引号的值
+        let yml: unknown = null;
+        try {
+            yml = yaml.load(m[1]);
+        } catch {
+            // 非 YAML frontmatter：按无效处理，description 走正文截取回退
+        }
+        if (yml && typeof yml === "object") {
+            const rec = yml as Record<string, unknown>;
+            if (typeof rec.name === "string" && rec.name.trim()) name = rec.name.trim();
+            if (typeof rec.description === "string" && rec.description.trim()) {
+                description = rec.description.trim();
+            }
+        }
         body = content.slice(m[0].length);
     }
     if (!description) {
