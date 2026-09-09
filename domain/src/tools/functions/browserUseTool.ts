@@ -63,14 +63,25 @@ async function browserOf(cdpUrl: string): Promise<Browser> {
     }
 }
 
-function contextOf(browser: Browser): BrowserContext {
+async function contextOf(cdpUrl: string, browser: Browser): Promise<BrowserContext> {
     const ctx = browser.contexts()[0];
-    if (!ctx) throw new Error("CDP 端点无浏览器上下文（先在浏览器里打开任意页面）");
-    return ctx;
+    if (ctx) return ctx;
+    // 无上下文 = 调试端口活着但没有任何页面目标（窗口全关只剩后台进程 / 刚启动没开页）。
+    // 经 CDP HTTP 端点自开一个空白页（新版 Chrome 要求 PUT），Playwright 随即能看到上下文。
+    try {
+        await fetch(cdpUrl.replace(/\/+$/, "") + "/json/new?about:blank", { method: "PUT" });
+    } catch {
+        // 开页失败走下方报错
+    }
+    const retry = browser.contexts()[0];
+    if (retry) return retry;
+    throw new Error(
+        "CDP 端点无可用页面：浏览器以调试模式启动但没有打开任何窗口。请保持浏览器至少一个窗口开启（或重启：chrome --remote-debugging-port=9222 并打开任意页面）"
+    );
 }
 
-function activePage(browser: Browser): Page {
-    const pages = contextOf(browser).pages();
+async function activePage(cdpUrl: string, browser: Browser): Promise<Page> {
+    const pages = (await contextOf(cdpUrl, browser)).pages();
     // 取最后一个非 about:blank 页；全空白则取最后一页
     const real = pages.filter((p) => !p.url().startsWith("about:"));
     return (real[real.length - 1] ?? pages[pages.length - 1]) as Page;
@@ -107,11 +118,11 @@ async function pageInfo(page: Page, selector?: string): Promise<string> {
 
 // ———— actions ————
 
-async function navigate(args: { url?: string }, browser: Browser): Promise<string> {
+async function navigate(args: { url?: string }, cdpUrl: string, browser: Browser): Promise<string> {
     const url = typeof args?.url === "string" ? args.url.trim() : "";
     if (!url) return "Error: url 不能为空";
     if (!/^https?:\/\//i.test(url)) return "Error: 仅支持 http(s) URL";
-    const page = activePage(browser);
+    const page = await activePage(cdpUrl, browser);
     // load 超时不报错：SPA 异步渲染不会触发 load——照常返回页面状态（RR-028 #4）
     let note = "load 完成";
     try {
@@ -125,17 +136,18 @@ async function navigate(args: { url?: string }, browser: Browser): Promise<strin
 
 async function content(
     args: { selector?: string },
+    cdpUrl: string,
     browser: Browser
 ): Promise<string> {
-    const page = activePage(browser);
+    const page = await activePage(cdpUrl, browser);
     const selector = typeof args?.selector === "string" ? args.selector : undefined;
     return pageInfo(page, selector);
 }
 
-async function evalJs(args: { js?: string }, browser: Browser): Promise<string> {
+async function evalJs(args: { js?: string }, cdpUrl: string, browser: Browser): Promise<string> {
     const js = typeof args?.js === "string" ? args.js : "";
     if (!js) return "Error: js 不能为空";
-    const page = activePage(browser);
+    const page = await activePage(cdpUrl, browser);
     // page.evaluate 对返回 Promise 自动 await（RR-028 #2）
     try {
         const v = await page.evaluate(js);
@@ -145,8 +157,8 @@ async function evalJs(args: { js?: string }, browser: Browser): Promise<string> 
     }
 }
 
-async function snapshot(_args: unknown, browser: Browser): Promise<string> {
-    const page = activePage(browser);
+async function snapshot(_args: unknown, cdpUrl: string, browser: Browser): Promise<string> {
+    const page = await activePage(cdpUrl, browser);
     // 无障碍树 + ref：模型"看快照 → 引用 ref 点击"，复杂样式/iframe/shadow DOM 都能覆盖
     // ai 模式：输出带 [ref=f1e3] 引用
     const snap = await page
@@ -159,11 +171,12 @@ async function snapshot(_args: unknown, browser: Browser): Promise<string> {
 
 async function click(
     args: { ref?: string; selector?: string },
+    cdpUrl: string,
     browser: Browser
 ): Promise<string> {
     const t = args?.ref || args?.selector;
     if (!t) return "Error: 需要 ref（来自 snapshot）或 selector";
-    const page = activePage(browser);
+    const page = await activePage(cdpUrl, browser);
     try {
         await target(page, t).click({ timeout: ACT_TIMEOUT_MS });
         return `已点击 ${t}`;
@@ -174,12 +187,13 @@ async function click(
 
 async function fill(
     args: { ref?: string; selector?: string; text?: string },
+    cdpUrl: string,
     browser: Browser
 ): Promise<string> {
     const t = args?.ref || args?.selector;
     const text = typeof args?.text === "string" ? args.text : undefined;
     if (!t || text === undefined) return "Error: 需要 ref/selector 和 text";
-    const page = activePage(browser);
+    const page = await activePage(cdpUrl, browser);
     try {
         await target(page, t).fill(text, { timeout: ACT_TIMEOUT_MS });
         return `已填入 ${t}`;
@@ -190,9 +204,10 @@ async function fill(
 
 async function cookies(
     args: { op?: string; name?: string; value?: string; url?: string },
+    cdpUrl: string,
     browser: Browser
 ): Promise<string> {
-    const ctx = contextOf(browser);
+    const ctx = await contextOf(cdpUrl, browser);
     const op = args?.op ?? "get";
     if (op === "get") {
         // cookies() 参数是 URL 数组而非名字——按名字过滤在前端做
@@ -217,9 +232,10 @@ async function cookies(
 
 async function tabs(
     args: { op?: string; index?: number; url?: string },
+    cdpUrl: string,
     browser: Browser
 ): Promise<string> {
-    const ctx = contextOf(browser);
+    const ctx = await contextOf(cdpUrl, browser);
     const op = args?.op ?? "list";
     const pages = ctx.pages();
     if (op === "list") return pages.map((p, i) => `${i}: ${p.url()}`).join("\n");
@@ -330,28 +346,29 @@ export const browserUseTool: Tool = {
         if (!ACTIONS.includes(args?.action ?? ""))
             return "Error: action 必须是 navigate / content / eval / snapshot / click / fill / cookies / tabs 之一";
         let browser: Browser;
+        const cdpUrl = cdpUrlOf(ctx);
         try {
-            browser = await browserOf(cdpUrlOf(ctx));
+            browser = await browserOf(cdpUrl);
         } catch (e) {
             return `Error: ${e instanceof Error ? e.message : String(e)}`;
         }
         switch (args?.action) {
             case "navigate":
-                return navigate(args, browser);
+                return navigate(args, cdpUrl, browser);
             case "content":
-                return content(args, browser);
+                return content(args, cdpUrl, browser);
             case "eval":
-                return evalJs(args, browser);
+                return evalJs(args, cdpUrl, browser);
             case "snapshot":
-                return snapshot(args, browser);
+                return snapshot(args, cdpUrl, browser);
             case "click":
-                return click(args, browser);
+                return click(args, cdpUrl, browser);
             case "fill":
-                return fill(args, browser);
+                return fill(args, cdpUrl, browser);
             case "cookies":
-                return cookies(args, browser);
+                return cookies(args, cdpUrl, browser);
             case "tabs":
-                return tabs(args, browser);
+                return tabs(args, cdpUrl, browser);
             default:
                 return "Error: 未知 action"; // 不可达（上方已校验），仅为收窄类型
         }
