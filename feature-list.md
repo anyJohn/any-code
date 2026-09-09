@@ -18,7 +18,7 @@
   - 已内置 anycode-docs 技能（AnyCode 自身配置与管理手册：改 config/mcp/tools/skills/rules/memory/proxy + 生效时机，让 agent 能自我管理配置）
   - 已内置 office-mcp 技能（Office 39 工具：Word/Excel/PPT/PDF/OCR，MIT + 三审；未发 npm，需首次 clone+build 配 MCP）
   - 已内置 code-review（代码审查五维清单）/ test-writing（测试编写指南）/ release-checklist（发布检查单）技能（FR-25 ①，2026-09-05）
-  - 原生 web 工具（用户决策 2026-09-03，取代内置 MCP 连接器）：`web_fetch`（网页→Markdown）/ `web_search`（ddg 免 key，可换 tavily/bing）/ `browser_use`（真浏览器 CDP 单工具：action=navigate/content/eval——导航/读页/点击填表）
+  - 原生 web 工具（用户决策 2026-09-03，取代内置 MCP 连接器）：`web_fetch`（网页→Markdown）/ `web_search`（ddg 免 key，可换 tavily/bing）/ `browser_use`（真浏览器单工具，playwright-core connectOverCDP 连用户已开浏览器：navigate/content/eval/snapshot（aria 快照带 ref）/click/fill/cookies/tabs，SPEC-039）
 - Memory
   - 原文层：Session History（durable 事件日志，含 thinking / tool call / 报错 / usage 等，reload 重放）
   - 摘要层：Global + Workspace/project 的跨 Session 摘要，经 `update_memory` agent tool 主动写入（LLM 决定记什么；mode=rewrite 可全量重写蒸馏，2026-09-05）
@@ -45,7 +45,7 @@
   - `create_skill`，agent 把可复用经验固化为技能（正规安装通道：落点/命名校验/拒覆盖，杜绝 skills/skills 双层嵌套误装；写入即热生效，2026-09-04）
   - `ask_question`，向 human 提问 / 让 human 选择（经 InteractionModal）
   - `use_skill`，按名读技能全文（目录注入 <available_skills>，正文按需取）
-  - 原生 web 工具（用户决策 2026-09-03）：`web_search` / `web_fetch`（联网）、`browser_navigate/content/eval` 真 CDP——不再有 MCP 间接层
+  - 原生 web 工具（用户决策 2026-09-03）：`web_search` / `web_fetch`（联网）、`browser_use` 真 CDP（playwright-core）——不再有 MCP 间接层
 - compact（上下文压缩）
   - 单 session 真实 usage ≥ 75% 自动压缩
   - 手动指令 `/compact [聚焦]` 压缩
@@ -129,11 +129,11 @@
 - 会话权限 pill PermissionPicker：输入框发送键左侧，彩色盾牌标识三档模式；会话级覆盖，未设置回落全局默认，持久化于 session meta（SPEC-037）
 - 变更 tab ChangesTab：快照下拉 + 高亮完整命令条 + 按文件手风琴看 diff，命令条/高亮跟随明暗主题
 - 文件 tab FilesTab：全量文件树 + 搜索 + gitignore 显隐开关，点文件开 preview modal
-- 运行 tab RuntimeTab：工作区级后台进程中心（SPEC-038）——进程卡片（状态点 / 意图标题 / 完整命令 / 来源会话 / 时长 / 日志展开 / 二次确认停止），运行中数角标
+- 运行 tab RuntimeTab：工作区级后台进程中心（SPEC-038）——进程卡片（状态点 / 意图标题 / 完整命令 / 来源会话 / 时长 / 日志展开 / 二次确认停止），运行中数角标；「＋ 新建进程」手动创建后台任务（输入完整命令，cwd=工作区根，与 agent 进程同表管理）
 - 输入 InputBox：slash 命令补全（内置 + 自定义 + Skills 分组，键盘导航）、`@` 文件引用、上下文压缩 indeterminate 进度条、随内容自动增高（上限 10 行后滚动）、IME 组合输入守卫、停止 / 发送
 - 技能斜杠指令：已安装技能以 `/<name>` 暴露（弹层 Skills 分组），执行即技能正文展开注入 + 参数追加；用户气泡渲染为技能徽标（/name + 参数，正文可展开查看）
 - 状态栏 StatusBar：模型 / Provider、上下文用量进度、Skill 数、MCP 数
-- 设置 Settings：`config.yaml` 图形化编辑，卡片可折叠（默认提供方 → 模型提供方 → 工具 → MCP 服务）；工具开关卡用 Switch（全量工具目录）、web_search 行内 provider（ddg/tavily/bing）+ API Key、browser_navigate 行内 cdpUrl；Provider 支持**拉取模型**（GET /models 填充列表）/ **测试模型**（ping 测可用性 + 首字延迟，✓/✗ 徽标）/ **选择模型**（可用者设默认），参考 LLM_Proxy；热生效
+- 设置 Settings：`config.yaml` 图形化编辑，卡片可折叠（默认提供方 → 模型提供方 → 工具 → MCP 服务）；工具开关卡用 Switch（全量工具目录）、web_search 行内 provider（ddg/tavily/bing）+ API Key、browser_use 行内 cdpUrl；Provider 支持**拉取模型**（GET /models 填充列表）/ **测试模型**（ping 测可用性 + 首字延迟，✓/✗ 徽标）/ **选择模型**（可用者设默认），参考 LLM_Proxy；热生效
 - 品牌识别：Logo（badge / glyph 双变体）+ 品牌靛蓝主题（`--primary`）+ favicon；选中色 / 细滚动条
 - 暗黑模式三态：浅色 / 深色 / 跟随系统（`config.yaml ui.theme`，ThemeProvider + `.dark` 类策略）；暗色 = Monokai Pro 系、亮色 = 其亮色姊妹版（DesignSpec「主题与配色」定稿），品牌靛蓝主色亮暗一致；代码块跟随主题（亮 GitHub Light / 暗深底）；设置页「通用」tab 收口语言 + 外观（顶栏语言切换按钮移除）
 - Markdown 渲染（prose）+ 代码块
