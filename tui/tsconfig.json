@@ -13,7 +13,7 @@
         "skipLibCheck": true,
         "jsx": "react",
         "types": ["node"],
-        "lib": ["ESNext"]
+        "lib": ["ESNext", "DOM"]
     },
     "include": ["source/**/*"],
     "exclude": ["node_modules"]
