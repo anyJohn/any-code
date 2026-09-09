@@ -6,12 +6,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // 内置能力目录（连接器 server.mjs + 未来 SKILL.md 等）随 server bundle 同目录分发：dist/builtin/<name>/
 mkdirSync(join(__dirname, "dist", "builtin"), { recursive: true });
 cpSync(join(__dirname, "..", "domain", "src", "builtin"), join(__dirname, "dist", "builtin"), { recursive: true });
-// playwright-core external + 整包 vendor 到 dist/node_modules/（CI 0.0.3 曝光：bundle 它会踩
-// chromium-bidi 可选依赖解析 / ESM 无 __dirname / 模块 init 按 packageRoot 读 browsers.json
-// 三连坑——external 后由 Node 原生解析，模块以真实 CJS 文件运行，一切自然正确）。
-// Node 裸说明符从 server.mjs 向上找 node_modules：dist/node_modules 命中。整包无运行时依赖，
-// 单目录自包含；core tar（server/dist 整目录）与 desktop 布局均天然携带/解析。
-// launch 浏览器的 registry/bin 路径不会被触碰（只 connectOverCDP，不下载浏览器）。
+// playwright-core external + 整包 vendor 到 dist/node_modules/（bundle 它会踩 chromium-bidi
+// 解析 / ESM 无 __dirname / 元数据读取三连坑；external 后以真实 CJS 文件运行，全部自然正确）。
+// 整包无运行时依赖，单目录自包含；core tar（server/dist 整目录）就近解析。
 {
     const req = createRequire(join(__dirname, "..", "domain", "package.json"));
     const pwRoot = dirname(req.resolve("playwright-core/package.json"));
@@ -27,10 +24,8 @@ cpSync(join(__dirname, "..", "domain", "src", "builtin"), join(__dirname, "dist"
 
 import esbuild from "esbuild";
 
-// 把 server + @any-code/domain + 依赖打成一个自包含 server.mjs（运行时不需 node_modules，
-// playwright-core 除外——上方 vendor 到 dist/node_modules，随分发布局解析）。
-// external @vscode/ripgrep（原生二进制，launcher vendor 到 runtime/rg + 注入 ANYCODE_RG_PATH；
-// ripgrep.ts 的 dynamic import 在无此包时 try/catch 降级，故 external 安全）。见 SPEC-028 A-005/C-005。
+// 自包含 server.mjs；external @vscode/ripgrep（原生二进制，launcher vendor + 注入
+// ANYCODE_RG_PATH，dynamic import 无此包时 try/catch 降级）与 playwright-core（上方 vendor）。
 const require = createRequire(import.meta.url);
 const pkg = require("./package.json");
 

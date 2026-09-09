@@ -33,10 +33,7 @@ await Promise.all(
                 minify: false,
                 sourcemap: false,
                 logLevel: "info",
-                // playwright-core external（CI 0.0.3 曝光）：bundle 它会踩 chromium-bidi /
-                // __dirname / browsers.json 三连坑；external 后运行期由 Node/electron 原生
-                // 解析——electron-builder 依赖分析已把完整包打进 asar node_modules（含
-                // package.json/browsers.json），以真实 CJS 文件运行，一切自然正确
+                // 运行期由 asar node_modules（electron-builder 依赖分析自动打包）原生加载
                 external: ["electron", "@vscode/ripgrep", "playwright-core"],
             })
             .then(() => console.log(`✓ ${e.src} → ${e.out}`)),
