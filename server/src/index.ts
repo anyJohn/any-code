@@ -17,6 +17,7 @@ import {
     switchDefaultProvider,
     setUiLanguage,
     setUiTheme,
+    setGitBashPath,
     projectKeyOf,
     resolveContextWindow,
     resolveInteraction,
@@ -828,7 +829,7 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
             const shellStatus = (hint?: string) => {
                 const kind = resolveShellKind(hint);
                 const binary = bashCandidates(hint)[0];
-                return { kind, path: binary ?? null };
+                return { kind, path: binary ?? null, platform: process.platform };
             };
             const providers: Record<string, unknown> = {};
             for (const [name, p] of Object.entries(cfg.providers)) {
@@ -1052,6 +1053,35 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         return c.json({ statusMessage: "需要 default / modelId / language / theme 之一" }, 400);
     });
 
+    // 设置 Windows bash 路径（设置页「通用」；空 = 清除回落自动探测）。存在性在这里校验。
+    app.patch("/api/config/shell", async (c) => {
+        let body: { gitBashPath?: string };
+        try {
+            body = (await c.req.json()) as { gitBashPath?: string };
+        } catch {
+            return c.json({ statusMessage: "invalid json body" }, 400);
+        }
+        const p = body.gitBashPath?.trim() ?? "";
+        if (p && !existsSync(p))
+            return c.json({ statusMessage: `路径不存在：${p}` }, 400);
+        const r = setGitBashPath(p);
+        if (!r.ok) return c.json({ statusMessage: r.message }, 400);
+        const kind = resolveShellKind(r.message || undefined);
+        const binary = bashCandidates(r.message || undefined)[0];
+        return c.json({ statusMessage: "switched", shell: { kind, path: binary ?? null, platform: process.platform } });
+    });
+
+    // bash 候选清单（设置页「通用」下拉用）：PATH 探测结果。
+    app.get("/api/config/shell/candidates", (c) => {
+        let hint: string | undefined;
+        try {
+            hint = Config.load().gitBashPath;
+        } catch {
+            // 坏 config：当作未配置
+        }
+        return c.json({ candidates: bashCandidates(hint) });
+    });
+
     // 裁决"永久允许/拒绝"落盘（SPEC-032 B-006）：单独小路由——避免 web 走整表单
     // POST /api/config（GET 的 apiKey 已脱敏，整表单回存会污染真实 key）。
     app.post("/api/config/permissions/rule", async (c) => {
@@ -1081,6 +1111,7 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
             if (scope === "global") {
                 const cfg = Config.load();
                 cfg.permissions.rules.push(rule);
+                // 全字段回写（原只传 6 段，其余被 normalize 重置成默认）
                 Config.save({
                     providers: cfg.providers,
                     default: cfg.default,
@@ -1088,6 +1119,12 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
                     gitBashPath: cfg.gitBashPath,
                     tools: cfg.tools,
                     permissions: cfg.permissions,
+                    maxConcurrentRuns: cfg.maxConcurrentRuns,
+                    ui: cfg.ui,
+                    pricing: cfg.pricing,
+                    proxy: cfg.proxy,
+                    noProxy: cfg.noProxy,
+                    memory: cfg.memory,
                 });
             } else {
                 const workspacePath = body.workspacePath?.trim();

@@ -6,6 +6,7 @@ import { useT, type LanguagePref } from "@/i18n";
 import { useTheme, type Theme } from "@/theme";
 import { Button } from "@/components/ui/button";
 import { apiJson } from "@/lib/api";
+import { isElectron } from "@/lib/electron";
 import {
     type ConfigResponse,
     type ProviderForm,
@@ -36,7 +37,11 @@ type SettingsTab = "general" | "models" | "tools" | "integrations";
 export default function SettingsPage() {
     const { t, languagePref, setLanguage } = useT();
     const { theme, setTheme } = useTheme();
-    const [shell, setShell] = useState<{ kind: string; path: string | null } | null>(null);
+    const [shell, setShell] = useState<{ kind: string; path: string | null; platform?: string } | null>(null);
+    // bash 路径草稿（输入框）+ 自动探测候选（datalist）+ 保存结果提示
+    const [bashDraft, setBashDraft] = useState("");
+    const [bashCandidates, setBashCandidates] = useState<string[]>([]);
+    const [bashMsg, setBashMsg] = useState("");
     const [providers, setProviders] = useState<ProviderForm[]>([]);
     const [def, setDef] = useState("");
     const [mcp, setMcp] = useState<McpForm[]>([]);
@@ -69,6 +74,42 @@ export default function SettingsPage() {
     const reloadConfig = () => setLoadTick((k) => k + 1);
     const [loadTick, setLoadTick] = useState(0);
 
+    /** 系统文件对话框选 bash.exe（桌面版兜底：PATH 探测不到时）。 */
+    const browseBash = async () => {
+        const picked = await window.anycode?.pickFile?.([
+            { name: "bash.exe", extensions: ["exe"] },
+        ]);
+        if (picked) setBashDraft(picked);
+    };
+
+    /** 保存 bash 工具链路径（PATCH /api/config/shell）：空 = 清除显式配置回落自动探测。
+     *  裸 fetch：400 校验错（路径不存在）的 statusMessage 要透给用户，apiJson 只回 null。 */
+    const saveBashPath = async () => {
+        setBashMsg("");
+        try {
+            const res = await fetch(`/api/config/shell`, {
+                method: "PATCH",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ gitBashPath: bashDraft }),
+            });
+            const data = (await res.json().catch(() => ({}))) as {
+                statusMessage?: string;
+                shell?: { kind: string; path: string | null };
+            };
+            if (!res.ok) {
+                setBashMsg(data.statusMessage ?? t("settings.bashSaveFail"));
+                return;
+            }
+            if (data.shell) {
+                setShell(data.shell);
+                setBashDraft(data.shell.path ?? "");
+            }
+            setBashMsg(t("settings.bashSaved"));
+        } catch {
+            setBashMsg(t("settings.bashSaveFail"));
+        }
+    };
+
     useEffect(() => {
         setStatus("loading");
         apiJson<ConfigResponse>(`/api/config`).then((res) => {
@@ -88,6 +129,11 @@ export default function SettingsPage() {
                 Object.fromEntries(ps.map((p, i) => [i, p.name.trim()]))
             );
             setShell(res.shell ?? null);
+            setBashDraft(res.shell?.path ?? "");
+            // 探测候选（Windows 输入框 datalist）：失败静默——输入框仍可手填
+            apiJson<{ candidates: string[] }>(`/api/config/shell/candidates`).then((r) => {
+                if (r?.candidates) setBashCandidates(r.candidates);
+            });
             setDef(d);
             setMcp(ms);
             const perm = res.permissions;
@@ -357,8 +403,50 @@ export default function SettingsPage() {
                             </div>
                         )}
                         {shell && (
-                            <div className="text-xs text-muted-foreground font-mono truncate" title={shell.path ?? ""}>
-                                bash: {shell.kind} · {shell.path ?? "-"}
+                            <div className="flex flex-col gap-2">
+                                <div className="flex flex-col gap-0.5">
+                                    <span className="text-sm">{t("settings.bashLabel")}</span>
+                                    {shell.platform === "win32" ? (
+                                        <span className="text-xs text-muted-foreground">{t("settings.bashHint")}</span>
+                                    ) : (
+                                        <span className="text-xs text-muted-foreground">{t("settings.bashHintUnix")}</span>
+                                    )}
+                                </div>
+                                {shell.platform === "win32" && (
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            value={bashDraft}
+                                            onChange={(e) => setBashDraft(e.target.value)}
+                                            list="bash-candidates"
+                                            placeholder={t("settings.bashPlaceholder")}
+                                            spellCheck={false}
+                                            className="flex-1 text-xs font-mono rounded-md border border-input bg-background px-2 py-1.5 outline-none focus:ring-1 focus:ring-ring"
+                                        />
+                                        <datalist id="bash-candidates">
+                                            {bashCandidates.map((p) => (
+                                                <option key={p} value={p} />
+                                            ))}
+                                        </datalist>
+                                        {isElectron() && (
+                                            <button
+                                                onClick={browseBash}
+                                                className="text-xs rounded-md border border-border px-2.5 py-1.5 hover:bg-accent shrink-0"
+                                            >
+                                                {t("settings.bashBrowse")}
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={saveBashPath}
+                                            className="text-xs rounded-md border border-border px-2.5 py-1.5 hover:bg-accent shrink-0"
+                                        >
+                                            {t("settings.bashSave")}
+                                        </button>
+                                    </div>
+                                )}
+                                <div className="text-xs text-muted-foreground font-mono truncate" title={shell.path ?? ""}>
+                                    bash: {shell.kind} · {shell.path ?? "-"}
+                                    {bashMsg && <span className="ml-2">{bashMsg}</span>}
+                                </div>
                             </div>
                         )}
                     </div>

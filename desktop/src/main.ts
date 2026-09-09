@@ -8,7 +8,7 @@
  *
  * 自包含：web/dist + rg + (win) busybox 全 bundle 进 resources/，双击即用、不依赖 prior install。
  */
-import { app, BrowserWindow, ipcMain, Menu, session } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, session } from "electron";
 import { createServer } from "node:net";
 import path from "node:path";
 import { start } from "@any-code/server";
@@ -49,6 +49,15 @@ ipcMain.on("anycode:win-toggle-maximize", () => {
     mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
 });
 ipcMain.on("anycode:win-close", () => mainWindow?.close());
+// 文件选择对话框（设置页 bash 路径兜底）：返回选中文件完整路径，取消返回 null
+ipcMain.handle("anycode:pick-file", async (_e, filters: { name: string; extensions: string[] }[]) => {
+    if (!mainWindow) return null;
+    const r = await dialog.showOpenDialog(mainWindow, {
+        properties: ["openFile"],
+        filters: filters ?? [],
+    });
+    return r.canceled ? null : (r.filePaths[0] ?? null);
+});
 
 /** 从 startPort 试到空闲端口（复用 launcher freePort 思路） */
 function freePort(startPort: number): Promise<number> {

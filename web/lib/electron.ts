@@ -10,6 +10,8 @@ interface AnycodeDesktopApi {
     close: () => void;
     /** 订阅最大化状态变化，返回取消订阅。 */
     onMaximizeChange: (cb: (maximized: boolean) => void) => () => void;
+    /** 系统文件选择对话框（取消返回 null；浏览器模式无）。 */
+    pickFile: (filters: { name: string; extensions: string[] }[]) => Promise<string | null>;
 }
 
 declare global {

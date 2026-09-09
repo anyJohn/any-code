@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { existsSync as _e } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { globalConfigDir } from "./workspace";
 
 /**
@@ -12,19 +12,37 @@ import { globalConfigDir } from "./workspace";
 export const SYSTEM_GIT_BASH = "C:\\Program Files\\Git\\bin\\bash.exe";
 
 /**
- * Windows bash 候选序（bugfix 2026-09-08：busybox 工具链残缺——grep --include/sed -i/ssh
- * 全缺，User 反馈 #22/25）。改为优先完整 GNU 工具链：
- * 1. config.gitBashPath（install.ps1 现写 MinGit 的 usr/bin/sh.exe；若仍指向旧 busybox 则跳过，
- *    交给后面的 busybox 候选兜底）
- * 2. 系统 Git for Windows（多数 Windows 开发机已装）
- * 3. ANYCODE_BASH_PATH（桌面/launcher 注入的 busybox，无 Git 时的兜底）
- * 4. 安装器 runtime busybox
+ * Windows Git Bash 探测候选：扫描 PATH 环境变量（bash.exe / sh.exe / git.exe 派生）。
+ * Git 安装器默认把 Git\cmd 加入 PATH，覆盖绝大多数安装位；不在 PATH 的用设置页
+ * 文件选择对话框手动指定（config.gitBashPath）。纯同步无 spawn。
+ */
+export function windowsGitBashCandidates(): string[] {
+    const out: string[] = [];
+    for (const raw of (process.env.PATH ?? "").split(";")) {
+        const base = raw.trim().replace(/[/\\]+$/, "");
+        if (!base || !isAbsolute(base)) continue;
+        out.push(join(base, "bash.exe"));
+        out.push(join(base, "sh.exe"));
+        out.push(join(base, "bin", "bash.exe"));
+        out.push(join(base, "usr", "bin", "bash.exe"));
+        // Git\cmd\git.exe 布局 → Git\bin、Git\usr\bin
+        out.push(join(base, "..", "bin", "bash.exe"));
+        out.push(join(base, "..", "usr", "bin", "bash.exe"));
+    }
+    return out;
+}
+
+/**
+ * Windows bash 候选序（bugfix 2026-09-08：busybox 工具链残缺）。优先完整 GNU 工具链：
+ * config 显式指定 → 系统 Git Bash 探测 → busybox 兜底 → POSIX。
  */
 export function bashCandidates(gitBashPath?: string): string[] {
     const busyboxLike = (p?: string) => !!p && p.toLowerCase().includes("busybox");
     const configBash = !busyboxLike(gitBashPath) ? gitBashPath : undefined;
+    const detected = process.platform === "win32" ? windowsGitBashCandidates() : [];
     return [
         configBash,
+        ...detected,
         SYSTEM_GIT_BASH,
         process.env.ANYCODE_BASH_PATH,
         join(globalConfigDir(), "runtime", "busybox", "sh.exe"),

@@ -593,14 +593,21 @@ export function switchDefaultModel(modelId: string): SwitchResult {
 }
 
 /** 设置外观主题（暗黑模式）。仅接受 light/dark/system。 */
-export function setUiTheme(theme: string): SwitchResult {
-    if (!isUiTheme(theme)) {
+export function setUiTheme(theme: string): SwitchResult {    if (!isUiTheme(theme)) {
         return { ok: false, message: "theme 仅支持 light / dark / system" };
     }
     const cfg = Config.load();
     cfg.ui = { ...cfg.ui, theme };
     saveFull(cfg);
     return { ok: true, message: theme };
+}
+
+/** 设置 Windows bash 路径（设置页「通用」）。空串 = 清除，回落自动探测。存在性校验在 server 侧。 */
+export function setGitBashPath(path: string): SwitchResult {
+    const cfg = Config.load();
+    cfg.gitBashPath = path.trim() || undefined;
+    saveFull(cfg);
+    return { ok: true, message: cfg.gitBashPath ?? "" };
 }
 
 /** 设置界面语言（FR-29，全字段回写）。接受 zh/en；system = 清除显式配置（跟随系统）。 */

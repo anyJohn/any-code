@@ -7,6 +7,9 @@ import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("anycode", {
     isElectron: true,
+    // 系统文件选择对话框：返回完整路径，取消返回 null（浏览器模式无此能力）
+    pickFile: (filters: { name: string; extensions: string[] }[]) =>
+        ipcRenderer.invoke("anycode:pick-file", filters),
     minimize: () => ipcRenderer.send("anycode:win-minimize"),
     toggleMaximize: () => ipcRenderer.send("anycode:win-toggle-maximize"),
     close: () => ipcRenderer.send("anycode:win-close"),
