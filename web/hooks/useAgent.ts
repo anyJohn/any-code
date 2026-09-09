@@ -117,9 +117,10 @@ export function useAgent(
         []
     );
 
-    /** 单帧入列：ask 类拦截驱动模态；其余去重（可选）后入 events。 */
+    /** 单帧入列：ask 类拦截驱动模态；其余去重（可选）后入 events。
+     *  strategic=true 时做数组级查重取证（todo #14）：同 type|message|timestamp 已在数组 → ARRAY-DUP。 */
     const ingest = useCallback(
-        (e: AgentEventPayload, seen?: Set<string>) => {
+        (e: AgentEventPayload, seen?: Set<string>, strategic?: boolean) => {
             if (e.type === "Interaction") {
                 setPendingInteraction(e.data as InteractionData);
                 return;
@@ -147,6 +148,16 @@ export function useAgent(
                                 p.message?.trim() === msg
                         );
                     if (hit) return prev;
+                }
+                if (
+                    strategic &&
+                    prev.some(
+                        (p) => p.type === e.type && p.message === e.message && p.timestamp === e.timestamp
+                    )
+                ) {
+                    dbgLog(
+                        `ARRAY-DUP type=${e.type} ts=${e.timestamp} msg=${e.message?.slice(0, 30) ?? ""} len=${prev.length}`
+                    );
                 }
                 return [
                     ...prev,
@@ -178,12 +189,13 @@ export function useAgent(
                     lastSeqRef.current = frame.seq;
                 }
                 // 战略帧取证（双气泡排查）：高频 Thinking/delta 跳过
-                if (!["Thinking", "AssistantDelta", "ToolProgress", "ToolArgProgress", "Usage", "ToolStart"].includes(frame.event.type)) {
+                const strategic = !["Thinking", "AssistantDelta", "ToolProgress", "ToolArgProgress", "Usage", "ToolStart"].includes(frame.event.type);
+                if (strategic) {
                     dbgLog(
                         `${tag} IN seq=${frame.seq} type=${frame.event.type} gate=${lastSeqRef.current} turn=${(frame.event as { turnId?: string }).turnId?.slice(0, 8) ?? "-"} msg=${frame.event.message?.slice(0, 30) ?? ""}`
                     );
                 }
-                ingest(frame.event, seen);
+                ingest(frame.event, seen, strategic);
                 if (TERMINAL.has(frame.event.type)) {
                     dbgLog(`TERMINAL ${frame.event.type} seq=${frame.seq} gate=${lastSeqRef.current}`);
                     dbgFlushToServer(sidRef.current ?? sessionId);
