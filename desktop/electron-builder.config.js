@@ -25,10 +25,6 @@ module.exports = {
     },
     files: [
         "dist/main/**/*",
-        // playwright-core bundle 的运行期元数据（registry init 按 packageRoot=dist/ 读；
-        // 见 esbuild.config.js 的拷贝注释，CI 0.0.3 曝光）
-        "dist/browsers.json",
-        "dist/package.json",
         "package.json",
     ],
     // 内置能力目录解包出 asar：MCP 连接器经子进程 spawn（asar 内文件不可被执行），
