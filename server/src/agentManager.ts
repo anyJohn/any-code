@@ -1,7 +1,10 @@
+import { appendFileSync, mkdirSync } from "node:fs";
+import { join, dirname } from "node:path";
 import {
     AnyAgent,
     Config,
     DURABLE_TYPES,
+    globalConfigDir,
     type AgentEvent,
     type SessionKey,
 } from "@any-code/domain";
@@ -62,6 +65,27 @@ function defaultMaxRuns(): number {
         return Config.load().maxConcurrentRuns;
     } catch {
         return 3;
+    }
+}
+
+
+// ---- 流式链路取证（双气泡排查 2026-09-09）：~/.anycode/logs/server-stream.log ----
+// 高频帧（Thinking/delta/进度）不记录——重复窗口发生在回合开头，Iteration 帧即标记点
+const HIGH_FREQ_TYPES = new Set([
+    "Thinking",
+    "AssistantDelta",
+    "ToolProgress",
+    "ToolArgProgress",
+    "ToolStart",
+    "Usage",
+]);
+const DEBUG_LOG = join(globalConfigDir(), "logs", "server-stream.log");
+export function streamDebugLog(line: string): void {
+    try {
+        mkdirSync(dirname(DEBUG_LOG), { recursive: true });
+        appendFileSync(DEBUG_LOG, `${new Date().toISOString()} ${line}\n`);
+    } catch {
+        // 取证不干扰主流程
     }
 }
 
@@ -169,6 +193,10 @@ export class AgentManager {
         };
         const sub = agent.eventStream$.subscribe(async (e: AgentEvent) => {
             const frame: StreamFrame = { seq: seq++, event: e };
+            if (!HIGH_FREQ_TYPES.has(e.type))
+                streamDebugLog(
+                    `FANOUT sid=${sessionId} seq=${frame.seq} type=${e.type} subs=${entry.subscribers.size} turn=${e.turnId?.slice(0, 8) ?? "-"}`
+                );
             for (const s of entry.subscribers) s(frame);
             // durable 事件落盘（原 /run 职责迁入：任何订阅者断开都不影响持久化）。
             // FR-22：Usage 事件同批写用量增量 meta（模型戳入 meta → 会话累计可按模型计费）。
@@ -216,7 +244,11 @@ export class AgentManager {
         const entry = this.runs.get(sessionId);
         if (!entry) return () => {};
         entry.subscribers.add(fn);
-        return () => entry.subscribers.delete(fn);
+        streamDebugLog(`SUBSCRIBE sid=${sessionId} subs=${entry.subscribers.size}`);
+        return () => {
+            entry.subscribers.delete(fn);
+            streamDebugLog(`UNSUBSCRIBE sid=${sessionId} subs=${entry.subscribers.size}`);
+        };
     }
 
     /** 显式停止：running → agent.stop()（终态经 Stopped → finalize）；queued → 出队。 */
