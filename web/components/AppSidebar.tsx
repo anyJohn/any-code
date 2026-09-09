@@ -330,9 +330,11 @@ export function AppSidebar({
                 body: JSON.stringify({ title }),
             }
         );
+        // 收尾只清"仍是当前编辑目标"的 state：blur 提交是异步的，若期间用户已
+        // 双击另一行开启新编辑，无条件置 null 会把新编辑框抹掉（竞态防护）。
         if (!r) {
             setSidebarErr(t("sidebar.renameSessionFailed"));
-            setRenameTarget(null);
+            setRenameTarget((cur) => (cur?.s.id === target.s.id ? null : cur));
             return;
         }
         // 本地更新 title
@@ -342,7 +344,7 @@ export function AppSidebar({
                 s.id === target.s.id ? { ...s, title } : s
             ),
         }));
-        setRenameTarget(null);
+        setRenameTarget((cur) => (cur?.s.id === target.s.id ? null : cur));
     };
 
     // 折叠态：rail（logo + 展开按钮 + 设置图标）
@@ -513,7 +515,7 @@ export function AppSidebar({
                                     <button
                                         className="shrink-0 p-0.5 rounded hover:bg-accent"
                                         aria-label={t(
-                                            openKeys[w.projectKey]
+                                            openKeys[w.projectKey] !== false
                                                 ? "sidebar.collapse"
                                                 : "sidebar.expand"
                                         )}
@@ -521,9 +523,12 @@ export function AppSidebar({
                                         <ChevronRight
                                             className="size-3.5 transition-transform"
                                             style={{
-                                                transform: openKeys[w.projectKey]
-                                                    ? "rotate(90deg)"
-                                                    : undefined,
+                                                // 开合判定须与 Collapsible open 一致：
+                                                // 未设置（undefined）默认展开，仅显式 false 才算收起
+                                                transform:
+                                                    openKeys[w.projectKey] !== false
+                                                        ? "rotate(90deg)"
+                                                        : undefined,
                                             }}
                                         />
                                     </button>
@@ -604,7 +609,9 @@ export function AppSidebar({
                                                                 else if (e.key === "Escape")
                                                                     setRenameTarget(null);
                                                             }}
-                                                            onBlur={() => setRenameTarget(null)}
+                                                            // 失焦=提交（用户需求 2026-09-09：
+                                                            // 点别处也应改名成功，而不是取消）
+                                                            onBlur={() => submitRename(rt)}
                                                         />
                                                     ) : (
                                                         <button
