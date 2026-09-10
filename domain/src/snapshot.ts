@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createStreamDecoder } from "./textDecode";
 import fs from "node:fs";
 import path from "node:path";
+import { join } from "node:path";
 import { globalConfigDir } from "./workspace";
 import { projectKeyOf } from "./session";
 
@@ -57,6 +58,8 @@ export interface SnapshotService {
     list(): Promise<Snapshot[]>;
     /** 回滚工作区到指定快照（恢复该时点已跟踪文件）。失败抛错由调用方处理。 */
     rollbackTo(id: string): Promise<void>;
+    /** 单文件回滚（变更 tab 逐文件恢复）：快照后新增的文件直接删除，其余 checkout 恢复。 */
+    rollbackFile(id: string, path: string): Promise<void>;
     /**
      * 工作树相对指定快照的变更（SPEC-036 B-007，变更 tab）：
      * status 为 git name-status（A/M/D/R…），patch 为统一 diff 文本。
@@ -305,6 +308,43 @@ export function createSnapshotService(
             if (!known) throw new Error(`快照 ${id} 不存在`);
             // cwd 锚定 workspaceRoot：pathspec "." 不随 server 进程 cwd 漂移（code-review 发现 #2）
             const co = await runGit(["checkout", id, "--", "."], gitDir, {
+                workTree: workspaceRoot,
+                cwd: workspaceRoot,
+            });
+            if (!co.ok) throw new Error(`回滚失败：${co.out.trim()}`);
+        },
+
+        async rollbackFile(id, path) {
+            if (!(await ensureRepo())) throw new Error("git 不可用，无法回滚");
+            if (!/^[0-9a-f]{7,40}$/.test(id)) throw new Error("非法快照 id");
+            const known = (await this.list()).some((s) => s.id === id);
+            if (!known) throw new Error(`快照 ${id} 不存在`);
+            // pathspec 注入防护：仅接受工作区内相对路径
+            if (
+                !path ||
+                path.startsWith("/") ||
+                path.includes("..") ||
+                path.includes("\\")
+            )
+                throw new Error(`非法路径：${path}`);
+            const pathArgs = ["--", path];
+            // intent-to-add 让快照后新建的未跟踪文件进 diff（与 diffFrom 同语义，index 无副作用）
+            await runGit(["add", "--intent-to-add", "-A"], gitDir, {
+                workTree: workspaceRoot,
+                cwd: workspaceRoot,
+            });
+            const st = await runGit(["diff", "--name-status", id, ...pathArgs], gitDir, {
+                workTree: workspaceRoot,
+                cwd: workspaceRoot,
+            });
+            if (!st.ok) throw new Error(`对比失败：${st.out.trim()}`);
+            const status = st.out.trim().split("\t")[0] ?? "";
+            if (status.startsWith("A") || status.startsWith("?")) {
+                // 快照后新增的文件：回滚 = 从工作树删除
+                fs.rmSync(join(workspaceRoot, path), { force: true });
+                return;
+            }
+            const co = await runGit(["checkout", id, ...pathArgs], gitDir, {
                 workTree: workspaceRoot,
                 cwd: workspaceRoot,
             });

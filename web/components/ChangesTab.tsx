@@ -5,8 +5,17 @@ import { apiJson } from "@/lib/api";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import hljs from "highlight.js/lib/common";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Undo2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogFooter,
+    DialogTitle,
+    DialogClose,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 interface SnapshotInfo {
     id: string;
@@ -135,7 +144,13 @@ function DiffView({ patch }: { patch: string }) {
  * ChangesTab（SPEC-036 B-007 变更 tab）：工作树相对所选快照的变更。
  * 快照下拉（仅列有变更的）+ 高亮完整命令条 + 按文件手风琴（默认收起，点开展开该文件 diff）。
  */
-export function ChangesTab({ projectKey }: { projectKey: string }) {
+export function ChangesTab({
+    projectKey,
+    sessionId,
+}: {
+    projectKey: string;
+    sessionId?: string | null;
+}) {
     const { t } = useT();
     const [snapshots, setSnapshots] = useState<SnapshotInfo[]>([]);
     const [gitAvailable, setGitAvailable] = useState(true);
@@ -143,6 +158,9 @@ export function ChangesTab({ projectKey }: { projectKey: string }) {
     const [diff, setDiff] = useState<DiffResult | null>(null);
     const [error, setError] = useState("");
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
+    const [rolling, setRolling] = useState<string | null>(null);
+    // 回滚确认弹窗目标（防误触）
+    const [confirmTarget, setConfirmTarget] = useState<string | null>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -207,6 +225,26 @@ export function ChangesTab({ projectKey }: { projectKey: string }) {
             else next.add(path);
             return next;
         });
+
+    // 单文件回滚：恢复到所选快照（新增文件删除，其余 checkout）；完成后刷新 diff
+    const rollbackFile = async (path: string) => {
+        setError("");
+        setRolling(path);
+        const r = await apiJson<{ statusMessage: string }>(
+            `/api/workspaces/${projectKey}/snapshots/rollback-file`,
+            {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ id: selected, path, sessionId }),
+            }
+        );
+        setRolling(null);
+        if (r && "statusMessage" in r && r.statusMessage !== "rolled back") {
+            setError(r.statusMessage);
+            return;
+        }
+        await loadDiff(selected);
+    };
 
     if (!gitAvailable) {
         return <Empty text={t("changes.gitUnavailable")} />;
@@ -282,6 +320,22 @@ export function ChangesTab({ projectKey }: { projectKey: string }) {
                                         <span className="font-mono truncate flex-1 min-w-0">
                                             {f.path}
                                         </span>
+                                        <span
+                                            role="button"
+                                            title={t("changes.rollback")}
+                                            className="shrink-0 p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setConfirmTarget(f.path);
+                                            }}
+                                        >
+                                            <Undo2
+                                                className={cn(
+                                                    "size-3.5",
+                                                    rolling === f.path && "animate-spin"
+                                                )}
+                                            />
+                                        </span>
                                     </button>
                                     {open && (
                                         <DiffView
@@ -294,6 +348,37 @@ export function ChangesTab({ projectKey }: { projectKey: string }) {
                     </div>
                 )}
             </div>
+
+            <Dialog
+                open={!!confirmTarget}
+                onOpenChange={(o) => !o && setConfirmTarget(null)}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>{t("changes.rollbackConfirmTitle")}</DialogTitle>
+                    </DialogHeader>
+                    <p className="text-sm text-muted-foreground break-all">
+                        {t("changes.rollbackConfirmBody", {
+                            path: confirmTarget ?? "",
+                        })}
+                    </p>
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <Button variant="ghost">{t("common.cancel")}</Button>
+                        </DialogClose>
+                        <Button
+                            variant="destructive"
+                            onClick={() => {
+                                const path = confirmTarget;
+                                setConfirmTarget(null);
+                                if (path) void rollbackFile(path);
+                            }}
+                        >
+                            {t("changes.rollback")}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

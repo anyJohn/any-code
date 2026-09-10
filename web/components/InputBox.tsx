@@ -32,6 +32,9 @@ interface InputBoxProps {
     // 发送
     send: () => void;
     stop: () => void;
+    // 消息历史 ↑/↓ 回填（shell history 风格）；返回 false = 未消费，走 textarea 默认光标移动
+    onHistoryUp?: () => boolean;
+    onHistoryDown?: () => boolean;
     // 模型切换 pill（左下角，用户需求 2026-09-04）
     projectKey?: string;
     onModelSwitched?: () => void;
@@ -66,6 +69,8 @@ export function InputBox({
     selectFile,
     send,
     stop,
+    onHistoryUp,
+    onHistoryDown,
     runRawCommand,
     projectKey,
     onModelSwitched,
@@ -313,6 +318,25 @@ export function InputBox({
                                     chips.length > 0
                                 ) {
                                     popLastChip();
+                                    return;
+                                } else if (e.key === "ArrowUp" && !e.altKey && !e.shiftKey) {
+                                    // 光标在首行（或空草稿）才翻历史，否则走默认移动光标
+                                    const ta = taRef.current;
+                                    const onFirstLine =
+                                        !ta ||
+                                        draft.slice(0, ta.selectionStart).indexOf("\n") === -1;
+                                    if (
+                                        (draft === "" || onFirstLine) &&
+                                        onHistoryUp?.()
+                                    ) {
+                                        e.preventDefault();
+                                    }
+                                    return;
+                                } else if (e.key === "ArrowDown" && !e.altKey && !e.shiftKey) {
+                                    // 仅在浏览历史时消费（退出/下一条），否则默认移动光标
+                                    if (onHistoryDown?.()) {
+                                        e.preventDefault();
+                                    }
                                     return;
                                 } else if (
                                     draft.startsWith("/") &&

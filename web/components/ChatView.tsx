@@ -188,6 +188,7 @@ export function ChatView({
         }
         fileRef.chips.forEach((c) => fileRef.removeChip(c.path));
         command.setDraft("");
+        histIdx.current = -1;
         // 运行中 → 入队（服务端注入当前对话）；409（刚结束的竞态）回退正常提交
         if (pending && currentSessionId) {
             const r = await apiJson<{ queued: boolean; id?: string }>(
@@ -218,6 +219,37 @@ export function ChatView({
     const editQueueItem = (q: { id: string; text: string }) => {
         removeQueueItem(q.id);
         command.setDraft(q.text);
+    };
+
+    // 消息历史 ↑/↓ 回填（shell history 风格）：-1 = 未在浏览，否则为 history 下标
+    const history = useMemo(
+        () => events.filter((e) => e.type === "User").map((e) => e.message ?? ""),
+        [events]
+    );
+    const histIdx = useRef(-1);
+    const draftMemo = useRef("");
+    const onHistoryUp = () => {
+        if (history.length === 0) return false;
+        if (histIdx.current === -1) {
+            draftMemo.current = command.draft;
+            histIdx.current = history.length - 1;
+        } else if (histIdx.current > 0) {
+            histIdx.current -= 1; // 已到最旧则停留
+        }
+        command.setDraft(history[histIdx.current]);
+        return true;
+    };
+    const onHistoryDown = () => {
+        if (histIdx.current === -1) return false;
+        if (histIdx.current < history.length - 1) {
+            histIdx.current += 1;
+            command.setDraft(history[histIdx.current]);
+        } else {
+            // 越过最新 → 退出浏览，恢复进入前的草稿
+            histIdx.current = -1;
+            command.setDraft(draftMemo.current);
+        }
+        return true;
     };
 
     const [runtimeCount, setRuntimeCount] = useState(0);
@@ -329,7 +361,9 @@ export function ChatView({
                     )}
                 </div>
             )}
-            {tab === "changes" && projectKey && <ChangesTab projectKey={projectKey} />}
+            {tab === "changes" && projectKey && (
+                <ChangesTab projectKey={projectKey} sessionId={currentSessionId} />
+            )}
             {tab === "files" && projectKey && (
                 <FilesTab projectKey={projectKey} onOpenFile={setPreviewPath} />
             )}
@@ -403,6 +437,8 @@ export function ChatView({
                 selectFile={fileRef.selectFile}
                 send={send}
                 stop={stop}
+                onHistoryUp={onHistoryUp}
+                onHistoryDown={onHistoryDown}
                 runRawCommand={command.runRawCommand}
                 projectKey={projectKey}
                 onModelSwitched={() => setStatusRefresh((k) => k + 1)}

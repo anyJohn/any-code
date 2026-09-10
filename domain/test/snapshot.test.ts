@@ -119,6 +119,60 @@ describe.skipIf(!gitOn)("createSnapshotService.diffFrom（SPEC-036 B-007）", ()
     });
 });
 
+// 变更 tab 单文件回滚（用户决策 2026-09-10）：修改/删除 checkout 恢复，新增文件删除
+describe.skipIf(!gitOn)("createSnapshotService.rollbackFile", () => {
+    const origHome = process.env.HOME;
+    let home: string;
+    let ws: string;
+
+    beforeEach(() => {
+        home = mkdtempSync(join(tmpdir(), "anycode-snaprb-"));
+        process.env.HOME = home;
+        ws = join(home, "proj");
+        mkdirSync(ws, { recursive: true });
+    });
+
+    afterEach(() => {
+        process.env.HOME = origHome;
+        rmSync(home, { recursive: true, force: true });
+    });
+
+    it("修改的文件 checkout 恢复；快照后新增的文件被删除；其余文件不受影响", async () => {
+        writeFileSync(join(ws, "a.txt"), "v1");
+        writeFileSync(join(ws, "keep.txt"), "keep");
+        const svc = createSnapshotService(ws);
+        const snap = await svc.snapshot("before");
+        const id = snap!.id;
+
+        writeFileSync(join(ws, "a.txt"), "v2");
+        writeFileSync(join(ws, "added.txt"), "new");
+        await svc.rollbackFile(id, "a.txt");
+        await svc.rollbackFile(id, "added.txt");
+
+        expect(readFileSync(join(ws, "a.txt"), "utf-8")).toBe("v1");
+        expect(() => readFileSync(join(ws, "added.txt"))).toThrow();
+        // 未回滚的文件不动
+        expect(readFileSync(join(ws, "keep.txt"), "utf-8")).toBe("keep");
+    });
+
+    it("快照后删除的文件 → 回滚恢复出来", async () => {
+        writeFileSync(join(ws, "gone.txt"), "data");
+        const svc = createSnapshotService(ws);
+        const id = (await svc.snapshot("before"))!.id;
+        rmSync(join(ws, "gone.txt"));
+        await svc.rollbackFile(id, "gone.txt");
+        expect(readFileSync(join(ws, "gone.txt"), "utf-8")).toBe("data");
+    });
+
+    it("非法路径（绝对/穿越/反斜杠）→ 抛错", async () => {
+        const svc = createSnapshotService(ws);
+        const id = (await svc.snapshot("init"))!.id;
+        await expect(svc.rollbackFile(id, "/etc/passwd")).rejects.toThrow(/非法路径/);
+        await expect(svc.rollbackFile(id, "../x")).rejects.toThrow(/非法路径/);
+        await expect(svc.rollbackFile(id, "a\\b")).rejects.toThrow(/非法路径/);
+    });
+});
+
 // SPEC-036 / 用户决策 2026-09-06：domain 存结构化事实（command + sessionId），不存展示 label
 describe("snapshot 结构化存储（用户决策 2026-09-06）", () => {
     const origHome = process.env.HOME;

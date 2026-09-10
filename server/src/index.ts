@@ -1279,6 +1279,47 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         }
     });
 
+    // 单文件回滚（变更 tab 逐文件恢复）：快照后新增的文件删除，其余 checkout 恢复
+    app.post("/api/workspaces/:projectKey/snapshots/rollback-file", async (c) => {
+        const workspace = resolveWorkspace(c.req.param("projectKey"));
+        if (!workspace) return c.json({ statusMessage: "workspace not found" }, 404);
+        const wsKey = c.req.param("projectKey");
+        if (runningWorkspaces().has(wsKey))
+            return c.json(
+                { statusMessage: "工作区正被运行中的会话使用，请先停止对话再回滚" },
+                409,
+            );
+        let body: { id?: string; path?: string; sessionId?: string } = {};
+        try {
+            body = await c.req.json();
+        } catch {
+            return c.json({ statusMessage: "invalid json body" }, 400);
+        }
+        const id = body?.id?.trim();
+        const path = body?.path?.trim();
+        if (!id || !path) return c.json({ statusMessage: "id and path required" }, 400);
+        try {
+            const svc = createSnapshotService(workspace.rootPath);
+            await svc.rollbackFile(id, path);
+            const sid = body?.sessionId?.trim();
+            if (sid) {
+                try {
+                    const key: SessionKey = { projectKey: wsKey, sessionId: sid };
+                    await new SessionService().appendEvent(key, {
+                        timestamp: Date.now(),
+                        type: "System",
+                        message: `文件已回滚到快照 ${id.slice(0, 8)}：${path}`,
+                    } as AgentEvent);
+                } catch {
+                    // 审计落盘失败不影响回滚结果
+                }
+            }
+            return c.json({ statusMessage: "rolled back" });
+        } catch (e) {
+            return c.json({ statusMessage: (e as Error).message }, 400);
+        }
+    });
+
     // ==================== permissions（SPEC-032 项目级规则） ====================
     // 项目级权限规则：<workspacePath>/.anycode/permissions.yaml（全局段走 /api/config）。
     app.get("/api/workspaces/:projectKey/permissions", (c) => {
