@@ -1,6 +1,6 @@
 {
     "name": "@any-code/server",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "private": true,
     "type": "module",
     "description": "AnyCode HTTP server (hono) — 静态 SPA 的薄 driving adapter，import @any-code/domain。",
