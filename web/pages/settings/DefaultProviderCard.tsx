@@ -2,6 +2,7 @@
 
 import { useT } from "@/i18n";
 import { CollapsibleCard } from "./CollapsibleCard";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 /** 默认提供方卡片：可选列表只认已提交（Enter/blur）的 provider 名，输入中的不算。 */
 export function DefaultProviderCard({
@@ -18,20 +19,21 @@ export function DefaultProviderCard({
     const { t } = useT();
     return (
         <CollapsibleCard title={t("defaultProviderCard.title")}>
-            <select
-                className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                value={def}
-                onChange={(e) => onChange(e.target.value)}
-            >
-                {providers
-                    .map((p, i) => (nameCommitted[i] ?? "").trim())
-                    .filter(Boolean)
-                    .map((name) => (
-                        <option key={name} value={name}>
-                            {name}
-                        </option>
-                    ))}
-            </select>
+            <Select value={def} onValueChange={onChange}>
+                <SelectTrigger className="w-full">
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    {providers
+                        .map((p, i) => (nameCommitted[i] ?? "").trim())
+                        .filter(Boolean)
+                        .map((name) => (
+                            <SelectItem key={name} value={name}>
+                                {name}
+                            </SelectItem>
+                        ))}
+                </SelectContent>
+            </Select>
         </CollapsibleCard>
     );
 }

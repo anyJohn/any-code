@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import { statSync } from "node:fs";
 import type { ToolContext } from "../../context";
-import { resolvePath } from "../../workspace";
+import { resolvePathWithEscape } from "../../workspace";
 import { decodeFileText } from "../../textDecode";
 
 interface ReadArgs {
@@ -19,7 +19,10 @@ export const readFunc = async (
     const { workspace } = ctx;
     try {
         const { offset = 1, limit = 2000 } = args;
-        const filePath = resolvePath(workspace, args.filePath);
+        // 工作区外路径：权限层 ask 兜底（toolCall 注入 __absFilePath），此处不再硬拒绝
+        const filePath =
+            (args as { __absFilePath?: string }).__absFilePath ??
+            resolvePathWithEscape(workspace, args.filePath).abs;
         const content = decodeFileText(await fs.readFile(filePath)).text;
 
         // 记录 mtime 供 write/edit staleness 校验（SPEC-022 B-006）。整文件读才记，

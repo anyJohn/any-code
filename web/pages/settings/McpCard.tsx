@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { useT } from "@/i18n";
 import { CollapsibleCard } from "./CollapsibleCard";
 import type { McpForm } from "./model";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 /** MCP 服务卡片：stdio / sse 两种 server 的表单录入。 */
 export function McpCard({
@@ -44,18 +45,22 @@ export function McpCard({
                                 patchMcp(i, { name: e.target.value })
                             }
                         />
-                        <select
-                            className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
+                        <Select
                             value={m.type}
-                            onChange={(e) =>
+                            onValueChange={(v) =>
                                 patchMcp(i, {
-                                    type: e.target.value as "stdio" | "sse",
+                                    type: v as "stdio" | "sse",
                                 })
                             }
                         >
-                            <option value="stdio">stdio</option>
-                            <option value="sse">sse</option>
-                        </select>
+                            <SelectTrigger className="h-8 w-28">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="stdio">stdio</SelectItem>
+                                <SelectItem value="sse">sse</SelectItem>
+                            </SelectContent>
+                        </Select>
                         <Switch
                             checked={m.enabled}
                             onCheckedChange={(v) => patchMcp(i, { enabled: v })}

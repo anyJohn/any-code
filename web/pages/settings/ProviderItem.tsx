@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { ProviderForm, ModelTestResult } from "./model";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 /** 单个 provider：可折叠卡片（头部 = 已提交名称 + 默认模型 + 删除），体内是完整表单。
  *  名称提交（Enter/blur）后才同步标题/下拉框；空名红框拦截。 */
@@ -521,24 +522,28 @@ export function ProviderItem({
                                 <span className="text-xs text-muted-foreground">
                                     {t("providerItem.defaultModelLabel")}
                                 </span>
-                                <select
-                                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                <Select
                                     value={p.defaultModel}
-                                    onChange={(e) =>
+                                    onValueChange={(v) =>
                                         patchProvider(index, {
-                                            defaultModel: e.target.value,
+                                            defaultModel: v,
                                         })
                                     }
                                 >
-                                    {p.models
-                                        .map((m) => m.id.trim())
-                                        .filter(Boolean)
-                                        .map((id) => (
-                                            <option key={id} value={id}>
-                                                {id}
-                                            </option>
-                                        ))}
-                                </select>
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {p.models
+                                            .map((m) => m.id.trim())
+                                            .filter(Boolean)
+                                            .map((id) => (
+                                                <SelectItem key={id} value={id}>
+                                                    {id}
+                                                </SelectItem>
+                                            ))}
+                                    </SelectContent>
+                                </Select>
                             </label>
                             <label className="flex items-center gap-2">
                                 <input

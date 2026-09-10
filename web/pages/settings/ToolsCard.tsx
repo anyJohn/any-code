@@ -5,6 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { useT } from "@/i18n";
 import { CollapsibleCard } from "./CollapsibleCard";
 import type { ToolCatalogItem } from "./model";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 /** web_search 的 provider 选项（与原生工具 webSearchTool 支持集一致）。 */
 const SEARCH_PROVIDERS = ["ddg", "tavily", "bing"] as const;
@@ -83,25 +84,29 @@ export function ToolsCard({
                                     <span className="text-xs text-muted-foreground">
                                         {t("toolsCard.searchProvider")}
                                     </span>
-                                    <select
-                                        className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                    <Select
                                         value={
                                             typeof cfg.provider === "string"
                                                 ? cfg.provider
                                                 : "ddg"
                                         }
-                                        onChange={(e) =>
+                                        onValueChange={(v) =>
                                             patchCfg(a.name, {
-                                                provider: e.target.value,
+                                                provider: v,
                                             })
                                         }
                                     >
-                                        {SEARCH_PROVIDERS.map((p) => (
-                                            <option key={p} value={p}>
-                                                {p}
-                                            </option>
-                                        ))}
-                                    </select>
+                                        <SelectTrigger className="h-8 w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {SEARCH_PROVIDERS.map((p) => (
+                                                <SelectItem key={p} value={p}>
+                                                    {p}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 </label>
                                 <label className="flex flex-col gap-1 flex-1">
                                     <span className="text-xs text-muted-foreground">

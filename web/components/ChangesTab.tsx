@@ -6,6 +6,7 @@ import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import hljs from "highlight.js/lib/common";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface SnapshotInfo {
     id: string;
@@ -219,20 +220,21 @@ export function ChangesTab({ projectKey }: { projectKey: string }) {
                             {t("changes.noneChanged")}
                         </span>
                     ) : (
-                        <select
-                            value={selected}
-                            onChange={(e) => {
-                                setSelected(e.target.value);
-                                setExpanded(new Set());
-                            }}
-                            className="text-xs rounded-md border border-input bg-background px-2 py-1 max-w-[60%]"
-                        >
-                            {snapshots.map((s) => (
-                                <option key={s.id} value={s.id}>
-                                    {snapshotOptionLabel(s)}
-                                </option>
-                            ))}
-                        </select>
+                        <Select value={selected} onValueChange={(v) => {
+                            setSelected(v);
+                            setExpanded(new Set());
+                        }}>
+                            <SelectTrigger className="text-xs h-8 max-w-[60%]">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {snapshots.map((s) => (
+                                    <SelectItem key={s.id} value={s.id}>
+                                        {snapshotOptionLabel(s)}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     )}
                 </div>
 

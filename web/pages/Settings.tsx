@@ -25,6 +25,7 @@ import { McpCard } from "./settings/McpCard";
 import { PermissionsCard } from "./settings/PermissionsCard";
 import { YamlEditorModal } from "@/components/YamlEditorModal";
 import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 /**
  * 设置页：全局配置 ~/.anycode/config.yaml 图形化编辑，热生效。
@@ -362,30 +363,32 @@ export default function SettingsPage() {
                                 <span className="text-sm">{t("settings.languageLabel")}</span>
                                 <span className="text-xs text-muted-foreground">{t("settings.languageHint")}</span>
                             </div>
-                            <select
-                                value={languagePref}
-                                onChange={(e) => setLanguage(e.target.value as LanguagePref)}
-                                className="text-sm rounded-md border border-input bg-background px-2 py-1.5 outline-none focus:ring-1 focus:ring-ring"
-                            >
-                                <option value="system">{t("settings.langSystem")}</option>
-                                <option value="zh">{t("settings.langZh")}</option>
-                                <option value="en">{t("settings.langEn")}</option>
-                            </select>
+                            <Select value={languagePref} onValueChange={(v) => setLanguage(v as LanguagePref)}>
+                                <SelectTrigger className="w-32">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="system">{t("settings.langSystem")}</SelectItem>
+                                    <SelectItem value="zh">{t("settings.langZh")}</SelectItem>
+                                    <SelectItem value="en">{t("settings.langEn")}</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                         <div className="flex items-center justify-between gap-3">
                             <div className="flex flex-col gap-0.5">
                                 <span className="text-sm">{t("settings.themeLabel")}</span>
                                 <span className="text-xs text-muted-foreground">{t("settings.themeHint")}</span>
                             </div>
-                            <select
-                                value={theme}
-                                onChange={(e) => setTheme(e.target.value as Theme)}
-                                className="text-sm rounded-md border border-input bg-background px-2 py-1.5 outline-none focus:ring-1 focus:ring-ring"
-                            >
-                                <option value="system">{t("settings.themeSystem")}</option>
-                                <option value="light">{t("settings.themeLight")}</option>
-                                <option value="dark">{t("settings.themeDark")}</option>
-                            </select>
+                            <Select value={theme} onValueChange={(v) => setTheme(v as Theme)}>
+                                <SelectTrigger className="w-32">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="system">{t("settings.themeSystem")}</SelectItem>
+                                    <SelectItem value="light">{t("settings.themeLight")}</SelectItem>
+                                    <SelectItem value="dark">{t("settings.themeDark")}</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                         {shell && (shell.kind === "busybox" || shell.kind === "none") && (
                             <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2">

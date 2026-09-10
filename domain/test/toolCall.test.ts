@@ -221,6 +221,66 @@ const submitted = (ctx: ToolContext) =>
         (c) => c[0]
     );
 
+describe("read 工作区外路径（逃逸检测撤除 + 权限 ask 兜底，2026-09-10）", () => {
+    it("标准模式：工作区外 read 强制 ask，allow_once 后执行", async () => {
+        const handler = vi.fn().mockResolvedValue("outside-content");
+        const tools = [mkTool("read", handler)];
+        const ctx = mkCtx();
+        ctx.workspace = { rootPath: "/tmp/anycode-ws" } as never;
+        ctx.permissions = mkPermCtx("standard");
+
+        const pending = toolCall(
+            [mkCall("read", "tc1", '{"filePath":"/etc/hosts"}')],
+            ctx,
+            tools,
+            "t1"
+        );
+        await new Promise((r) => setTimeout(r, 0));
+        expect(handler).not.toHaveBeenCalled();
+        const asks = submitted(ctx).filter((e) => e.type === "PermissionAsk");
+        expect(asks).toHaveLength(1);
+        expect(asks[0].data.tool).toBe("read");
+        expect(resolveInteraction(asks[0].data.id, ["allow_once"])).toBe(true);
+        const result = await pending;
+        expect(handler).toHaveBeenCalledWith(
+            expect.objectContaining({ __absFilePath: expect.stringContaining("/etc/hosts") }),
+            expect.anything()
+        );
+        expect(result[0].content).toBe("outside-content");
+    });
+
+    it("信任模式：工作区外 read 直通不弹窗", async () => {
+        const handler = vi.fn().mockResolvedValue("ok");
+        const tools = [mkTool("read", handler)];
+        const ctx = mkCtx();
+        ctx.permissions = mkPermCtx("trusted");
+        const result = await toolCall(
+            [mkCall("read", "tc1", '{"filePath":"/etc/hosts"}')],
+            ctx,
+            tools,
+            "t1"
+        );
+        expect(handler).toHaveBeenCalledOnce();
+        expect(submitted(ctx).filter((e) => e.type === "PermissionAsk")).toHaveLength(0);
+        expect(result[0].content).toBe("ok");
+    });
+
+    it("工作区内 read 照常直通（不受兜底影响）", async () => {
+        const handler = vi.fn().mockResolvedValue("ok");
+        const tools = [mkTool("read", handler)];
+        const ctx = mkCtx();
+        ctx.permissions = mkPermCtx("standard");
+        const result = await toolCall(
+            [mkCall("read", "tc1", '{"filePath":"src/a.ts"}')],
+            ctx,
+            tools,
+            "t1"
+        );
+        expect(handler).toHaveBeenCalledOnce();
+        expect(result[0].content).toBe("ok");
+    });
+});
+
 describe("toolCall 权限 seam（SPEC-032）", () => {
     it("AC-001 标准模式 bash → 发 PermissionAsk + 审计 asked，阻塞；裁决 allow_once 后执行", async () => {
         const handler = vi.fn().mockResolvedValue("ran");

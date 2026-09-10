@@ -8,6 +8,7 @@ import { CollapsibleCard } from "./CollapsibleCard";
 import { apiJson } from "@/lib/api";
 import { useAppSelector } from "@/hooks/useRedux";
 import type { PermissionRuleForm } from "./model";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 /** 预设模式三档（SPEC-032 B-009/D-008）。label/desc 存 i18n key，渲染时经 t() 翻译。 */
 const MODES: { value: "standard" | "accept_edits" | "trusted"; label: string; desc: string }[] = [
@@ -155,22 +156,26 @@ export function PermissionsCard({
                             value={draft.pattern}
                             onChange={(e) => setDraft({ ...draft, pattern: e.target.value })}
                         />
-                        <select
-                            className="h-7 text-xs rounded-md border border-border bg-background px-1"
+                        <Select
                             value={draft.action}
-                            onChange={(e) =>
+                            onValueChange={(v) =>
                                 setDraft({
                                     ...draft,
-                                    action: e.target.value as PermissionRuleForm["action"],
+                                    action: v as PermissionRuleForm["action"],
                                 })
                             }
                         >
-                            {ACTIONS.map((a) => (
-                                <option key={a.value} value={a.value}>
-                                    {t(a.label)}
-                                </option>
-                            ))}
-                        </select>
+                            <SelectTrigger className="h-7 text-xs">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {ACTIONS.map((a) => (
+                                    <SelectItem key={a.value} value={a.value}>
+                                        {t(a.label)}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                         <Button size="sm" className="h-7 px-2 text-xs" onClick={addRule}>
                             {t("permissionsCard.add")}
                         </Button>

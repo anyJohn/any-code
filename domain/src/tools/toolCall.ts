@@ -171,20 +171,23 @@ export async function toolCall(
                 verdict.action === "allow" ||
                 (verdict.action === "ask" && perm.allowOnce.has(cacheKey));
         }
-        // edit/write 逃逸（B-013）：硬拒绝会把模型逼去 bash 绕道（绕开快照/审计通道）。
-        // 改为权限 ask——标准模式弹裁决窗，信任模式（allow）直通，deny 规则照拒。
+        // 工作区外路径（B-013 + 2026-09-10 扩到 read）：edit/write 硬拒绝会把模型逼去
+        // bash 绕道（绕开快照/审计通道），read 拦截则挡住正常读外部文件——一律改权限
+        // ask（信任模式直通，deny 规则照拒）。搜索类工具（glob/grep/explore）仍锚定工作区。
         let escapeAbs: string | undefined;
         if (
-            (funcName === "edit" || funcName === "write") &&
+            (funcName === "edit" || funcName === "write" || funcName === "read") &&
             typeof args.filePath === "string" &&
             typeof ctx.workspace?.rootPath === "string"
         ) {
             const { abs, escaped } = resolvePathWithEscape(ctx.workspace, args.filePath);
             if (escaped) {
                 escapeAbs = abs;
-                if (verdict && verdict.action === "ask") {
+                if (verdict && (verdict.action === "ask" || (verdict.action === "allow" && verdict.source === "mode" && perm?.mode !== "trusted"))) {
+                    // 强制 ask：模式默认放行不适用于工作区外路径
                     verdict = {
                         ...verdict,
+                        action: "ask",
                         ruleKey: undefined,
                     };
                     cacheKey = `${funcName}|escape:${abs}`;
@@ -344,7 +347,7 @@ async function permissionGate(plan: ToolPlan, ctx: ToolContext): Promise<string 
     // 实时重新评估（code-review #3）：批内 allow_always 追加的规则对后续调用立即生效，
     // 不复用计划阶段的冻结 verdict。
     const { funcName, args } = plan;
-    const verdict = evaluatePermission({
+    let verdict = evaluatePermission({
         mode: perm.mode,
         rules: perm.rules,
         dangerPatterns: perm.dangerPatterns,
@@ -354,6 +357,10 @@ async function permissionGate(plan: ToolPlan, ctx: ToolContext): Promise<string 
     });
     // 逃逸目标（B-013）：ask 缓存键按绝对路径隔离，弹窗摘要展示真实写点
     const isEscape = plan.escapeAbs !== undefined;
+    // 工作区外路径：模式默认放行不适用——降级为 ask（信任模式直通，规则 allow/deny 照旧）
+    if (isEscape && verdict.action === "allow" && verdict.source === "mode" && perm.mode !== "trusted") {
+        verdict = { ...verdict, action: "ask", ruleKey: undefined };
+    }
     const cacheKey = isEscape
         ? `${funcName}|escape:${plan.escapeAbs}`
         : `${funcName}|${verdict.ruleKey ?? funcName}`;
