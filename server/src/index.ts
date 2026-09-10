@@ -631,6 +631,32 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         return c.json({ status: result });
     });
 
+    // POST /api/sessions/:sessionId/queue —— queue 消息：运行中入队用户消息，agentLoop
+    // 迭代边界注入当前对话。未在运行返回 queued:false，前端回退走 /run 正常提交。
+    app.post("/api/sessions/:sessionId/queue", async (c) => {
+        const sessionId = c.req.param("sessionId");
+        const body = await c.req.json<{ message?: string }>().catch(() => null);
+        const message = body?.message?.trim();
+        if (!message) return c.json({ statusMessage: "message required" }, 400);
+        const agent = getAgentManager().get(sessionId)?.agent;
+        const id = agent?.queueUserMessage(message) ?? null;
+        if (id === null) return c.json({ queued: false }, 409);
+        return c.json({ queued: true, id });
+    });
+
+    // DELETE /api/sessions/:sessionId/queue/:qid —— 移除尚未注入的队列消息
+    app.delete("/api/sessions/:sessionId/queue/:qid", (c) => {
+        const agent = getAgentManager().get(c.req.param("sessionId"))?.agent;
+        if (!agent) return c.json({ statusMessage: "session not running" }, 404);
+        return c.json({ removed: agent.cancelQueuedMessage(c.req.param("qid")) });
+    });
+
+    // GET /api/sessions/:sessionId/queue —— 当前待注入的队列消息（前端队列展示）
+    app.get("/api/sessions/:sessionId/queue", (c) => {
+        const agent = getAgentManager().get(c.req.param("sessionId"))?.agent;
+        return c.json({ items: agent?.listQueuedMessages() ?? [] });
+    });
+
     // GET /api/running —— 全局运行快照（FR-30 B-004）：跨工作区 queued/running/waiting_ask + 标题，
     // 供 AppShell 的跨会话 pending ask 提醒与侧栏徽标兜底。
     app.get("/api/running", async (c) => {

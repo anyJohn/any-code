@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef } from "react";
+import { Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { CommandItem } from "@/hooks/useCommand";
@@ -221,7 +222,7 @@ export function InputBox({
                     <textarea
                             ref={taRef}
                             value={draft}
-                            disabled={pending}
+                            disabled={compacting}
                             rows={1}
                             placeholder={t("inputBox.placeholder")}
                             className="resize-none border-0 outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 bg-transparent text-sm leading-6 max-h-60 overflow-y-auto py-1.5"
@@ -340,18 +341,32 @@ export function InputBox({
                             <div className="flex items-center gap-1.5">
                                 <PermissionPicker sessionId={sessionId ?? null} />
                                 {pending ? (
-                                    <Button
-                                        variant="destructive"
-                                        size="sm"
-                                        onClick={stop}
-                                    >
-                                        {t("inputBox.stop")}
-                                    </Button>
+                                    <>
+                                        {/* queue 消息：运行中发送进队列，下轮对话注入 */}
+                                        <Button
+                                            size="sm"
+                                            onClick={send}
+                                            disabled={!draft.trim() || compacting}
+                                            title={t("inputBox.queue")}
+                                        >
+                                            {t("inputBox.send")}
+                                        </Button>
+                                        <Button
+                                            variant="destructive"
+                                            size="icon"
+                                            onClick={stop}
+                                            title={t("inputBox.stop")}
+                                            className="size-8 rounded-lg"
+                                        >
+                                            <Square className="size-3 fill-current" />
+                                        </Button>
+                                    </>
                                 ) : (
                                     <Button
                                         size="sm"
                                         onClick={send}
                                         disabled={compacting}
+                                        title={t("inputBox.send")}
                                     >
                                         {t("inputBox.send")}
                                     </Button>

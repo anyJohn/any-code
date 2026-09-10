@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { loadMemory } from "./memory";
 import {
     AgentEvent,
@@ -82,6 +83,13 @@ class AnyAgent {
     /** 当前任务的取消控制器。stop() 调 abort()，正在进行的 LLM 调用会抛 AbortError，
      * agentLoop 在迭代边界捕获后返回，executeTask 据 signal.aborted 发 STOPPED 而非 DONE。 */
     private abortController: AbortController | null = null;
+    // queue 消息：运行中入队的用户消息，agentLoop 迭代边界 drain 进当前对话
+    private userQueue: { id: string; text: string }[] = [];
+    // 当前执行任务的对话引用（drain 需要 messages + onMessage）；null = 空闲
+    private activeRun: {
+        messages: ChatMessage[];
+        onMessage: (msg: ChatMessage) => Promise<void>;
+    } | null = null;
     // session 延迟到首条用户消息时才创建，避免每次启动都落盘一个空 session
     private session: Session | null = null;
     private sessionKey: SessionKey | null = null;
@@ -320,6 +328,29 @@ class AnyAgent {
         this.task$.next(task);
     }
 
+    /** 运行中入队用户消息：agentLoop 下一迭代边界注入当前对话（drain 时落盘 + 发 User 事件）。
+     * 未在运行返回 null（调用方回退走 submit 正常任务路径）。 */
+    queueUserMessage(text: string): string | null {
+        if (!this.activeRun || !this.abortController || this.abortController.signal.aborted)
+            return null;
+        const id = randomUUID();
+        this.userQueue.push({ id, text });
+        return id;
+    }
+
+    /** 移除尚未 drain 的队列消息（前端队列项删除）。已注入/不存在返回 false。 */
+    cancelQueuedMessage(id: string): boolean {
+        const i = this.userQueue.findIndex((q) => q.id === id);
+        if (i < 0) return false;
+        this.userQueue.splice(i, 1);
+        return true;
+    }
+
+    /** 当前待注入的队列消息（前端队列展示）。 */
+    listQueuedMessages(): { id: string; text: string }[] {
+        return [...this.userQueue];
+    }
+
     /**
      * 手动压缩当前 session 上下文：旧消息→一条摘要 + 保留尾部原文。
      * 压缩后整体重写 session.jsonl（保留 title/createdAt）。返回压缩前后 token 数。
@@ -381,6 +412,9 @@ class AnyAgent {
                         takeUntil(this.stop$),
                         catchError((err) => {
                             console.error("Error processing task:", err);
+                            // 异常路径同样收尾 run 状态（正常路径在 executeTask 末尾清）
+                            this.activeRun = null;
+                            this.userQueue.length = 0;
                             // domain 发出即 plain ErrorPayload（serializeError），raw Error 不离开内核；
                             // live==persisted by construction，adapter 不再 replacer（SPEC-030 B-002/I-001）。
                             this.eventStream.submit({
@@ -433,6 +467,18 @@ class AnyAgent {
             await this.service.appendMessage(sessionKey, msg);
             seen.add(msg as unknown as object);
         };
+        // queue 消息（queueUserMessage）的注入点：activeRun 提供当前对话引用，
+        // agentLoop 每个迭代边界调用 drainQueued（工具结果已齐、下一次 LLM 前）
+        this.activeRun = { messages: session.messages, onMessage };
+        const drainQueued = async () => {
+            while (this.userQueue.length) {
+                const item = this.userQueue.shift()!;
+                const msg: ChatMessage = { role: "user", content: item.text };
+                this.activeRun!.messages.push(msg);
+                await onMessage(msg);
+                this.eventStream.submit({ type: "User", message: item.text });
+            }
+        };
         // 每个任务一个独立的 AbortController，stop() abort 它
         const abortController = new AbortController();
         this.abortController = abortController;
@@ -464,6 +510,8 @@ class AnyAgent {
                 : undefined,
             // AR-23：日志不变式断言（seen 由 onMessage/压缩/resume 标记）
             logInvariant: { seen: this.loggedMessages },
+            // queue 消息注入（queueUserMessage）：迭代边界 drain
+            drainQueuedUserMessages: drainQueued,
             // AR-4：写类工具执行前自动快照——domain 存结构化事实（命令 + 会话 id），
             // 展示 label 由 interface 层拼接
             snapshot: {
@@ -488,6 +536,11 @@ class AnyAgent {
             }
         );
         this.abortController = null;
+        this.activeRun = null;
+        // 队列遗留转新任务：queue 是用户的主动输入，stop 只终止当前任务不停队列
+        //（destroy 后 task$ 已拆订阅，submit 自然失效，不担心复活）
+        const leftover = this.userQueue.splice(0);
+        for (const q of leftover) this.submit(q.text);
         // 终态信号：被 stop 中断 → STOPPED（前端显示"已停止任务"）；否则 DONE。
         // Error 由 catchError 发 ERROR，前端同样解除 pending。
         if (abortController.signal.aborted) {

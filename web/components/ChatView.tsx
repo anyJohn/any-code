@@ -23,7 +23,7 @@ import { TodoPanel } from "./TodoPanel";
 import { RuntimeTab } from "./RuntimeTab";
 import type { JobInfo } from "./RuntimeTab";
 import { useT } from "@/i18n";
-import { MessagesSquare, GitCompare, FolderOpen, ArrowDown } from "lucide-react";
+import { MessagesSquare, GitCompare, FolderOpen, ArrowDown, Clock3, Pencil, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Cpu } from "lucide-react";
 
@@ -158,7 +158,14 @@ export function ChatView({
         if (nearBottom) el.scrollTop = el.scrollHeight;
     }, [events.length]);
 
-    const send = () => {
+    // queue 消息：运行中发送的消息（服务端入队，agentLoop 下轮注入；User 事件入聊天流）
+    const [queueItems, setQueueItems] = useState<{ id: string; text: string }[]>([]);
+    // run 结束清空本地队列残影（服务端遗留已由 domain 转新任务/丢弃）
+    useEffect(() => {
+        if (!pending) setQueueItems([]);
+    }, [pending]);
+
+    const send = async () => {
         // 发送后视图同步（用户反馈 2026-09-06）：回到聊天 tab 并滚到底
         setTab("chat");
         requestAnimationFrame(() => {
@@ -181,7 +188,36 @@ export function ChatView({
         }
         fileRef.chips.forEach((c) => fileRef.removeChip(c.path));
         command.setDraft("");
+        // 运行中 → 入队（服务端注入当前对话）；409（刚结束的竞态）回退正常提交
+        if (pending && currentSessionId) {
+            const r = await apiJson<{ queued: boolean; id?: string }>(
+                `/api/sessions/${currentSessionId}/queue`,
+                {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ message }),
+                }
+            );
+            if (r?.queued && r.id) {
+                setQueueItems((p) => [...p, { id: r.id!, text: message }]);
+                return;
+            }
+        }
         submit(message);
+    };
+
+    const removeQueueItem = (id: string) => {
+        setQueueItems((p) => p.filter((q) => q.id !== id));
+        if (currentSessionId) {
+            void apiJson(`/api/sessions/${currentSessionId}/queue/${id}`, {
+                method: "DELETE",
+            });
+        }
+    };
+
+    const editQueueItem = (q: { id: string; text: string }) => {
+        removeQueueItem(q.id);
+        command.setDraft(q.text);
     };
 
     const [runtimeCount, setRuntimeCount] = useState(0);
@@ -311,6 +347,40 @@ export function ChatView({
                             <span className="compact-progress-bar rounded-full bg-primary" />
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* queue 消息条：运行中入队、待注入的消息（可取回编辑/移除） */}
+            {queueItems.length > 0 && (
+                <div className="shrink-0 w-full max-w-3xl mx-auto px-4 pb-1 flex flex-col gap-1">
+                    <p className="px-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                        {t("inputBox.queued")}
+                    </p>
+                    {queueItems.map((q) => (
+                        <div
+                            key={q.id}
+                            className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs"
+                        >
+                            <Clock3 className="size-3 shrink-0 text-muted-foreground" />
+                            <span className="flex-1 min-w-0 truncate text-muted-foreground">
+                                {q.text}
+                            </span>
+                            <button
+                                title={t("inputBox.editQueued")}
+                                className="shrink-0 text-muted-foreground hover:text-foreground"
+                                onClick={() => editQueueItem(q)}
+                            >
+                                <Pencil className="size-3" />
+                            </button>
+                            <button
+                                title={t("inputBox.removeQueued")}
+                                className="shrink-0 text-muted-foreground hover:text-foreground"
+                                onClick={() => removeQueueItem(q.id)}
+                            >
+                                <X className="size-3.5" />
+                            </button>
+                        </div>
+                    ))}
                 </div>
             )}
 

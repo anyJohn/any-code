@@ -437,4 +437,24 @@ describe("POST/GET /api/sessions/:id/permission-mode（SPEC-037）", () => {
         });
         expect(bad.status).toBe(400);
     });
+
+    it("POST /api/sessions/:id/queue —— 400 缺 message / 409 未在运行（前端回退 /run）", async () => {
+        const noMsg = await app.request("/api/sessions/none/queue", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({}),
+        });
+        expect(noMsg.status).toBe(400);
+
+        const idle = await app.request("/api/sessions/none/queue", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ message: "hi" }),
+        });
+        expect(idle.status).toBe(409);
+        expect(((await idle.json()) as { queued: boolean }).queued).toBe(false);
+
+        const list = await app.request("/api/sessions/none/queue");
+        expect(((await list.json()) as { items: unknown[] }).items).toEqual([]);
+    });
 });

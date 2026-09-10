@@ -67,6 +67,9 @@ export async function agentLoop(
         if (ctx.signal.aborted) {
             return { result: "[stopped]", messages, stopReason: "stopped" };
         }
+        // queue 消息（queueUserMessage）：迭代边界注入——此刻工具结果已齐、
+        // 下一次 LLM 调用前，消息顺序合法（不会插在 assistant tool_calls 与结果之间）
+        await ctx.drainQueuedUserMessages?.();
         // 分级压缩（FR-6）：micro（清陈旧 tool result）先于全量摘要；
         // 全量阈值 = 窗口 - 固定 buffer（不再用比例）；真实 usage 最准。
         if (

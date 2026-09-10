@@ -55,6 +55,9 @@ export interface ToolContext {
      *  seen = 已确认落盘的消息身份集（main.ts 经 onMessage/compact 标记）；
      *  agentLoop 每次 LLM 调用前断言请求内非 system 消息全部已落盘，破坏发 Warning。 */
     logInvariant?: { seen: WeakSet<object>; warned?: boolean };
+    /** queue 消息（queueUserMessage）注入：agentLoop 每个迭代边界调用，把待入队
+     *  用户消息 push 进当前对话并落盘；undefined = 无队列（sub-agent 不传）。 */
+    drainQueuedUserMessages?: () => Promise<void>;
     /** 通用工具私有配置（用户决策 2026-09-03）：config.tools.<工具名>.config 经此注入；
      *  工具 handler 按名取（web_search: provider/apiKey；browser_*: cdpUrl…）。undefined = 未配置。 */
     toolsConfig?: Record<string, Record<string, unknown>>;

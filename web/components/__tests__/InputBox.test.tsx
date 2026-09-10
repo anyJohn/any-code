@@ -179,10 +179,10 @@ describe("InputBox 发送（SPEC-016）", () => {
         expect(props.send).toHaveBeenCalled();
     });
 
-    it("pending → 显示停止按钮，点击 → stop()", () => {
+    it("pending → 显示停止按钮（方形图标），点击 → stop()", () => {
         const props = makeProps({ pending: true });
         render(<InputBox {...props} />);
-        const stopBtn = screen.getByText("停止");
+        const stopBtn = screen.getByTitle("停止");
         fireEvent.click(stopBtn);
         expect(props.stop).toHaveBeenCalled();
     });
