@@ -166,9 +166,7 @@ export function AppSidebar({
     };
 
     const onToggle = (w: WorkspaceMeta) => {
-        // 默认展开（未显式关过即视为开）：点击把"默认开"翻成显式关
         const willOpen = openKeys[w.projectKey] === false;
-        dispatch(setSelected(w));
         setOpenKeys((p) => ({ ...p, [w.projectKey]: willOpen }));
     };
 
