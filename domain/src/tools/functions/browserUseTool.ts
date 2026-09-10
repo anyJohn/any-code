@@ -31,6 +31,20 @@ function cdpUrlOf(ctx: ToolContext): string {
 // ———— 连接缓存（按 cdpUrl 记忆；context 取第一个，页面取最近活跃页） ————
 let conn: { url: string; browser: Browser } | null = null;
 
+/** CDP 端点探活分类：refused=端口无服务（浏览器没开）；http=有服务但响应异常（配置可能错）；ok=是 CDP 端点 */
+async function probeCdp(cdpUrl: string): Promise<"refused" | "http" | "ok"> {
+    try {
+        const res = await fetch(cdpUrl.replace(/\/+$/, "") + "/json/version", {
+            signal: AbortSignal.timeout(3_000),
+        });
+        if (!res.ok) return "http";
+        const body = (await res.json().catch(() => null)) as { webSocketDebuggerUrl?: string } | null;
+        return body?.webSocketDebuggerUrl ? "ok" : "http";
+    } catch {
+        return "refused";
+    }
+}
+
 async function browserOf(cdpUrl: string): Promise<Browser> {
     if (conn && conn.url === cdpUrl) {
         // 连接可能已被浏览器侧断开：轻量探测
@@ -48,7 +62,7 @@ async function browserOf(cdpUrl: string): Promise<Browser> {
     }
     if (!cdpUrl)
         throw new Error(
-            "未配置 cdpUrl（tools.browser_use.config.cdpUrl）。需先启动浏览器：chrome --remote-debugging-port=9222"
+            "cdpUrl is not configured (tools.browser_use.config.cdpUrl). Start the browser first: chrome --remote-debugging-port=9222"
         );
     try {
         const browser = await chromium.connectOverCDP(cdpUrl, {
@@ -57,8 +71,18 @@ async function browserOf(cdpUrl: string): Promise<Browser> {
         conn = { url: cdpUrl, browser };
         return browser;
     } catch (e) {
+        const raw = e instanceof Error ? e.message : String(e);
+        const kind = await probeCdp(cdpUrl);
+        if (kind === "refused")
+            throw new Error(
+                `Browser is not running: no service is listening on ${cdpUrl}. Start it with remote debugging: chrome --remote-debugging-port=9222 (if the port is not 9222, use the actual port and verify cdpUrl in settings)`
+            );
+        if (kind === "http")
+            throw new Error(
+                `cdpUrl may be misconfigured: a service is listening on ${cdpUrl} but it is not a browser debugging endpoint (/json/version responded abnormally). Verify cdpUrl in settings points to the browser's --remote-debugging-port`
+            );
         throw new Error(
-            `CDP 连接失败：${e instanceof Error ? e.message : String(e)}（检查 cdpUrl 与浏览器调试端口；浏览器需以 --remote-debugging-port=9222 启动）`
+            `CDP connection failed (endpoint reachable, handshake error): ${raw}. Try restarting the browser: chrome --remote-debugging-port=9222`
         );
     }
 }
@@ -76,7 +100,7 @@ async function contextOf(cdpUrl: string, browser: Browser): Promise<BrowserConte
     const retry = browser.contexts()[0];
     if (retry) return retry;
     throw new Error(
-        "CDP 端点无可用页面：浏览器以调试模式启动但没有打开任何窗口。请保持浏览器至少一个窗口开启（或重启：chrome --remote-debugging-port=9222 并打开任意页面）"
+        "No usable page on the CDP endpoint: the browser runs in debug mode but has no open window. Keep at least one window open (or restart: chrome --remote-debugging-port=9222 and open any page)"
     );
 }
 
@@ -103,7 +127,7 @@ async function pageInfo(page: Page, selector?: string): Promise<string> {
               .locator(selector)
               .first()
               .innerText({ timeout: ACT_TIMEOUT_MS })
-              .catch(() => "(selector 未命中任何元素)")
+              .catch(() => "(selector matched no elements)")
         : await page.evaluate(() =>
               document.body ? document.body.innerText : ""
           );
@@ -111,27 +135,27 @@ async function pageInfo(page: Page, selector?: string): Promise<string> {
     const clipped =
         full.length > TEXT_LIMIT
             ? full.slice(0, TEXT_LIMIT) +
-              `\n\n(内容已截断至 ${TEXT_LIMIT} 字符——用 selector 参数只取目标区域，或 eval 精读)`
+              `\n\n(content clipped to ${TEXT_LIMIT} chars — use the selector param to scope, or eval for targeted reading)`
             : full;
-    return `URL: ${url}\n标题: ${title || "(无标题)"}\n\n${clipped || "(无可读文本)"}`;
+    return `URL: ${url}\nTitle: ${title || "(untitled)"}\n\n${clipped || "(no readable text)"}`;
 }
 
 // ———— actions ————
 
 async function navigate(args: { url?: string }, cdpUrl: string, browser: Browser): Promise<string> {
     const url = typeof args?.url === "string" ? args.url.trim() : "";
-    if (!url) return "Error: url 不能为空";
-    if (!/^https?:\/\//i.test(url)) return "Error: 仅支持 http(s) URL";
+    if (!url) return "Error: url is required";
+    if (!/^https?:\/\//i.test(url)) return "Error: only http(s) URLs are supported";
     const page = await activePage(cdpUrl, browser);
     // load 超时不报错：SPA 异步渲染不会触发 load——照常返回页面状态（RR-028 #4）
-    let note = "load 完成";
+    let note = "load completed";
     try {
         await page.goto(url, { waitUntil: "load", timeout: NAV_TIMEOUT_MS });
     } catch {
-        note = "网络 load 超时，但页面状态如下（SPA 可能仍在异步渲染，可稍后用 content 重读）";
+        note = "network load timed out; page state below (SPA may still be rendering — retry with content later)";
     }
     const info = await pageInfo(page);
-    return `导航到 ${url}（${note}）\n${info}`;
+    return `Navigated to ${url} (${note})\n${info}`;
 }
 
 async function content(
@@ -146,7 +170,7 @@ async function content(
 
 async function evalJs(args: { js?: string }, cdpUrl: string, browser: Browser): Promise<string> {
     const js = typeof args?.js === "string" ? args.js : "";
-    if (!js) return "Error: js 不能为空";
+    if (!js) return "Error: js is required";
     const page = await activePage(cdpUrl, browser);
     // page.evaluate 对返回 Promise 自动 await（RR-028 #2）
     try {
@@ -165,8 +189,8 @@ async function snapshot(_args: unknown, cdpUrl: string, browser: Browser): Promi
         .locator("body")
         .ariaSnapshot({ mode: "ai" })
         .catch(() => "");
-    if (!snap) return "(快照为空——页面可能未加载或无可访问内容)";
-    return `无障碍快照（ref 形如 s1e3，配合 click/fill 使用）：\n\n${snap}`;
+    if (!snap) return "(snapshot is empty — the page may not be loaded or has no accessible content)";
+    return `Accessibility snapshot (refs look like s1e3; use them with click/fill):\n\n${snap}`;
 }
 
 async function click(
@@ -175,13 +199,13 @@ async function click(
     browser: Browser
 ): Promise<string> {
     const t = args?.ref || args?.selector;
-    if (!t) return "Error: 需要 ref（来自 snapshot）或 selector";
+    if (!t) return "Error: ref (from snapshot) or selector is required";
     const page = await activePage(cdpUrl, browser);
     try {
         await target(page, t).click({ timeout: ACT_TIMEOUT_MS });
-        return `已点击 ${t}`;
+        return `Clicked ${t}`;
     } catch (e) {
-        return `Error: 点击 ${t} 失败：${e instanceof Error ? e.message : String(e)}（先 snapshot 拿最新 ref）`;
+        return `Error: click ${t} failed: ${e instanceof Error ? e.message : String(e)} (run snapshot first for a fresh ref)`;
     }
 }
 
@@ -192,13 +216,13 @@ async function fill(
 ): Promise<string> {
     const t = args?.ref || args?.selector;
     const text = typeof args?.text === "string" ? args.text : undefined;
-    if (!t || text === undefined) return "Error: 需要 ref/selector 和 text";
+    if (!t || text === undefined) return "Error: ref/selector and text are required";
     const page = await activePage(cdpUrl, browser);
     try {
         await target(page, t).fill(text, { timeout: ACT_TIMEOUT_MS });
-        return `已填入 ${t}`;
+        return `Filled ${t}`;
     } catch (e) {
-        return `Error: 填入 ${t} 失败：${e instanceof Error ? e.message : String(e)}`;
+        return `Error: fill ${t} failed: ${e instanceof Error ? e.message : String(e)}`;
     }
 }
 
@@ -217,17 +241,17 @@ async function cookies(
     }
     if (op === "set") {
         if (!args?.name || args?.value === undefined || !args?.url)
-            return "Error: set 需要 name / value / url";
+            return "Error: set requires name / value / url";
         await ctx.addCookies([
             { name: args.name, value: args.value, url: args.url },
         ]);
-        return `已设置 cookie ${args.name}`;
+        return `Cookie ${args.name} set`;
     }
     if (op === "clear") {
         await ctx.clearCookies();
-        return "已清空全部 cookies";
+        return "All cookies cleared";
     }
-    return "Error: cookies op 必须是 get / set / clear";
+    return "Error: cookies op must be get / set / clear";
 }
 
 async function tabs(
@@ -246,21 +270,21 @@ async function tabs(
             await page
                 .goto(url, { waitUntil: "load", timeout: NAV_TIMEOUT_MS })
                 .catch(() => {});
-        return `已新建页签 ${pages.length}${url ? ` 并导航到 ${url}` : ""}`;
+        return `New tab #${pages.length}${url ? ` navigated to ${url}` : ""}`;
     }
     if (op === "select") {
         const page = pages[args?.index ?? -1];
-        if (!page) return "Error: index 越界（用 tabs op=list 查看）";
+        if (!page) return "Error: index out of range (see tabs op=list)";
         await page.bringToFront();
-        return `已切换到页签 ${args?.index}: ${page.url()}`;
+        return `Switched to tab ${args?.index}: ${page.url()}`;
     }
     if (op === "close") {
         const page = pages[args?.index ?? -1];
-        if (!page) return "Error: index 越界";
+        if (!page) return "Error: index out of range";
         await page.close();
-        return `已关闭页签 ${args?.index}`;
+        return `Closed tab ${args?.index}`;
     }
-    return "Error: tabs op 必须是 list / new / select / close";
+    return "Error: tabs op must be list / new / select / close";
 }
 
 export const browserUseTool: Tool = {
@@ -344,7 +368,7 @@ export const browserUseTool: Tool = {
         };
         const ACTIONS = ["navigate", "content", "eval", "snapshot", "click", "fill", "cookies", "tabs"];
         if (!ACTIONS.includes(args?.action ?? ""))
-            return "Error: action 必须是 navigate / content / eval / snapshot / click / fill / cookies / tabs 之一";
+            return "Error: action must be one of navigate / content / eval / snapshot / click / fill / cookies / tabs";
         let browser: Browser;
         const cdpUrl = cdpUrlOf(ctx);
         try {
