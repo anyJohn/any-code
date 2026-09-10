@@ -200,12 +200,12 @@ const readSchema: ChatCompletionTool = {
                 },
                 offset: {
                     type: "number",
-                    description: "Starting character position (default: 0)",
+                    description:
+                        "Starting line number (1-based, default: 1) for paginated reads of large files",
                 },
                 limit: {
                     type: "number",
-                    description:
-                        "Maximum number of characters to read (default: 8000)",
+                    description: "Number of lines to read (default: 2000)",
                 },
             },
             required: ["filePath"],

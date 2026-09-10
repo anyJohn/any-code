@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiJson } from "@/lib/api";
-import { dbgLog, dbgFlushToServer } from "@/lib/streamDebug";
 import { useT } from "@/i18n";
 import {
     type AgentEvent,
@@ -98,14 +97,9 @@ export function useAgent(
     const lastSeqRef = useRef<number>(-1);
     // events 镜像 ref（attach 去重快照用，避免闭包陈旧）
     const eventsRef = useRef<AgentEvent[]>(initialEvents);
-    // 会话 id 镜像（取证日志落盘用；state 在回调闭包里会陈旧）
-    const sidRef = useRef<string | null>(sessionId);
     useEffect(() => {
         eventsRef.current = events;
     }, [events]);
-    useEffect(() => {
-        sidRef.current = currentSessionId;
-    }, [currentSessionId]);
 
     const appendLocal = useCallback(
         (type: "System" | "Error" | "Stopped", message: string) => {
@@ -117,10 +111,9 @@ export function useAgent(
         []
     );
 
-    /** 单帧入列：ask 类拦截驱动模态；其余去重（可选）后入 events。
-     *  strategic=true 时做数组级查重取证（todo #14）：同 type|message|timestamp 已在数组 → ARRAY-DUP。 */
+    /** 单帧入列：ask 类拦截驱动模态；其余去重（可选）后入 events。 */
     const ingest = useCallback(
-        (e: AgentEventPayload, seen?: Set<string>, strategic?: boolean) => {
+        (e: AgentEventPayload, seen?: Set<string>) => {
             if (e.type === "Interaction") {
                 setPendingInteraction(e.data as InteractionData);
                 return;
@@ -149,16 +142,6 @@ export function useAgent(
                         );
                     if (hit) return prev;
                 }
-                if (
-                    strategic &&
-                    prev.some(
-                        (p) => p.type === e.type && p.message === e.message && p.timestamp === e.timestamp
-                    )
-                ) {
-                    dbgLog(
-                        `ARRAY-DUP type=${e.type} ts=${e.timestamp} msg=${e.message?.slice(0, 30) ?? ""} len=${prev.length}`
-                    );
-                }
                 return [
                     ...prev,
                     { ...e, id: nextId("live") } as AgentEvent,
@@ -177,28 +160,14 @@ export function useAgent(
      * seq ≤ 本 hook 已投递最大值的帧直接丢弃。seq=-1（synth 提示帧/裸事件兼容）不去重。
      */
     const consumeStream = useCallback(
-        async (body: ReadableStream<Uint8Array>, seen?: Set<string>, tag = "pump") => {
+        async (body: ReadableStream<Uint8Array>, seen?: Set<string>) => {
             for await (const frame of parseSSE(body)) {
                 if (frame.seq >= 0) {
-                    if (frame.seq <= lastSeqRef.current) {
-                        dbgLog(
-                            `${tag} DUP-SKIP seq=${frame.seq} gate=${lastSeqRef.current} type=${frame.event.type}`
-                        );
-                        continue;
-                    }
+                    if (frame.seq <= lastSeqRef.current) continue;
                     lastSeqRef.current = frame.seq;
                 }
-                // 战略帧取证（双气泡排查）：高频 Thinking/delta 跳过
-                const strategic = !["Thinking", "AssistantDelta", "ToolProgress", "ToolArgProgress", "Usage", "ToolStart"].includes(frame.event.type);
-                if (strategic) {
-                    dbgLog(
-                        `${tag} IN seq=${frame.seq} type=${frame.event.type} gate=${lastSeqRef.current} turn=${(frame.event as { turnId?: string }).turnId?.slice(0, 8) ?? "-"} msg=${frame.event.message?.slice(0, 30) ?? ""}`
-                    );
-                }
-                ingest(frame.event, seen, strategic);
+                ingest(frame.event, seen);
                 if (TERMINAL.has(frame.event.type)) {
-                    dbgLog(`TERMINAL ${frame.event.type} seq=${frame.seq} gate=${lastSeqRef.current}`);
-                    dbgFlushToServer(sidRef.current ?? sessionId);
                     setPending(false);
                     setPendingInteraction(null);
                     setPendingPermission(null);
@@ -222,12 +191,10 @@ export function useAgent(
             while (true) {
                 let ok = false;
                 try {
-                    dbgLog(`pump OPEN ${curInit?.method ?? "GET"} ${curUrl}`);
                     const res = await fetch(curUrl, { ...curInit, signal: ac.signal });
                     if (res.ok && res.body) {
                         ok = true;
-                        const terminal = await consumeStream(res.body, undefined, "pump");
-                        dbgLog(`pump CLOSE terminal=${terminal}`);
+                        const terminal = await consumeStream(res.body);
                         if (terminal || ac.signal.aborted) return;
                     }
                 } catch {
@@ -267,14 +234,12 @@ export function useAgent(
                     signal: ac.signal,
                 });
                 if (!res.ok || !res.body) return; // 空闲会话：无流
-                dbgLog(`attach OPEN since=-1 sid=${sid}`);
                 // 不重置 lastSeqRef：若同 hook 已有流投递过帧（StrictMode 双挂载/提交后
                 // attach），重放中 seq ≤ 已投递最大值的帧由 consumeStream 的 seq 闸丢弃。
                 // 会话切换经 ChatView key 重挂载（ref 全新），无需此处清理。
                 const seen = new Set(eventsRef.current.map(eventKey));
                 setPending(true);
-                const terminal = await consumeStream(res.body, seen, "attach");
-                dbgLog(`attach CLOSE terminal=${terminal}`);
+                const terminal = await consumeStream(res.body, seen);
                 if (!terminal && !ac.signal.aborted) {
                     await pump(sid, `/api/sessions/${sid}/stream?since=${lastSeqRef.current}`, undefined, ac);
                 }

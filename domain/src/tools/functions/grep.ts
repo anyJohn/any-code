@@ -1,6 +1,8 @@
 import { runRipgrep } from "../../ripgrep";
 import type { ToolContext } from "../../context";
 import { resolvePath } from "../../workspace";
+import { statSync } from "node:fs";
+import { dirname } from "node:path";
 
 interface GrepArgs {
     pattern: string;
@@ -31,9 +33,19 @@ export const grepFunc = async (
             multiline = false,
             case_insensitive = false,
         } = args;
-        const cwd = args.path
+        // path 兼许文件：rg 的搜索路径参数收文件；spawn cwd 必须是目录——文件时落到其父目录
+        let rgPath: string | undefined;
+        let cwd = args.path
             ? resolvePath(workspace, args.path)
             : workspace.rootPath;
+        try {
+            if (statSync(cwd).isFile()) {
+                rgPath = cwd;
+                cwd = dirname(cwd);
+            }
+        } catch {
+            // 路径不存在：交给 rg 报错
+        }
 
         const rgArgs: string[] = [];
         if (case_insensitive) rgArgs.push("-i");
@@ -49,13 +61,13 @@ export const grepFunc = async (
         }
         rgArgs.push("--regexp", pattern);
         // 显式传 path：rg 无 path 且 stdin 非 tty 时会读 stdin 阻塞，故显式给搜索路径
-        rgArgs.push(cwd);
+        rgArgs.push(rgPath ?? cwd);
 
         const { stdout, stderr, code } = await runRipgrep(rgArgs, { cwd });
 
-        // code 1 = 无匹配（正常），code 2 = 错误
-        if (code === 2) {
-            return `Error: ${stderr.trim() || "ripgrep error"}`;
+        // code 1 = 无匹配（正常），code 2 = 错误；null = spawn 失败——绝不能解释为"无匹配"
+        if (code === 2 || code === null) {
+            return `Error: ${stderr.trim() || `ripgrep 启动失败（cwd=${cwd}）`}`;
         }
 
         const lines = stdout.split("\n").filter((l) => l !== "");

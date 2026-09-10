@@ -47,6 +47,14 @@ describe("grepFunc（SPEC-021 AC-003，ripgrep）", () => {
         );
         expect(out).toMatch(/HELLO/); // 命中 second HELLO 行
     });
+    it("path 为文件时仍能命中（假阴性回归，外部审查 2026-09-10）", async () => {
+        const out = await grepFunc(
+            { pattern: "hello", path: path.join(tmp, "a.ts") },
+            P()
+        );
+        expect(out).toContain("a.ts");
+        expect(out).toMatch(/1: hello world/);
+    });
     it("无匹配返提示（code 1）", async () => {
         const out = await grepFunc({ pattern: "zzzznomatch" }, P());
         expect(out).toMatch(/No matches/);

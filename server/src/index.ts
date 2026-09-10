@@ -1,6 +1,6 @@
 import { Hono, type Context } from "hono";
 import { serve } from "@hono/node-server";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, statSync, readdirSync } from "node:fs";
 import { basename, dirname, join, parse as parsePath, resolve } from "node:path";
 import os from "node:os";
 import {
@@ -17,7 +17,6 @@ import {
     switchDefaultProvider,
     setUiLanguage,
     setUiTheme,
-    globalConfigDir,
     setGitBashPath,
     projectKeyOf,
     resolveContextWindow,
@@ -1070,29 +1069,6 @@ export function createApp(opts: { staticDir?: string } = {}): Hono {
         const kind = resolveShellKind(r.message || undefined);
         const binary = bashCandidates(r.message || undefined)[0];
         return c.json({ statusMessage: "switched", shell: { kind, path: binary ?? null, platform: process.platform } });
-    });
-
-    // 客户端流式取证日志落盘（双气泡排查）：body { sessionId, lines[] } → ~/.anycode/logs/
-    app.post("/api/debug/client-log", async (c) => {
-        let body: { sessionId?: string; lines?: string[] };
-        try {
-            body = await c.req.json();
-        } catch {
-            return c.json({ statusMessage: "invalid json body" }, 400);
-        }
-        try {
-            const dir = join(globalConfigDir(), "logs");
-            mkdirSync(dir, { recursive: true });
-            const file = join(dir, "client-debug.log");
-            appendFileSync(
-                file,
-                (body.lines ?? []).join("\n") + "\n",
-                "utf-8"
-            );
-            return c.json({ status: "logged" });
-        } catch {
-            return c.json({ statusMessage: "log write failed" }, 500);
-        }
     });
 
     // bash 候选清单（设置页「通用」下拉用）：PATH 探测结果。

@@ -74,15 +74,21 @@ async function exploreDirectory(
 function formatTree(
     node: DirectoryNode,
     indent: string = "",
-    isLast: boolean = true
+    isLast: boolean = true,
+    isRoot: boolean = false
 ): string {
-    const prefix =
-        indent === "" ? "" : indent.slice(0, -2) + (isLast ? "└─ " : "├─ ");
-    let result =
-        prefix + node.name + (node.type === "directory" ? "/" : "") + "\n";
+    // 根节点不渲染自身——与标题 "Directory Structure: <path>" 信息重复
+    const prefix = isRoot
+        ? ""
+        : indent === ""
+          ? ""
+          : indent.slice(0, -2) + (isLast ? "└─ " : "├─ ");
+    let result = isRoot
+        ? ""
+        : prefix + node.name + (node.type === "directory" ? "/" : "") + "\n";
 
     if (node.children && node.children.length > 0) {
-        const newIndent = indent + (isLast ? "   " : "│  ");
+        const newIndent = isRoot ? "" : indent + (isLast ? "   " : "│  ");
         for (let i = 0; i < node.children.length; i++) {
             result += formatTree(
                 node.children[i],
@@ -119,7 +125,7 @@ export const exploreFunc = async (
         let output = `Directory Structure: ${absolutePath}\n`;
         output += `Max Depth: ${maxDepth}\n`;
         output += `Ignored: ${ignorePatterns.join(", ")}\n\n`;
-        output += formatTree(rootNode);
+        output += formatTree(rootNode, "", true, true);
 
         return output;
     } catch (error) {

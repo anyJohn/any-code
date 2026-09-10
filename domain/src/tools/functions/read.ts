@@ -6,7 +6,9 @@ import { decodeFileText } from "../../textDecode";
 
 interface ReadArgs {
     filePath: string;
+    /** 起始行号（1 起，缺省 1）。 */
     offset?: number;
+    /** 读取行数（缺省 2000）。 */
     limit?: number;
 }
 
@@ -16,13 +18,13 @@ export const readFunc = async (
 ): Promise<string> => {
     const { workspace } = ctx;
     try {
-        const { offset = 0, limit = 8000 } = args;
+        const { offset = 1, limit = 2000 } = args;
         const filePath = resolvePath(workspace, args.filePath);
         const content = decodeFileText(await fs.readFile(filePath)).text;
 
         // 记录 mtime 供 write/edit staleness 校验（SPEC-022 B-006）。整文件读才记，
-        // 偏移读（offset>0）不记基线（partial 读后整写本就该警告）。
-        if (ctx.fileState && offset === 0) {
+        // 偏移读（offset>1）不记基线（partial 读后整写本就该警告）。
+        if (ctx.fileState && offset <= 1) {
             try {
                 ctx.fileState.set(filePath, statSync(filePath).mtimeMs);
             } catch {
@@ -30,28 +32,26 @@ export const readFunc = async (
             }
         }
 
-        const totalLength = content.length;
-        const start = Math.max(0, offset);
-        const end = Math.min(start + limit, totalLength);
-        const slicedContent = content.slice(start, end);
-
-        const contentBeforeStart = content.slice(0, start);
-        const lineNumber = (contentBeforeStart.match(/\n/g) || []).length + 1;
-
-        const lines = slicedContent.split("\n");
-        const contentWithLineNumbers = lines
-            .map((line, index) => `${lineNumber + index}\t${line}`)
+        const lines = content.split("\n");
+        const totalLines = lines.length;
+        // offset 为行号（1 起）；行号单位是工具生态惯例（sed/编辑器），字符 offset
+        // 极易切断行且让行号前缀失义（外部审查反馈 2026-09-10）
+        const start = Math.max(1, offset);
+        const end = Math.min(start - 1 + limit, totalLines);
+        const selected = lines.slice(start - 1, end);
+        const numbered = selected
+            .map((line, i) => `${start + i}\t${line}`)
             .join("\n");
 
-        if (end < totalLength) {
-            return `${contentWithLineNumbers}\n\n[... Truncated - ${
-                totalLength - end
-            } more characters available. Use offset=${end} to continue reading.]`;
+        if (end < totalLines) {
+            return `${numbered}\n\n[... Truncated - ${
+                totalLines - end
+            } more lines. Use offset=${end + 1} to continue reading.]`;
         }
-        if (start > 0) {
-            return `[... Starting from offset ${start} (line ${lineNumber}) of ${totalLength} total characters]\n\n${contentWithLineNumbers}`;
+        if (start > 1) {
+            return `[... Lines ${start}-${end} of ${totalLines} total lines]\n\n${numbered}`;
         }
-        return contentWithLineNumbers;
+        return numbered;
     } catch (error) {
         if (error instanceof Error) {
             return `Error: ${error.message}`;
