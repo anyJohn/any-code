@@ -6,6 +6,7 @@ import { useAppDispatch } from "@/hooks/useRedux";
 import { apiJson } from "@/lib/api";
 import { useAgent } from "@/hooks/useAgent";
 import { useCommand } from "@/hooks/useCommand";
+import { useDraft } from "@/hooks/useDraft";
 import { useFileReference } from "@/hooks/useFileReference";
 import { bumpSessions } from "@/store/workspaceSlice";
 import { fmtTokens } from "@/lib/format";
@@ -62,6 +63,8 @@ export function ChatView({
         reloadHistory,
     } = useAgent(sessionId, rootPath, initialEvents);
     const [snapshotsOpen, setSnapshotsOpen] = useState(false);
+    // 输入框草稿（按工作区 + 会话持久），由本组件持有，命令/文件引用 hooks 只读写
+    const { draft, setDraft } = useDraft(projectKey, sessionId);
     const command = useCommand({
         appendSystem,
         submit,
@@ -69,12 +72,14 @@ export function ChatView({
         rootPath,
         currentSessionId,
         openSnapshots: () => setSnapshotsOpen(true),
+        draft,
+        setDraft,
     });
     const fileRef = useFileReference({
         projectKey,
         commandMode: command.commandMode,
-        draft: command.draft,
-        setDraft: command.setDraft,
+        draft,
+        setDraft,
     });
 
     // 新对话建会话完成（currentSessionId: null → sid）：bumpSessions 让侧栏刷新会话列表。
@@ -172,10 +177,10 @@ export function ChatView({
             const el = scrollRef.current;
             if (el) el.scrollTop = el.scrollHeight;
         });
-        const task = command.draft;
+        const task = draft;
         // 斜杠草稿走指令展开（发送按钮与 Enter 行为一致）
         if (task.trim().startsWith("/")) {
-            command.setDraft("");
+            setDraft("");
             command.runRawCommand(task);
             return;
         }
@@ -187,7 +192,7 @@ export function ChatView({
                 fileRef.chips.map((c) => fileRef.formatEntry(c)).join(", ");
         }
         fileRef.chips.forEach((c) => fileRef.removeChip(c.path));
-        command.setDraft("");
+        setDraft("");
         histIdx.current = -1;
         // 运行中 → 入队（服务端注入当前对话）；409（刚结束的竞态）回退正常提交
         if (pending && currentSessionId) {
@@ -218,7 +223,7 @@ export function ChatView({
 
     const editQueueItem = (q: { id: string; text: string }) => {
         removeQueueItem(q.id);
-        command.setDraft(q.text);
+        setDraft(q.text);
     };
 
     // 消息历史 ↑/↓ 回填（shell history 风格）：-1 = 未在浏览，否则为 history 下标
@@ -231,23 +236,23 @@ export function ChatView({
     const onHistoryUp = () => {
         if (history.length === 0) return false;
         if (histIdx.current === -1) {
-            draftMemo.current = command.draft;
+            draftMemo.current = draft;
             histIdx.current = history.length - 1;
         } else if (histIdx.current > 0) {
             histIdx.current -= 1; // 已到最旧则停留
         }
-        command.setDraft(history[histIdx.current]);
+        setDraft(history[histIdx.current]);
         return true;
     };
     const onHistoryDown = () => {
         if (histIdx.current === -1) return false;
         if (histIdx.current < history.length - 1) {
             histIdx.current += 1;
-            command.setDraft(history[histIdx.current]);
+            setDraft(history[histIdx.current]);
         } else {
             // 越过最新 → 退出浏览，恢复进入前的草稿
             histIdx.current = -1;
-            command.setDraft(draftMemo.current);
+            setDraft(draftMemo.current);
         }
         return true;
     };
@@ -419,8 +424,8 @@ export function ChatView({
             )}
 
             <InputBox
-                draft={command.draft}
-                setDraft={command.setDraft}
+                draft={draft}
+                setDraft={setDraft}
                 pending={pending}
                 chips={fileRef.chips}
                 removeChip={fileRef.removeChip}

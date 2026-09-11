@@ -43,19 +43,21 @@ interface UseCommandDeps {
     currentSessionId: string | null;
     /** 打开快照回滚窗（AR-4 /rewind） */
     openSnapshots?: () => void;
+    /** 输入框草稿（useDraft 持有，本 hook 只读 + 清空） */
+    draft: string;
+    setDraft: (updater: string | ((prev: string) => string)) => void;
 }
 
 /**
  * 斜杠命令 hook：拉取自定义命令、过滤、执行。
- * draft 是受控的：本 hook 不持有 draft，由调用方传入。
+ * draft 是受控的：本 hook 不持有 draft，由调用方传入（useDraft）。
  * runCommand(name) 从 draft 提取 args，清空 draft 后执行。
  */
-export function useCommand({ appendSystem, submit, projectKey, rootPath, currentSessionId, openSnapshots }: UseCommandDeps) {
+export function useCommand({ appendSystem, submit, projectKey, rootPath, currentSessionId, openSnapshots, draft, setDraft }: UseCommandDeps) {
     const navigate = useNavigate();
     const { t } = useT();
     const [customCommands, setCustomCommands] = useState<CommandItem[]>([]);
     const [skillCommands, setSkillCommands] = useState<CommandItem[]>([]);
-    const [draft, setDraft] = useState("");
     // /compact 进行中（调摘要 LLM 数秒）：驱动进度条（阶段 + 流式已生成计数）
     const [compacting, setCompacting] = useState(false);
     const [compactProgress, setCompactProgress] = useState<{

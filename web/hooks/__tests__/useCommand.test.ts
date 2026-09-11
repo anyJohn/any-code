@@ -32,13 +32,20 @@ function mkDeps(over: Partial<{
     projectKey?: string;
     rootPath: string;
     currentSessionId: string | null;
+    draft: string;
 }> = {}) {
+    // draft 受控模拟：内存态（草稿持久化由 useDraft 负责，不在此测）
+    let draft = over.draft ?? "";
     return {
         appendSystem: vi.fn(),
         submit: vi.fn(),
         projectKey: undefined,
         rootPath: "/w",
         currentSessionId: "s1" as string | null,
+        draft,
+        setDraft: (u: string | ((p: string) => string)) => {
+            draft = typeof u === "function" ? u(draft) : u;
+        },
         ...over,
     };
 }
