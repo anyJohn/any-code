@@ -185,9 +185,10 @@ export const executeBashFunc = async (
                 workspace.rootPath,
                 ctx.gitBashPath
             );
+            // 不用 spawn 的 signal 选项：abort 时 Node 只 SIGTERM 直接子进程，
+            // 孙进程全部孤儿化（code-review 实证）。改自管 abort → killTree 端整组。
             child = spawn(binary, ["-c", args.command], {
                 cwd,
-                signal: ctx.signal,
                 windowsHide: true,
                 ...detachedIfPosix,
             });
@@ -195,6 +196,13 @@ export const executeBashFunc = async (
             finish({ content: `Error: ${(err as Error).message}`, data: { exitCode: null } });
             return;
         }
+        let stopped = false;
+        const onAbort = () => {
+            stopped = true;
+            killTree(child);
+        };
+        if (ctx.signal.aborted) onAbort();
+        else ctx.signal.addEventListener("abort", onAbort, { once: true });
 
         timer = setTimeout(() => {
             killTree(child);
@@ -217,10 +225,14 @@ export const executeBashFunc = async (
             finish({ content: `Error: ${err.message}`, data: { exitCode: null } });
         });
         child.on("close", (code, signal) => {
+            ctx.signal.removeEventListener("abort", onAbort);
             const raw = `${stdout}${stderr}`.trim();
-            const timedOut = signal === "SIGTERM";
+            // SIGTERM 可能来自超时 killTree 或 stop abort——用 stopped 区分
+            const timedOut = !stopped && signal === "SIGTERM";
             const cap = capBashOutput(raw);
-            const content = timedOut
+            const content = stopped
+                ? `[Stopped by user]\n${cap.text}`
+                : timedOut
                 ? `[Timed out after ${resolveTimeoutMs(args.timeout_ms)}ms]\n${cap.text}`
                 : code !== 0
                   ? // 非零退出码（grep 无匹配、ls 目标不存在等）也走这里，输出对 agent 有用，不丢弃

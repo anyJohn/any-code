@@ -97,8 +97,13 @@ export async function start(opts: {
     // 当主机名解析会绑到非回环地址，破坏"仅本机监听"立场（desktop 需要时经 opts 显式注入）。
     const hostname = opts.hostname ?? "127.0.0.1";
     const server = serve({ fetch: app.fetch, port, hostname });
-    // FR-30 B-007：进程退出统一清理运行中 agent（不留孤儿 LLM 流 / bash / MCP 子进程）
-    const shutdown = (signal: string) => {
+    // 统一清理：停运行中 agent（不留孤儿 LLM 流 / bash / MCP 子进程）+ 杀全部后台 job +
+    // 关 HTTP。close() 供 desktop 关窗调用（Electron app.quit() 不给内嵌 node 发
+    // SIGTERM，只关 server 会把 job 子进程全部孤儿化——泄漏根因）。
+    let closed = false;
+    const cleanup = () => {
+        if (closed) return;
+        closed = true;
         getAgentManager().stopAll();
         for (const r of workspaceJobs.values()) r.killAll();
         try {
@@ -106,10 +111,13 @@ export async function start(opts: {
         } catch {
             // 已关
         }
+    };
+    const shutdown = (signal: string) => {
+        cleanup();
         process.exit(0);
     };
     process.once("SIGINT", () => shutdown("SIGINT"));
     process.once("SIGTERM", () => shutdown("SIGTERM"));
-    return { port, hostname, close: () => server.close() };
+    return { port, hostname, close: cleanup };
 }
 

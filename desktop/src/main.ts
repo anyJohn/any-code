@@ -181,11 +181,19 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
     // 关窗 = 无后台残留（SPEC-029 B-002 / I-002）：非 mac 直接退出。
+    // close() 走 server 的统一清理（停 agent + 杀后台 job），而非只关 HTTP。
     // mac 关窗后 app 驻 Dock，activate 触发 boot() 重开（server 在 boot 里重启）。
     if (process.platform !== "darwin") {
         serverHandle?.close();
+        serverHandle = null;
         app.quit();
     }
+});
+
+// mac Cmd+Q 等主动退出路径：window-all-closed 不触发（窗口还在就退），兜底清理
+app.on("before-quit", () => {
+    serverHandle?.close();
+    serverHandle = null;
 });
 
 // mac Dock 点击重新开窗；window-all-closed 后 app 仍存活，boot() 防双启动直接重建。
