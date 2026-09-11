@@ -129,7 +129,7 @@ export function ProviderItem({
         setSelectedIds(
             (prev) => new Set([...prev].filter((id) => !filteredIds.includes(id)))
         );
-    /** 弹窗内测试：对勾选（未添加）的模型发 ping，结果行内显 ✓/✗。 */
+    /** 弹窗内测试：对勾选（未添加）的模型发 ping，结果即时上屏、行内显 ✓/✗。 */
     const testDialogSelected = async () => {
         const ids = notAddedOf([...selectedIds]);
         if (!ids.length) {
@@ -138,35 +138,11 @@ export function ProviderItem({
         }
         setDialogTesting(true);
         setDialogTestResults({});
-        try {
-            const res = await fetch(`/api/config/models/test`, {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({
-                    baseURL: p.baseURL,
-                    apiKey: p.apiKey,
-                    providerName: nameCommitted || p.name.trim(),
-                    models: ids,
-                }),
-            });
-            const j = (await res.json()) as {
-                results?: ModelTestResult[];
-                statusMessage?: string;
-            };
-            if (!res.ok) {
-                toast.error(j.statusMessage ?? t("providerItem.testFailed"));
-                return;
-            }
-            setDialogTestResults(
-                Object.fromEntries(
-                    (j.results ?? []).map((r) => [r.requested_model, r])
-                )
-            );
-        } catch {
-            toast.error(t("providerItem.testNetworkError"));
-        } finally {
-            setDialogTesting(false);
-        }
+        const err = await testModelsIncremental(ids, (id, r) =>
+            setDialogTestResults((prev) => ({ ...prev, [id]: r }))
+        );
+        if (err) toast.error(err);
+        setDialogTesting(false);
     };
 
     /** 剔除无效模型：把测试结果 available:false 的从勾选集移除（保留有效的）。 */
@@ -187,7 +163,46 @@ export function ProviderItem({
         (r) => !r.available
     ).length;
 
-    /** 测试当前 models 列表可用性 + 首字延迟。 */
+    /** 逐模型并发测试（每模型单独请求），结果经 onResult 即时上屏——
+     * 一个模型卡住只影响自己那行，不拖累其他结果。返回首个错误文案（无错则 null）。 */
+    const testModelsIncremental = async (
+        ids: string[],
+        onResult: (id: string, r: ModelTestResult) => void
+    ): Promise<string | null> => {
+        const creds = {
+            baseURL: p.baseURL,
+            apiKey: p.apiKey,
+            providerName: nameCommitted || p.name.trim(),
+        };
+        let firstError: string | null = null;
+        await Promise.all(
+            ids.map(async (id) => {
+                try {
+                    const res = await fetch(`/api/config/models/test`, {
+                        method: "POST",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({ ...creds, models: [id] }),
+                    });
+                    const j = (await res.json()) as {
+                        results?: ModelTestResult[];
+                        statusMessage?: string;
+                    };
+                    if (!res.ok) {
+                        firstError ??=
+                            j.statusMessage ?? t("providerItem.testFailed");
+                        return;
+                    }
+                    const r = j.results?.[0];
+                    if (r) onResult(id, r);
+                } catch {
+                    firstError ??= t("providerItem.testNetworkError");
+                }
+            })
+        );
+        return firstError;
+    };
+
+    /** 测试当前 models 列表可用性 + 首字延迟（结果即时显示）。 */
     const testModels = async () => {
         const ids = p.models.map((m) => m.id.trim()).filter(Boolean);
         if (!ids.length) {
@@ -196,35 +211,11 @@ export function ProviderItem({
         }
         setTesting(true);
         setTestResults({});
-        try {
-            const res = await fetch(`/api/config/models/test`, {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({
-                    baseURL: p.baseURL,
-                    apiKey: p.apiKey,
-                    providerName: nameCommitted || p.name.trim(),
-                    models: ids,
-                }),
-            });
-            const j = (await res.json()) as {
-                results?: ModelTestResult[];
-                statusMessage?: string;
-            };
-            if (!res.ok) {
-                toast.error(j.statusMessage ?? t("providerItem.testFailed"));
-                return;
-            }
-            setTestResults(
-                Object.fromEntries(
-                    (j.results ?? []).map((r) => [r.requested_model, r])
-                )
-            );
-        } catch {
-            toast.error(t("providerItem.testNetworkError"));
-        } finally {
-            setTesting(false);
-        }
+        const err = await testModelsIncremental(ids, (id, r) =>
+            setTestResults((prev) => ({ ...prev, [id]: r }))
+        );
+        if (err) toast.error(err);
+        setTesting(false);
     };
 
     return (
