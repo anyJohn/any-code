@@ -226,24 +226,42 @@ export function ChangesTab({
             return next;
         });
 
-    // 单文件回滚：恢复到所选快照（新增文件删除，其余 checkout）；完成后刷新 diff
+    // 单文件回滚：恢复到所选快照（新增文件删除，其余 checkout）；完成后刷新 diff。
+    // 用原生 fetch：apiJson 对非 2xx 返回 null 会丢掉 body 里的 statusMessage 详情
     const rollbackFile = async (path: string) => {
         setError("");
         setRolling(path);
-        const r = await apiJson<{ statusMessage: string }>(
-            `/api/workspaces/${projectKey}/snapshots/rollback-file`,
-            {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ id: selected, path, sessionId }),
+        try {
+            const res = await fetch(
+                `/api/workspaces/${projectKey}/snapshots/rollback-file`,
+                {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ id: selected, path, sessionId }),
+                }
+            );
+            if (!res.ok) {
+                let msg = t("changes.rollbackFailed");
+                try {
+                    const j = await res.json();
+                    if (j?.statusMessage) msg = j.statusMessage;
+                } catch {
+                    // 非 JSON 错误体：用通用文案
+                }
+                setError(msg);
+                return;
             }
-        );
-        setRolling(null);
-        if (r && "statusMessage" in r && r.statusMessage !== "rolled back") {
-            setError(r.statusMessage);
-            return;
+            const r = (await res.json()) as { statusMessage?: string };
+            if (r.statusMessage && r.statusMessage !== "rolled back") {
+                setError(r.statusMessage);
+                return;
+            }
+            await loadDiff(selected);
+        } catch {
+            setError(t("changes.rollbackFailed"));
+        } finally {
+            setRolling(null);
         }
-        await loadDiff(selected);
     };
 
     if (!gitAvailable) {

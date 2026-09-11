@@ -54,6 +54,7 @@ export const zh: Record<string, string> = {
     "changes.rollback": "回滚",
     "changes.rollbackConfirmTitle": "回滚此文件？",
     "changes.rollbackConfirmBody": "「{path}」将恢复到所选快照的内容（该快照后新增的文件会被删除）。",
+    "changes.rollbackFailed": "回滚失败",
     "chat.editMessage": "编辑并重发",
     "chat.resend": "重发",
     "runtime.empty": "没有运行中的进程。agent 在对话里用后台方式启动的服务会出现在这里。",

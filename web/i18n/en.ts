@@ -53,6 +53,7 @@ export const en: Record<string, string> = {
     "changes.rollback": "Roll back",
     "changes.rollbackConfirmTitle": "Roll back this file?",
     "changes.rollbackConfirmBody": "\"{path}\" will be restored to the selected snapshot (files added after it will be deleted).",
+    "changes.rollbackFailed": "Rollback failed",
     "chat.editMessage": "Edit & resend",
     "chat.resend": "Resend",
     "runtime.empty": "No running processes. Services the agent starts in the background appear here.",
