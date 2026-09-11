@@ -414,7 +414,11 @@ class AnyAgent {
                             console.error("Error processing task:", err);
                             // 异常路径同样收尾 run 状态（正常路径在 executeTask 末尾清）
                             this.activeRun = null;
-                            this.userQueue.length = 0;
+                            // 队列遗留转新任务：与正常路径同语义——queue 是用户的主动输入，
+                            // 任务出错只终止当前任务，不静默丢弃排队的消息
+                            //（destroy 后 task$ 已拆订阅，submit 自然失效，不担心复活）
+                            const leftover = this.userQueue.splice(0);
+                            for (const q of leftover) this.submit(q.text);
                             // domain 发出即 plain ErrorPayload（serializeError），raw Error 不离开内核；
                             // live==persisted by construction，adapter 不再 replacer（SPEC-030 B-002/I-001）。
                             this.eventStream.submit({
