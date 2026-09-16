@@ -74,6 +74,31 @@ You are an execution agent. You are given an APPROVED plan — follow it step by
 
 import type { ShellKind } from "./shell";
 
+/**
+ * system prompt 纯拼装（SPEC-041）：全部输入显式传入、无 IO、无时钟/随机——
+ * 同输入字节必同。这是 provider prompt 前缀缓存的正确性前提：缓存按前缀命中，
+ * system head 是 messages[0]，装配结果哪怕一个字节漂移都会作废整个会话的缓存。
+ * 稳定性由 test/promptStability.test.ts 钉住（新增注入段必须保持纯函数纪律）。
+ */
+export function assembleSystemPrompt(parts: {
+    instruction: string;
+    rootPath: string;
+    memory: string;
+    enabledTools: ReadonlySet<string>;
+    shellKind: ShellKind;
+    /** renderSkillCatalog 的产物（main.ts 传入——技能扫描与命令展开共用一次结果） */
+    skillCatalog: string;
+    rule: string;
+}): string {
+    let sysPrompt = parts.instruction + workspaceNote(parts.rootPath);
+    if (parts.memory) sysPrompt += parts.memory;
+    sysPrompt += toolNotes(parts.enabledTools);
+    sysPrompt += shellNote(parts.shellKind);
+    if (parts.skillCatalog) sysPrompt += parts.skillCatalog;
+    if (parts.rule) sysPrompt += parts.rule;
+    return sysPrompt;
+}
+
 /** Workspace 上下文注入：告知 LLM 工作根目录，使其能把工具输出里的绝对路径对应到根。 */
 export function workspaceNote(rootPath: string): string {
     return (

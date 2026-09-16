@@ -8,7 +8,7 @@ import {
 import { agentLoop } from "./core";
 import { compactMessages } from "./compact";
 import { loadRule } from "./rule";
-import { resolveSkills, renderSkillCatalog } from "./skill";
+import { resolveSkills, renderSkillCatalog, type SkillEntry } from "./skill";
 import { expandTask } from "./commands";
 import { seedBuiltinSkills } from "./seed";
 import { EventStream } from "./eventStream";
@@ -27,9 +27,7 @@ import { loadMcpTools, loadProjectMcp, type McpServerConfig } from "./mcp";
 import { Config } from "./config";
 import { applyProxyConfig } from "./netProxy";
 import {
-    workspaceNote,
-    toolNotes,
-    shellNote,
+    assembleSystemPrompt,
     cleanSessionTitle,
     systemFingerprint,
 } from "./prompt";
@@ -447,8 +445,10 @@ class AnyAgent {
         const session = this.session!;
         const sessionKey = this.sessionKey!;
 
+        // 技能扫描（SPEC-041）：每任务一次，命令展开 / system head / use_skill 三处共享
+        const skills = resolveSkills(this.workspace);
         // 重建 system prompt 放 messages[0]（不入盘，每次保持最新）
-        this.ensureSystemHead(session.messages);
+        this.ensureSystemHead(session.messages, skills);
         // AR-23：system prompt 指纹——动态装配内容不入盘，哈希留日志作审计锚点
         const sysFp = systemFingerprint(
             (session.messages[0]?.content as string) ?? ""
@@ -477,7 +477,6 @@ class AnyAgent {
         this.activeRun = { messages: session.messages, onMessage };
         // 斜杠命令展开（SPEC-040 B-003）：submit 边界唯一 choke point——主任务与
         // queue 消息都经 expandTask，skill/custom 在此解析，TUI/CLI 同语义
-        const skills = resolveSkills(this.workspace);
         const expanded = expandTask(task, this.workspace, skills);
         const drainQueued = async () => {
             while (this.userQueue.length) {
@@ -607,8 +606,8 @@ class AnyAgent {
     }
 
     /** 确保 messages[0] 是最新 system prompt（compact 与 executeTask 共用的前置保障） */
-    private ensureSystemHead(messages: ChatMessage[]): void {
-        const sys = this.getSystemMessage(this.workspace);
+    private ensureSystemHead(messages: ChatMessage[], skills?: Map<string, SkillEntry>): void {
+        const sys = this.getSystemMessage(this.workspace, skills);
         if (messages[0]?.role === "system") {
             messages[0] = sys[0];
         } else {
@@ -616,36 +615,28 @@ class AnyAgent {
         }
     }
 
-    private getSystemMessage(workspace: Workspace): ChatMessage[] {
+    private getSystemMessage(workspace: Workspace, skills?: Map<string, SkillEntry>): ChatMessage[] {
         const memory = loadMemory(workspace, this.config.memory.maxChars);
         const rule = loadRule(workspace);
         // 技能目录注入（SPEC-031 B-004）：只注入 name+description 的 <available_skills>，不加正文。
-        const skills = renderSkillCatalog(resolveSkills(workspace).values());
-        // 拼装 system prompt：instruction + workspace/memory 注入段 + memory/skills/rule。
-        // 所有 prompt 文本集中存于 ./prompt.ts，此处只拼装。
-        let sysPrompt =
-            this.definition.instruction + workspaceNote(workspace.rootPath);
-        if (memory) {
-            sysPrompt += memory;
-        }
-        // 工具门控注入（用户需求 2026-09-04）：工具关闭时其引导段不进 prompt
-        sysPrompt += toolNotes(
-            new Set(
+        // skills 由调用方传入时复用（SPEC-041：每任务只扫一次，命令展开与目录注入共享）
+        const skillEntries = skills ?? resolveSkills(workspace);
+        const skillCatalog = renderSkillCatalog(skillEntries.values());
+        const sysPrompt = assembleSystemPrompt({
+            instruction: this.definition.instruction,
+            rootPath: workspace.rootPath,
+            memory,
+            enabledTools: new Set(
                 this.tools.map(
                     (t) =>
                         (t.schema as { function?: { name?: string } }).function
                             ?.name ?? ""
                 )
-            )
-        );
-        // shell 兼容性提示（Windows busybox/git-bash 告知 LLM 命令边界；unix 静默）
-        sysPrompt += shellNote(resolveShellKind(this.config.gitBashPath));
-        if (skills) {
-            sysPrompt += skills;
-        }
-        if (rule) {
-            sysPrompt += rule;
-        }
+            ),
+            shellKind: resolveShellKind(this.config.gitBashPath),
+            skillCatalog,
+            rule,
+        });
         return [
             {
                 role: "system",
