@@ -210,7 +210,11 @@ export function createPlanWorkflowTool(): Tool {
                 // 1) 规划（只读工具）
                 const planMessages: ChatMessage[] = [
                     { role: "system", content: planAgentInstruction },
-                    { role: "user", content: feedback ? `${task}\n\n[修订意见（上一版计划被要求修改）]：${feedback}` : task },
+                    {
+                        role: "user",
+                        content: feedback ? `${task}\n\n[修订意见（上一版计划被要求修改）]：${feedback}` : task,
+                        _meta: { origin: "system" },
+                    } as ChatMessage,
                 ];
                 const planning = await agentLoop(
                     "produce the plan",
@@ -254,7 +258,7 @@ export function createPlanWorkflowTool(): Tool {
                 // 4) 执行阶段（executeTools，按批准的计划）
                 const execMessages: ChatMessage[] = [
                     { role: "system", content: planExecutionInstruction },
-                    { role: "user", content: `${task}\n\n[Approved plan]\n${planText}` },
+                    { role: "user", content: `${task}\n\n[Approved plan]\n${planText}`, _meta: { origin: "system" } } as ChatMessage,
                 ];
                 const execution = await agentLoop(
                     "execute the approved plan",

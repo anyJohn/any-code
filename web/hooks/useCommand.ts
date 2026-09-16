@@ -270,22 +270,16 @@ export function useCommand({ appendSystem, submit, projectKey, rootPath, current
                     return;
                 }
                 default: {
-                    // 技能指令：正文展开注入 + 参数追加（业界 /skill 语义）
+                    // 技能/自定义命令（SPEC-040 B-003/DEC-144）：展开已下沉 domain submit
+                    // 边界——这里只传用户原始输入，User 事件回带 command 标记（徽标数据源）。
+                    // 展开文本不再进入 ↑↓ 历史与草稿；TUI/CLI 同语义。
                     const skill = skillCommands.find((c) => c.name === name);
-                    if (skill && skill.body != null) {
-                        // 首行 "/name args" 是渲染标记（UserBubble 显示徽标）；
-                        // trim：server 会 trim 任务，须与回显一致（去重依赖）
-                        submit(
-                            `/${name}${args ? ` ${args}` : ""}\n\n${skill.body}`.trim()
-                        );
+                    const custom = customCommands.find((c) => c.name === name);
+                    if (skill || custom) {
+                        submit(`/${name}${args ? ` ${args}` : ""}`);
                         return;
                     }
-                    const custom = customCommands.find((c) => c.name === name);
-                    if (custom && custom.body != null) {
-                        submit(custom.body + (args ? "\n" + args : ""));
-                    } else {
-                        appendSystem(t("command.unknownCommand", { name }));
-                    }
+                    appendSystem(t("command.unknownCommand", { name }));
                 }
             }
         },

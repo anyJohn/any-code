@@ -9,6 +9,7 @@ import { agentLoop } from "./core";
 import { compactMessages } from "./compact";
 import { loadRule } from "./rule";
 import { resolveSkills, renderSkillCatalog } from "./skill";
+import { expandTask } from "./commands";
 import { seedBuiltinSkills } from "./seed";
 import { EventStream } from "./eventStream";
 import {
@@ -474,20 +475,29 @@ class AnyAgent {
         // queue 消息（queueUserMessage）的注入点：activeRun 提供当前对话引用，
         // agentLoop 每个迭代边界调用 drainQueued（工具结果已齐、下一次 LLM 前）
         this.activeRun = { messages: session.messages, onMessage };
+        // 斜杠命令展开（SPEC-040 B-003）：submit 边界唯一 choke point——主任务与
+        // queue 消息都经 expandTask，skill/custom 在此解析，TUI/CLI 同语义
+        const skills = resolveSkills(this.workspace);
+        const expanded = expandTask(task, this.workspace, skills);
         const drainQueued = async () => {
             while (this.userQueue.length) {
                 const item = this.userQueue.shift()!;
-                const msg: ChatMessage = { role: "user", content: item.text };
+                const q = expandTask(item.text, this.workspace, skills);
+                const msg: ChatMessage = { role: "user", content: q.content };
                 this.activeRun!.messages.push(msg);
                 await onMessage(msg);
-                this.eventStream.submit({ type: "User", message: item.text });
+                this.eventStream.submit({
+                    type: "User",
+                    message: q.display,
+                    ...(q.command ? { command: q.command } : {}),
+                });
             }
         };
         // 每个任务一个独立的 AbortController，stop() abort 它
         const abortController = new AbortController();
         this.abortController = abortController;
         // 首条任务异步用 LLM 起会话名（独立短调用，不阻塞 agentLoop、不进事件流；只落盘）
-        void this.generateSessionTitle(task, sessionKey, session);
+        void this.generateSessionTitle(expanded.display, sessionKey, session);
         const ctx = {
             workspace: this.workspace,
             eventStream: this.eventStream,
@@ -495,8 +505,8 @@ class AnyAgent {
             llm: this.config.getCurrentProvider(),
             fileState: new Map<string, number>(),
             gitBashPath: this.config.gitBashPath,
-            // 技能目录合并表：use_skill 工具按 name 取全文（SPEC-031 B-005）
-            skills: resolveSkills(this.workspace),
+            // 技能目录合并表：use_skill 工具按 name 取全文（SPEC-031 B-005）；命令展开共用
+            skills,
             permissions: this.buildPermissionContext(),
             // FR-11：provider 表供 sub-agent 定义覆盖（def.provider/def.model）
             providers: this.config.providers,
@@ -524,7 +534,7 @@ class AnyAgent {
             },
         };
         await agentLoop(
-            task,
+            expanded.display,
             session.messages,
             this.definition.maxIterations,
             {},
@@ -537,7 +547,11 @@ class AnyAgent {
                 for (const m of msgs) {
                     this.loggedMessages.add(m as unknown as object);
                 }
-            }
+            },
+            // 命令展开：LLM content 与 display 分离，User 事件携带 command 标记（SPEC-040 B-003）
+            expanded.command
+                ? { content: expanded.content, command: expanded.command }
+                : undefined
         );
         this.abortController = null;
         this.activeRun = null;

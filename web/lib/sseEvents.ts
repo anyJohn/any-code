@@ -13,7 +13,13 @@ interface EventBase {
 
 export type AgentEvent =
     | (EventBase & { type: "System" })
-    | (EventBase & { type: "User" })
+    | (EventBase & {
+          type: "User";
+          /** 命令注入标记（SPEC-040，镜像 domain）：徽标数据源，旧事件无此字段走嗅探兜底 */
+          command?: { name: string; args?: string; body?: string };
+          /** 来源（SPEC-040）：human=用户输入（缺省）；system=系统注入 */
+          origin?: "human" | "system";
+      })
     | (EventBase & { type: "Iteration" })
     | (EventBase & { type: "Thinking" })
     | (EventBase & { type: "Assistant" })
@@ -38,6 +44,14 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends T
     ? Omit<T, K>
     : never;
 export type AgentEventPayload = DistributiveOmit<AgentEvent, "id">;
+export type EventType = AgentEvent["type"];
+
+/**
+ * 命令首行解析（SPEC-040）：web 内单份拷贝（镜像层协议，不跨包依赖 domain——
+ * web 对 domain 零运行时依赖的纪律不变；domain 侧 commands.ts 持有自己的同义实现）。
+ * 用于旧 session 无 command 字段时的徽标嗅探兜底（MessageList）。
+ */
+export const SLASH_COMMAND_RE = /^\/([\w-]+)(?:\s+([\s\S]+))?$/;
 
 // ── per-variant data 形状（镜像 domain type.ts）──
 

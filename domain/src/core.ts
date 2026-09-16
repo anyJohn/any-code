@@ -46,19 +46,26 @@ export async function agentLoop(
     onMessage: ((msg: ChatMessage) => void | Promise<void>) | undefined,
     ctx: ToolContext,
     tools: Tool[],
-    onCompact?: (messages: ChatMessage[]) => void | Promise<void>
+    onCompact?: (messages: ChatMessage[]) => void | Promise<void>,
+    /** 命令展开（SPEC-040 B-003）：display 与 LLM content 分离时，content 是展开文本，
+     *  User 事件携带 command 结构化标记（message 仍是原始输入 task）。 */
+    userSpec?: { content: string; command?: { name: string; args?: string; body?: string } }
 ): Promise<AgentLoopResult> {
     // 迭代上限缺省 150（用户决策 2026-09-03：30 对长任务太小；AgentDefinition.maxIterations 可覆盖）
     const maxIter = maxIterations ?? 150;
     const userMsg: ChatMessage = {
         role: "user",
-        content: task,
+        content: userSpec?.content ?? task,
     };
     messages.push(userMsg);
     await onMessage?.(userMsg);
     // User 事件入流（durable，作 reload 真值）。web live 端已乐观插入 user 气泡，
     // 此 server 事件会被 web 去重（同 message），不重复显示。
-    ctx.eventStream.submit({ type: "User", message: task });
+    ctx.eventStream.submit({
+        type: "User",
+        message: task,
+        ...(userSpec?.command ? { command: userSpec.command } : {}),
+    });
     let lastUsage: { prompt_tokens: number } | undefined;
     // AR-9：被动压缩只试一次（压缩后仍超限则原错误上抛，避免循环）
     let reactiveCompacted = false;

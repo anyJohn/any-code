@@ -308,11 +308,12 @@ export async function compactMessages(
                 summaryContent +
                 "\n\n--- Latest message ---\n" +
                 contentToText((tail[0] as unknown as Record<string, unknown>).content),
+            _meta: { origin: "system" },
         } as ChatMessage;
         newRest = [merged, ...tail.slice(1)];
     } else {
         newRest = [
-            { role: "user", content: summaryContent } as ChatMessage,
+            { role: "user", content: summaryContent, _meta: { origin: "system" } } as ChatMessage,
             ...tail,
         ];
     }

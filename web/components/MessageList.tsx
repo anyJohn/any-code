@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { AgentEvent } from "@/lib/sseEvents";
+import { SLASH_COMMAND_RE, type AgentEvent } from "@/lib/sseEvents";
 import { Pencil, Check, X } from "lucide-react";
 import { CopyButton } from "./MarkdownRenderer";
 import { cn } from "@/lib/utils";
@@ -9,7 +9,7 @@ import { useT } from "@/i18n";
 import { SubagentBlock } from "./SubagentBlock";
 import { TurnBlock } from "./TurnBlock";
 import { Logo } from "./Logo";
-import type { RenderItem } from "@/lib/renderItems";
+import { liveActiveTool, type RenderItem } from "@/lib/renderItems";
 
 const tagClass: Record<AgentEvent["type"], string> = {
     System: "text-muted-foreground",
@@ -115,31 +115,9 @@ export function MessageList({
             .every((e) => !OUTPUT_STARTED.has(e.type));
     })();
 
-    // 活动工具：覆盖两阶段——arguments 流式生成（ToolArgProgress，未到 ToolStart）
-    // 与工具执行（ToolStart..Tool）。ToolArgProgress 期间显"正在生成… N bytes"防冻屏。SPEC-022 B-008。
-    const activeTool = (() => {
-        let active:
-            | { phase: "generating"; name: string; bytes: number }
-            | { phase: "running"; name: string; progress: string }
-            | null = null;
-        for (const e of events) {
-            if (e.type === "ToolArgProgress") {
-                const bytes =
-                    (e.data as { bytes?: number } | undefined)?.bytes ?? 0;
-                active = { phase: "generating", name: e.message, bytes };
-            } else if (e.type === "ToolStart") {
-                active = { phase: "running", name: e.message, progress: "" };
-            } else if (
-                e.type === "ToolProgress" &&
-                active?.phase === "running"
-            ) {
-                active.progress += e.message;
-            } else if (e.type === "Tool") {
-                active = null; // 工具完成，关闭活动卡片（最终 result 由 ToolRow 渲染）
-            }
-        }
-        return active;
-    })();
+    // 活动工具 overlay（SPEC-040 B-004）：从 renderItems 的 liveActiveTool 取，
+    // shadowOf=Tool 的 transient 事件在此收敛为单一 overlay reducer
+    const activeTool = liveActiveTool(events);
 
     return (
         <div ref={scrollRef} onScroll={onScroll} className="flex-1 min-h-0 overflow-y-auto">
@@ -335,15 +313,19 @@ function UserBubble({
     const [draft, setDraft] = useState(event.message);
     const [showSkillBody, setShowSkillBody] = useState(false);
 
-    // 技能调用标记（首行 "/name args"，斜杠指令程序化 submit）：渲染为徽标 + 参数，正文可展开
+    // 技能调用标记（SPEC-040）：优先读 User 事件结构化 command 字段；旧 session
+    // （首行 "/name args" 格式、无 command 字段）按嗅探兜底。渲染为徽标 + 参数，正文可展开
     const nl = event.message.indexOf("\n");
-    const skillMatch = event.message
+    const sniff = event.message
         .slice(0, nl === -1 ? undefined : nl)
         .trim()
-        .match(/^\/([\w-]+)(?:\s+([\s\S]+))?$/);
-    const skillName = skillMatch?.[1];
-    const skillArgs = skillMatch?.[2]?.trim();
-    const skillBody = skillName ? (nl === -1 ? "" : event.message.slice(nl + 1).trim()) : "";
+        .match(SLASH_COMMAND_RE);
+    const skillName = event.command?.name ?? sniff?.[1];
+    const skillArgs =
+        event.command?.args ??
+        (event.command ? undefined : sniff?.[2]?.trim());
+    const skillBody = event.command?.body ??
+        (skillName ? (nl === -1 ? "" : event.message.slice(nl + 1).trim()) : "");
 
     if (editing) {
         return (

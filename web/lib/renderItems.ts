@@ -1,4 +1,41 @@
-import type { AgentEvent, ToolCallData } from "./sseEvents";
+import type { AgentEvent, EventType, ToolCallData } from "./sseEvents";
+
+/**
+ * 渲染规则表（SPEC-040 B-004 / DEC-145）：每个事件类型的渲染归类，单点声明——
+ * turn = 入当前回合块；single = 单条渲染并切分回合；meta = 旁路（不打断回合、
+ * 不独立成项，供 overlay/状态计算消费）；drop = 不渲染（live 弹窗类走专路）。
+ * 与 domain 协议表（durable/shadowOf）正交：durable 是协议事实，本表是 web 排版选择。
+ */
+type RenderKind = "turn" | "single" | "meta" | "drop";
+
+export const RENDER_RULES: Record<EventType, RenderKind> = {
+    // single：切分回合、独立成项
+    System: "single",
+    User: "single",
+    Done: "single",
+    Stopped: "single",
+    Compact: "single",
+    Error: "single",
+    Warning: "single",
+    Permission: "single",
+    // turn：回合块内容
+    Iteration: "turn",
+    Thinking: "turn",
+    Assistant: "turn",
+    AssistantDelta: "turn",
+    Tool: "turn",
+    // meta：旁路——不打断回合分组；活动工具卡片由 liveOverlays 从原始 events 计算
+    Usage: "meta",
+    ToolStart: "meta",
+    ToolProgress: "meta",
+    ToolArgProgress: "meta",
+    // drop：live 专用（ask 拦截走 useAgent → 模态），不进渲染项
+    Interaction: "drop",
+    PermissionAsk: "drop",
+    // Planning durable 但由 TodoPanel 专路渲染（web/components/TodoPanel.tsx 直接
+    // 从 events 取 Planning 事件）——改 TodoPanel 数据源时记得同步本表，反之亦然
+    Planning: "drop",
+};
 
 // 渲染项：回合块 / sub-agent 分组 / 单事件
 export interface TurnItem {
@@ -120,17 +157,10 @@ export function groupByTurn(
                     tools: [],
                 };
             }
-        } else if (e.type === "Usage") {
-            // 状态元数据，落在 Assistant 与 Tool 之间：不打断当前回合，也不入盘。
-            continue;
-        } else if (
-            e.type === "ToolStart" ||
-            e.type === "ToolProgress" ||
-            e.type === "ToolArgProgress"
-        ) {
-            // 流式工具实时事件（不入盘，仅 SSE）：不打断回合分组；
-            // 活动工具卡片由 MessageList 从原始 events 直接算（见 activeTool）。
-            // ToolArgProgress 也算思考结束（思考完→调工具的 arguments 流式）→ 标记 thinkingFinished。
+        } else if (RENDER_RULES[e.type] === "meta") {
+            // 旁路事件（Usage/ToolStart/ToolProgress/ToolArgProgress，不入盘）：
+            // 不打断回合分组；活动工具卡片由 MessageList 经 liveOverlays 从原始 events 计算。
+            // meta 也算思考结束（思考完→调工具的 arguments 流式）→ 标记 thinkingFinished。
             markThinkingDone(cur, e);
             continue;
         } else if (e.type === "Tool") {
@@ -214,21 +244,16 @@ export function toRenderItems(events: AgentEvent[]): RenderItem[] {
                     startIdx: i,
                 };
             }
-        } else if (
-            e.type === "System" ||
-            e.type === "User" ||
-            e.type === "Done" ||
-            e.type === "Stopped" ||
-            e.type === "Compact" ||
-            e.type === "Error" ||
-            e.type === "Warning" ||
-            e.type === "Permission"
-        ) {
+        } else if (RENDER_RULES[e.type] === "single") {
             // single 事件会切分回合：以自身时间戳闭合主流开着的思考
             //（Warning/User/Compact 等切断思考流 → 思考到此为止；终态同样闭合）
             flushMain(e.timestamp);
             flushSub();
             items.push({ kind: "single", event: e, startIdx: i });
+        } else if (RENDER_RULES[e.type] === "drop") {
+            // live 专用事件（Interaction/PermissionAsk）：不进渲染项，但切分回合
+            flushMain(e.timestamp);
+            flushSub();
         } else {
             flushSub();
             if (!mainBuf.length) mainStart = i;
@@ -240,15 +265,11 @@ export function toRenderItems(events: AgentEvent[]): RenderItem[] {
     return items;
 }
 
-/** 组起点判定：Iteration / single 切分事件 / sub-agent runId 边界都开新组 */
+/** 组起点判定：Iteration / single 切分事件 / sub-agent runId 边界都开新组（SPEC-040 B-004 表驱动） */
 function isGroupStart(events: AgentEvent[], i: number): boolean {
     const e = events[i];
     if (e.type === "Iteration") return true;
-    if (
-        e.type === "System" || e.type === "User" || e.type === "Done" ||
-        e.type === "Stopped" || e.type === "Compact" || e.type === "Error" ||
-        e.type === "Warning" || e.type === "Permission"
-    ) return true;
+    if (RENDER_RULES[e.type] === "single") return true;
     if (e.runId) {
         const prev = i > 0 ? events[i - 1] : undefined;
         return !prev?.runId || prev.runId !== e.runId;
@@ -283,6 +304,35 @@ export function toRenderItemsIncremental(
     const tail = toRenderItems(events.slice(split));
     for (const it of tail) it.startIdx = (it.startIdx ?? 0) + split;
     return [...closed, ...tail];
+}
+
+/**
+ * 活动工具 overlay（SPEC-040 B-004）：扫描 shadowOf=Tool 的 transient 事件流，
+ * 还原当前"进行中工具"的两阶段状态——arguments 流式生成（ToolArgProgress，未到
+ * ToolStart）与工具执行（ToolStart..Tool）。ToolArgProgress 期间显"正在生成… N bytes"
+ * 防冻屏（SPEC-022 B-008）。工具完成（durable Tool 落地）→ 影子消散，返回 null。
+ */
+export type ActiveTool =
+    | { phase: "generating"; name: string; bytes: number }
+    | { phase: "running"; name: string; progress: string }
+    | null;
+
+export function liveActiveTool(events: AgentEvent[]): ActiveTool {
+    let active: ActiveTool = null;
+    for (const e of events) {
+        if (e.type === "ToolArgProgress") {
+            const bytes =
+                (e.data as { bytes?: number } | undefined)?.bytes ?? 0;
+            active = { phase: "generating", name: e.message, bytes };
+        } else if (e.type === "ToolStart") {
+            active = { phase: "running", name: e.message, progress: "" };
+        } else if (e.type === "ToolProgress" && active?.phase === "running") {
+            active.progress += e.message;
+        } else if (e.type === "Tool") {
+            active = null; // 工具完成，关闭活动卡片（最终 result 由 ToolRow 渲染）
+        }
+    }
+    return active;
 }
 
 /** 工具调用摘要：按工具名挑最相关参数（参数字段名见 domain/src/tools/schema.ts） */

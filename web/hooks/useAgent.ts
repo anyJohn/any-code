@@ -270,7 +270,10 @@ export function useAgent(
 
     const submit = useCallback(
         async (task: string) => {
-            if (!task.trim() || pending || submitGateRef.current) return;
+            // SPEC-040：入口即 trim——server /run 对 task trim 后回显 User 事件，
+            // 乐观插入必须与回显同文，去重才成立（否则尾随空白产生双气泡）
+            task = task.trim();
+            if (!task || pending || submitGateRef.current) return;
             submitGateRef.current = true;
             try {
                 setPending(true);

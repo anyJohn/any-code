@@ -25,7 +25,15 @@ interface EventBase {
 
 export type AgentEvent =
     | (EventBase & { type: "System" })
-    | (EventBase & { type: "User" })
+    | (EventBase & {
+          type: "User";
+          /** 命令注入的结构化标记（SPEC-040 B-003）："/name args" 经内核展开。
+           *  message 仍是用户原始输入（去重/历史依赖）；body 供 UI 展开（落盘等价旧格式）。 */
+          command?: { name: string; args?: string; body?: string };
+          /** 来源（SPEC-040 B-002）：human=用户输入；system=系统注入（命令展开/定时器等）。
+           *  缺省 = human（旧事件兼容）。 */
+          origin?: "human" | "system";
+      })
     | (EventBase & { type: "Iteration" })
     | (EventBase & { type: "Thinking" })
     | (EventBase & { type: "Assistant" })
@@ -124,24 +132,52 @@ export interface PermissionAskData {
     danger?: boolean;
 }
 
-/** durable 事件集：持久化到 session JSONL，作 reload UI 真值（SPEC-030 B-004/I-005）。
- *  ephemeral（AssistantDelta/ToolStart/ToolProgress/ToolArgProgress/System/Planning/Interaction）
- *  live-only 不持久——deltas/progress 是实时 UX，reload 不重建。 */
-export const DURABLE_TYPES: ReadonlySet<EventType> = new Set<EventType>([
-    "User",
-    "Iteration",
-    "Thinking",
-    "Assistant",
-    "Tool",
-    "Usage",
-    "Compact",
-    "Planning",
-    "Permission",
-    "Error",
-    "Warning",
-    "Done",
-    "Stopped",
-]);
+/**
+ * 事件协议表（SPEC-040 B-001）：每个事件类型单点声明两个协议事实——
+ *  durable：入 session.jsonL，作 reload UI 真值（SPEC-030 B-004/I-005）。
+ *  shadowOf：该事件是某 durable 事件的实时影子（overlay），正身落地即消散——
+ *    AssistantDelta→Assistant（流式增量→定稿），ToolStart/ToolProgress/ToolArgProgress→Tool
+ *    （参数生成/执行进度→结果定稿）。shadowOf 的目标必须 durable（I-001，单测断言）。
+ * DURABLE_TYPES 派生自此表，不再独立枚举（防两处漂移）。
+ */
+export interface EventProtocol {
+    durable: boolean;
+    shadowOf?: EventType;
+}
+
+const PROTOCOL: Record<EventType, EventProtocol> = {
+    System: { durable: false },
+    User: { durable: true },
+    Iteration: { durable: true },
+    Thinking: { durable: true },
+    Assistant: { durable: true },
+    AssistantDelta: { durable: false, shadowOf: "Assistant" },
+    Tool: { durable: true },
+    ToolStart: { durable: false, shadowOf: "Tool" },
+    ToolProgress: { durable: false, shadowOf: "Tool" },
+    ToolArgProgress: { durable: false, shadowOf: "Tool" },
+    Usage: { durable: true },
+    Compact: { durable: true },
+    Interaction: { durable: false },
+    Planning: { durable: true },
+    Permission: { durable: true },
+    PermissionAsk: { durable: false },
+    Error: { durable: true },
+    Warning: { durable: true },
+    Done: { durable: true },
+    Stopped: { durable: true },
+};
+
+/** durable 事件集：派生自 PROTOCOL（SPEC-040 B-001）。ephemeral（delta/progress/System/
+ *  Interaction/PermissionAsk）live-only 不持久——deltas/progress 是实时 UX，reload 不重建。 */
+export const DURABLE_TYPES: ReadonlySet<EventType> = new Set<EventType>(
+    (Object.keys(PROTOCOL) as EventType[]).filter((t) => PROTOCOL[t].durable)
+);
+
+/** 事件协议查询（SPEC-040 B-001）：渲染层/持久化层经它取事实，不各自枚举。 */
+export function eventProtocol(type: EventType): EventProtocol {
+    return PROTOCOL[type];
+}
 
 /**
  * assistant message 的非标准 sidecar（命名空间化，避免和 provider 的 reasoning_content 字段撞）。
@@ -150,6 +186,9 @@ export const DURABLE_TYPES: ReadonlySet<EventType> = new Set<EventType>([
  */
 export interface MessageMeta {
     reasoning?: string;
+    /** user 位消息来源（SPEC-040 B-002）：system=系统注入（compact 摘要 / plan 反馈 /
+     *  命令展开）。缺省 = human。callLLM 剥离 _meta，provider 不可见。 */
+    origin?: "human" | "system";
 }
 
 /** LLM API 响应里的 token 用量（OpenAI 兼容 shape） */
