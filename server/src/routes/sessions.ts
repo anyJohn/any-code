@@ -4,16 +4,47 @@ import {
     Config,
     DEFAULT_TITLE,
     SessionService,
+    eventProtocol,
     hasInteraction,
     projectKeyOf,
     resolveInteraction,
     type AgentEvent,
+    type EventType,
 } from "@any-code/domain";
 import { getWorkspaceJobs } from "../shared.js";
 import { StreamFrame, TERMINAL, getAgentManager } from "../agentManager.js";
 import { runningSessions, runningWorkspaces } from "../singleFlight.js";
 
 import type { Hono } from "hono";
+
+/**
+ * 重放期影子过滤（bugfix 2026-09-10「切页回来 bash 执行中卡死」）：
+ * EventStream.history$ 含 transient 事件（ToolStart/AssistantDelta 等影子，SPEC-040
+ * 协议表 durable:false），而 reload 真值（/history）只含 durable 正身。重挂时客户端
+ * 先载 /history 再 attach 重放——若把陈年影子照发：配对正身（Tool/Assistant）被 seen
+ * 去重跳过，孤儿影子驱动 liveActiveTool 停在 running 态 → "bash · 执行中"永久卡死。
+ * 规则（尾部存活）：影子仅当位于最后一个 durable 事件之后（当前实时尾段，任务在跑）
+ * 才重放，客户端得以恢复"执行中"卡片/流式增量（SPEC-022 防冻屏）；尾段之前的影子
+ * 正身均已落地，纯幽灵，一律不发。并行批次（concurrencySafe 工具）里未落地者的
+ * 影子也会被滤——与前端 live 行为一致（liveActiveTool 遇任何 Tool 即关卡片），
+ * 结果由 durable Tool 渲染，不产生 live 期没有的幽灵卡片。非影子（含 durable:false
+ * 的 System/Interaction）不动，Interaction/PermissionAsk 另有过期防护。
+ */
+export function replayable(history: AgentEvent[]): boolean[] {
+    let lastDurable = -1;
+    for (let i = history.length - 1; i >= 0; i--) {
+        const e = history[i];
+        if (e && eventProtocol(e.type).durable) {
+            lastDurable = i;
+            break;
+        }
+    }
+    return history.map((e, i) => {
+        if (!e) return false;
+        const shadowOf = eventProtocol(e.type).shadowOf;
+        return !shadowOf || i > lastDurable;
+    });
+}
 
 export function registerSessionsRoutes(app: Hono): void {
     // ==================== sessions ====================
@@ -149,9 +180,12 @@ export function registerSessionsRoutes(app: Hono): void {
                         return;
                     }
                     manager.register(agent, sessionId, workspacePath);
-                    // 重放本 run 已有事件（create 阶段的 System/Warning 等），seq 即 history 下标
+                    // 重放本 run 已有事件（create 阶段的 System/Warning 等），seq 即 history 下标。
+                    // 影子事件（ToolStart 等）按 replayable 过滤——尾段之前的已完成影子不下发。
                     const history = agent.eventHistory$.value;
-                    for (let i = 0; i < history.length; i++) send({ seq: i, event: history[i] });
+                    const keep = replayable(history);
+                    for (let i = 0; i < history.length; i++)
+                        if (keep[i]) send({ seq: i, event: history[i] });
                     unsub = manager.addSubscriber(sessionId, (frame) => {
                         send(frame);
                         if (TERMINAL.has(frame.event.type)) finish();
@@ -221,9 +255,11 @@ export function registerSessionsRoutes(app: Hono): void {
                 const manager2 = getAgentManager();
                 const entry2 = manager2.get(sessionId);
                 const history = entry2?.agent.eventHistory$.value ?? [];
+                const keep = replayable(history);
                 const start = Number.isFinite(since) ? Math.max(0, Math.floor(since) + 1) : 0;
                 for (let i = start; i < history.length; i++) {
                     const ev = history[i];
+                    if (!keep[i]) continue;
                     if (ev?.type === "PermissionAsk") {
                         const askId = (ev.data as { id?: string })?.id;
                         if (entry2?.pendingAsk?.id !== askId) continue;
