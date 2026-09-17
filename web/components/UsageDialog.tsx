@@ -186,11 +186,14 @@ function DetailTable({
                 </tr>
             </thead>
             <tbody>
-                {rows.map((d, i) => {
+                {/* 最新在上（todo#16）：rows 本身按时间正序，展示时倒序渲染；
+                    序号 i+1 仍按时间正序编号（#1 = 会话首笔），与柱图对齐 */}
+                {[...rows].reverse().map((d, i) => {
+                    const idx = rows.length - 1 - i;
                     const c = hasPricing ? rowCost(d, pricing) : null;
                     return (
                         <tr key={i} className="border-t border-border/50">
-                            <td className="py-1">{i + 1}</td>
+                            <td className="py-1">{idx + 1}</td>
                             <td className="py-1 truncate max-w-32" title={d.model}>
                                 {d.model ?? "—"}
                             </td>

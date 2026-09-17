@@ -383,6 +383,13 @@ async function permissionGate(plan: ToolPlan, ctx: ToolContext): Promise<string 
     // ask：会话缓存命中（D-007）→ 直通
     if (perm.allowOnce.has(cacheKey)) return null;
 
+    // 会话内已被用户拒绝过同类调用（todo#13）→ 不再弹窗，短路拒绝。
+    // 否则模型按拒绝文案"说明后再请求授权"立刻重问，用户观感 = 拒绝未被感知。
+    if (perm.deniedOnce.has(cacheKey)) {
+        audit(ctx, funcName, args, verdict, "decided", "deny");
+        return `[Permission denied] 用户已拒绝过 ${funcName}（${verdict.ruleKey ?? funcName}）。不要再次请求同样或相似的授权；换用无需该权限的方案完成目标，或直接向用户说明原因并等待用户主动开放权限。`;
+    }
+
     // ask：阻塞等裁决（B-005），挂起等待不超时（SPEC-033 DEC-101，取代 120s 自动拒绝）；
     // 仅 run abort/stop 才解除。abort 干净退出
     audit(ctx, funcName, args, verdict, "asked");
@@ -402,6 +409,8 @@ async function permissionGate(plan: ToolPlan, ctx: ToolContext): Promise<string 
         });
         return null;
     }
+    // 用户拒绝：记入会话级拒绝缓存（todo#13），后续同类 ask 不再打扰
+    perm.deniedOnce.add(cacheKey);
     return `[Permission denied] 用户拒绝了本次执行：${funcName}。请改用其他方式完成目标，或先向用户说明操作意图与原因后再请求授权。`;
 }
 

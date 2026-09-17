@@ -169,6 +169,26 @@ export function ChatView({
     useEffect(() => {
         if (!pending) setQueueItems([]);
     }, [pending]);
+    // 注入对账（todo#12）：domain 在迭代边界 drain 时发 User 事件（durable），
+    // 前端看到即从队列条移除对应项——消息已注入对话，不该再挂着。按文本匹配
+    // （drain 发的 display 与入队原文同文；server 回显经 useAgent 入 events）。
+    const eventsLenRef = useRef(initialEvents.length);
+    useEffect(() => {
+        if (events.length <= eventsLenRef.current) {
+            eventsLenRef.current = Math.min(eventsLenRef.current, events.length);
+            return;
+        }
+        const fresh = events.slice(eventsLenRef.current);
+        eventsLenRef.current = events.length;
+        const injected = fresh
+            .filter((e) => e.type === "User" && !e.id.startsWith("local"))
+            .map((e) => (e.message ?? "").trim());
+        if (!injected.length) return;
+        setQueueItems((p) => {
+            const next = p.filter((q) => !injected.includes(q.text.trim()));
+            return next.length === p.length ? p : next;
+        });
+    }, [events.length, initialEvents.length]);
 
     const send = async () => {
         // 发送后视图同步（用户反馈 2026-09-06）：回到聊天 tab 并滚到底

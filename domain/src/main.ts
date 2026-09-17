@@ -96,6 +96,8 @@ class AnyAgent {
     private mcpCleanup: (() => Promise<void>) | null = null;
     // 会话内"允许一次"权限缓存（SPEC-032 C-004：per-agent，不跨 session）
     private permissionAllowOnce = new Set<string>();
+    /** 会话内已拒绝缓存（todo#13）：拒绝过的 cacheKey 本会话不再弹窗，短路拒绝 */
+    private permissionDeniedOnce = new Set<string>();
     // 工作区快照服务（AR-4）：per-agent，写类工具执行前自动快照
     private snapshots: ReturnType<typeof createSnapshotService>;
     // bash 后台任务注册表（SPEC-038 桌模型）：工作区级注入，跨会话共享
@@ -602,6 +604,7 @@ class AnyAgent {
             dangerPatterns: cfg.dangerPatterns,
             readOnlyTools,
             allowOnce: this.permissionAllowOnce,
+            deniedOnce: this.permissionDeniedOnce,
         };
     }
 

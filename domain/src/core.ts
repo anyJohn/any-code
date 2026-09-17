@@ -51,8 +51,9 @@ export async function agentLoop(
      *  User 事件携带 command 结构化标记（message 仍是原始输入 task）。 */
     userSpec?: { content: string; command?: { name: string; args?: string; body?: string } }
 ): Promise<AgentLoopResult> {
-    // 迭代上限缺省 150（用户决策 2026-09-03：30 对长任务太小；AgentDefinition.maxIterations 可覆盖）
-    const maxIter = maxIterations ?? 150;
+    // 迭代上限缺省无限（用户决策 2026-09-17：150 在长任务中提前截断；停止按钮随时可 abort，
+    // AgentDefinition.maxIterations 仍可为 sub-agent 设上限）。0/负数同样视为不设限。
+    const maxIter = maxIterations && maxIterations > 0 ? maxIterations : Infinity;
     const userMsg: ChatMessage = {
         role: "user",
         content: userSpec?.content ?? task,
@@ -152,7 +153,10 @@ export async function agentLoop(
             iterationSent = true;
             ctx.eventStream.submit({
                 type: "Iteration",
-                message: `Iteration ${i + 1}/${maxIter}`,
+                message:
+                    maxIter === Infinity
+                        ? `Iteration ${i + 1}`
+                        : `Iteration ${i + 1}/${maxIter}`,
                 turnId,
             });
         };

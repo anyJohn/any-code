@@ -213,6 +213,7 @@ function mkPermCtx(
         dangerPatterns: ["rm -rf", "sudo"],
         readOnlyTools: new Set(readOnly),
         allowOnce: new Set<string>(),
+        deniedOnce: new Set<string>(),
     };
 }
 
@@ -319,6 +320,27 @@ describe("toolCall 权限 seam（SPEC-032）", () => {
         expect(handler).not.toHaveBeenCalled();
         expect(result[0].content).toContain("Permission denied");
         expect(ctx.permissions!.allowOnce.size).toBe(0);
+    });
+
+    it("todo#13 拒绝后同类 ask 不再弹窗：记入 deniedOnce 短路拒绝，模型收到勿再请求指令", async () => {
+        const handler = vi.fn();
+        const ctx = mkCtx();
+        ctx.permissions = mkPermCtx("standard");
+        const tool = mkTool("bash", handler);
+
+        // 第一次：用户拒绝
+        const p1 = toolCall([mkCall("bash", "tc1", '{"command":"ls"}')], ctx, [tool]);
+        await new Promise((r) => setTimeout(r, 0));
+        resolveInteraction(submitted(ctx).find((e) => e.type === "PermissionAsk").data.id, ["deny"]);
+        await p1;
+        expect(ctx.permissions!.deniedOnce.size).toBe(1);
+
+        // 第二次同类调用：不弹 PermissionAsk，直接拒绝文案（含勿再请求指令）
+        (ctx.eventStream.submit as ReturnType<typeof vi.fn>).mockClear();
+        const r2 = await toolCall([mkCall("bash", "tc2", '{"command":"ls -la"}')], ctx, [tool]);
+        expect(handler).not.toHaveBeenCalled();
+        expect(submitted(ctx).filter((e) => e.type === "PermissionAsk")).toHaveLength(0);
+        expect(r2[0].content).toContain("不要再次请求");
     });
 
     it("AC-006 ask 挂起等待不超时（SPEC-033 DEC-101）：任意时长推进不自动拒绝，裁决后执行", async () => {

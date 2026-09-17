@@ -190,7 +190,8 @@ const readSchema: ChatCompletionTool = {
     type: "function",
     function: {
         name: ToolName.Read,
-        description: "Read the content of a file with pagination support",
+        description:
+            "Read the content of a file with pagination support. Image files (png/jpg/gif/webp/svg etc.) return a truncated base64 payload with metadata instead of decoded text — attach the image to the chat if visual understanding is needed.",
         parameters: {
             type: "object",
             properties: {

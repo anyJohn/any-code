@@ -71,6 +71,10 @@ export interface PermissionContext {
     readOnlyTools: ReadonlySet<string>;
     /** 会话内"允许一次"缓存：key = tool + "|" + ruleKey（D-007）。 */
     allowOnce: Set<string>;
+    /** 会话内"已拒绝"缓存（todo#13，与 allowOnce 对称）：用户拒绝过的 cacheKey，
+     *  本会话内同类 ask 不再弹窗——直接短路拒绝并告知模型勿再请求。
+     *  没有它，模型按拒绝文案"说明后再请求授权"立刻重问，用户观感 = 拒绝未被感知。 */
+    deniedOnce: Set<string>;
 }
 
 // ── 匹配器 ──

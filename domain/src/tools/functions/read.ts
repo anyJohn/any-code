@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import { statSync } from "node:fs";
+import path from "node:path";
 import type { ToolContext } from "../../context";
 import { resolvePathWithEscape } from "../../workspace";
 import { decodeFileText } from "../../textDecode";
@@ -12,6 +13,23 @@ interface ReadArgs {
     limit?: number;
 }
 
+/**
+ * 图片类扩展名（todo#15）：二进制格式硬解成 UTF-8/GBK 全是替换符，模型看不懂。
+ * 改为 base64 内联——模型可借此判断图片大致内容（尺寸/格式），如需视觉理解
+ * 应提示用户把图片贴进对话（web 端 file chip 有真正的多模态通道）。
+ */
+const IMAGE_EXTS = new Set([
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".bmp",
+    ".ico",
+    ".svg",
+    ".avif",
+]);
+
 export const readFunc = async (
     args: ReadArgs,
     ctx: ToolContext
@@ -23,7 +41,27 @@ export const readFunc = async (
         const filePath =
             (args as { __absFilePath?: string }).__absFilePath ??
             resolvePathWithEscape(workspace, args.filePath).abs;
-        const content = decodeFileText(await fs.readFile(filePath)).text;
+
+        const buf = await fs.readFile(filePath);
+
+        // 图片文件：base64 而非硬解文本（todo#15）
+        if (IMAGE_EXTS.has(path.extname(filePath).toLowerCase())) {
+            const mime =
+                path.extname(filePath).toLowerCase() === ".svg"
+                    ? "image/svg+xml"
+                    : `image/${path
+                          .extname(filePath)
+                          .toLowerCase()
+                          .slice(1)
+                          .replace("jpg", "jpeg")}`;
+            const b64 = buf.toString("base64");
+            const head =
+                `[Binary image file: ${path.basename(filePath)}, ${buf.length} bytes, ${mime}. ` +
+                `Base64 follows — you cannot visually render it; ask the user to attach the image to the chat if visual inspection is needed.]\n\n`;
+            return head + b64.slice(0, 2000) + (b64.length > 2000 ? "\n[... base64 truncated]" : "");
+        }
+
+        const content = decodeFileText(buf).text;
 
         // 记录 mtime 供 write/edit staleness 校验（SPEC-022 B-006）。整文件读才记，
         // 偏移读（offset>1）不记基线（partial 读后整写本就该警告）。
