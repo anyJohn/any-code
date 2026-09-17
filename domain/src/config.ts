@@ -214,6 +214,9 @@ export interface ConfigShape {
     permissions?: PermissionsConfig;
     /** server 并发运行上限（FR-30 / SPEC-033 DEC-102）：缺省 3，0 = 不限。 */
     maxConcurrentRuns?: number;
+    /** agentLoop 迭代上限（用户决策 2026-09-17）：缺省不配 = 无限；正整数才设限。
+     *  AgentDefinition.maxIterations 优先于本全局值（sub-agent 细粒度覆盖）。 */
+    maxIterations?: number;
     /** 界面偏好（FR-29）：language = 界面语言（缺省跟随系统语言）；theme = 外观三态（缺省跟随系统）。 */
     ui?: { language?: "zh" | "en"; theme?: UiTheme };
     /** 模型单价（FR-22）：美元 / 每 1M tokens。缺省不配 → 界面只显 tokens 不显费用。 */
@@ -304,6 +307,8 @@ export class Config {
     permissions: Required<PermissionsConfig>;
     /** server 并发运行上限（FR-30）：缺省 3，0 = 不限。server 侧消费，domain 仅承载。 */
     maxConcurrentRuns: number;
+    /** agentLoop 迭代上限（用户决策 2026-09-17）：undefined = 无限。 */
+    maxIterations: number | undefined;
     /** 界面偏好（FR-29）：language / theme 缺省 undefined = 跟随系统。 */
     ui: { language?: "zh" | "en"; theme?: UiTheme };
     /** 模型单价（FR-22）：缺省空表 → 界面只显 tokens。 */
@@ -321,6 +326,7 @@ export class Config {
         tools: Record<string, ToolConfigEntry>,
         permissions: Required<PermissionsConfig>,
         maxConcurrentRuns: number,
+        maxIterations: number | undefined,
         ui: { language?: "zh" | "en"; theme?: UiTheme },
         pricing: Record<string, ModelPricing>,
         memory: { maxChars: number }
@@ -334,6 +340,7 @@ export class Config {
         this.tools = tools;
         this.permissions = permissions;
         this.maxConcurrentRuns = maxConcurrentRuns;
+        this.maxIterations = maxIterations;
         this.ui = ui;
         this.pricing = pricing;
         this.memory = memory;
@@ -398,6 +405,7 @@ export class Config {
             normalizeTools(parsed?.tools, parsed?.abilities),
             normalizePermissions(parsed?.permissions),
             normalizeMaxConcurrentRuns(parsed?.maxConcurrentRuns),
+            normalizeMaxIterations(parsed?.maxIterations),
             normalizeUi(parsed?.ui),
             normalizePricing(parsed?.pricing),
             normalizeMemory(parsed?.memory)
@@ -455,6 +463,7 @@ export class Config {
                 // abilities 段已废弃（迁移到 tools），保存不再写出
                 permissions: normalizePermissions(data.permissions),
                 maxConcurrentRuns: normalizeMaxConcurrentRuns(data.maxConcurrentRuns),
+                maxIterations: normalizeMaxIterations(data.maxIterations),
                 ui: normalizeUi(data.ui),
                 pricing: normalizePricing(data.pricing),
                 proxy: normalizeProxy(data.proxy),
@@ -515,6 +524,15 @@ export const DEFAULT_MAX_CONCURRENT_RUNS = 3;
 function normalizeMaxConcurrentRuns(v?: number): number {
     if (typeof v !== "number" || !Number.isFinite(v) || v < 0) {
         return DEFAULT_MAX_CONCURRENT_RUNS;
+    }
+    return Math.floor(v);
+}
+
+/** maxIterations 归一化（用户决策 2026-09-17）：undefined = 无限（缺省不配）；
+ *  正整数才设限，0/负数/非数字回退 undefined（不设限）。 */
+function normalizeMaxIterations(v?: number): number | undefined {
+    if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) {
+        return undefined;
     }
     return Math.floor(v);
 }
@@ -642,6 +660,7 @@ function saveFull(cfg: Config): void {
         gitBashPath: cfg.gitBashPath,
         permissions: cfg.permissions,
         maxConcurrentRuns: cfg.maxConcurrentRuns,
+        maxIterations: cfg.maxIterations,
         ui: cfg.ui,
         pricing: cfg.pricing,
         tools: cfg.tools,

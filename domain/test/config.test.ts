@@ -243,3 +243,84 @@ default: deepseek
         expect(fresh.getCurrentProvider().defaultModel).toBe("deepseek-chat");
     });
 });
+
+describe("maxIterations（迭代上限配置化，用户决策 2026-09-17）", () => {
+    it("缺省不配 → undefined（无限）", () => {
+        writeConfig(`
+providers:
+  openai:
+    apiKey: sk
+    models: [{ id: m1 }]
+    defaultModel: m1
+default: openai
+`);
+        expect(Config.load().maxIterations).toBeUndefined();
+    });
+
+    it("配正整数 → 生效", () => {
+        writeConfig(`
+providers:
+  openai:
+    apiKey: sk
+    models: [{ id: m1 }]
+    defaultModel: m1
+default: openai
+maxIterations: 80
+`);
+        expect(Config.load().maxIterations).toBe(80);
+    });
+
+    it("0/负数/非数字 → undefined（不设限）", () => {
+        writeConfig(`
+providers:
+  openai:
+    apiKey: sk
+    models: [{ id: m1 }]
+    defaultModel: m1
+default: openai
+maxIterations: 0
+`);
+        expect(Config.load().maxIterations).toBeUndefined();
+        writeConfig(`
+providers:
+  openai:
+    apiKey: sk
+    models: [{ id: m1 }]
+    defaultModel: m1
+default: openai
+maxIterations: -5
+`);
+        expect(Config.load().maxIterations).toBeUndefined();
+        writeConfig(`
+providers:
+  openai:
+    apiKey: sk
+    models: [{ id: m1 }]
+    defaultModel: m1
+default: openai
+maxIterations: abc
+`);
+        expect(Config.load().maxIterations).toBeUndefined();
+    });
+
+    it("save 回写保留 maxIterations（全字段不丢）", () => {
+        writeConfig(`
+providers:
+  openai:
+    apiKey: sk
+    models: [{ id: m1 }]
+    defaultModel: m1
+default: openai
+maxIterations: 120
+`);
+        const cfg = Config.load();
+        Config.save({
+            providers: cfg.providers,
+            default: cfg.default,
+            maxIterations: cfg.maxIterations,
+            maxConcurrentRuns: cfg.maxConcurrentRuns,
+            memory: cfg.memory,
+        });
+        expect(Config.load().maxIterations).toBe(120);
+    });
+});

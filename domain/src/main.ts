@@ -537,7 +537,9 @@ class AnyAgent {
         await agentLoop(
             expanded.display,
             session.messages,
-            this.definition.maxIterations,
+            // 迭代上限：definition 显式设置优先（sub-agent 细粒度），否则全局 config.maxIterations
+            //（缺省不配 = 无限，用户决策 2026-09-17）
+            this.definition.maxIterations ?? this.config.maxIterations,
             {},
             onMessage,
             ctx,

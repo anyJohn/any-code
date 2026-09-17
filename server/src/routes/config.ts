@@ -51,6 +51,7 @@ export function registerConfigRoutes(app: Hono): void {
                 tools: { catalog, config: cfg.tools },
                 permissions: cfg.permissions,
                 maxConcurrentRuns: cfg.maxConcurrentRuns,
+                maxIterations: cfg.maxIterations,
                 ui: cfg.ui,
                 pricing: cfg.pricing,
                 proxy: cfg.proxy,
@@ -93,6 +94,8 @@ export function registerConfigRoutes(app: Hono): void {
             permissions: body.permissions ?? existing?.permissions,
             // 表单不含 maxConcurrentRuns 时保留已存值（FR-30）
             maxConcurrentRuns: body.maxConcurrentRuns ?? existing?.maxConcurrentRuns,
+            // 表单不含 maxIterations 时保留已存值（迭代上限，缺省不配 = 无限）
+            maxIterations: body.maxIterations ?? existing?.maxIterations,
             // 表单不含 ui 段时保留已存值（FR-29 语言偏好）
             ui: body.ui ?? existing?.ui,
             // 表单不含 pricing 段时保留已存值（FR-22 模型单价）
@@ -322,6 +325,7 @@ export function registerConfigRoutes(app: Hono): void {
                     tools: cfg.tools,
                     permissions: cfg.permissions,
                     maxConcurrentRuns: cfg.maxConcurrentRuns,
+                    maxIterations: cfg.maxIterations,
                     ui: cfg.ui,
                     pricing: cfg.pricing,
                     proxy: cfg.proxy,
