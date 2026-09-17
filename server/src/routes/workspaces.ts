@@ -11,6 +11,7 @@ import {
     type SessionKey,
 } from "@any-code/domain";
 import { resolveWorkspace } from "../shared.js";
+import { readUsageLedger } from "@any-code/domain";
 import { getAgentManager } from "../agentManager.js";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -275,5 +276,14 @@ export function registerWorkspacesRoutes(app: Hono): void {
         const service = new SessionService();
         await service.setTitle(key, title);
         return c.json({ status: "renamed", title });
+    });
+
+    // 用量账本（SPEC-042 B-003/C-003）：读工作区 usage.jsonl 原始行，web 自行聚合换算
+    app.get("/api/workspaces/:projectKey/usage", async (c) => {
+        const projectKey = c.req.param("projectKey");
+        if (!resolveWorkspace(projectKey))
+            return c.json({ statusMessage: "workspace not found" }, 404);
+        const records = await readUsageLedger(projectKey);
+        return c.json({ records });
     });
 }

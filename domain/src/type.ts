@@ -80,6 +80,11 @@ export interface UsageEventData {
     contextWindow: number;
     /** FR-22：产生该用量的模型 id（费用按模型单价换算；老事件无此戳） */
     model?: string;
+    /** SPEC-042：缓存命中 token 数（provider 未报则缺省——命中率有则显无则隐） */
+    cached_tokens?: number;
+    /** SPEC-042：首 token 延迟 / 调用时长（ms，非流式无 ttft） */
+    ttft_ms?: number;
+    duration_ms?: number;
 }
 export interface CompactEventData {
     beforeTokens: number;
@@ -191,10 +196,15 @@ export interface MessageMeta {
     origin?: "human" | "system";
 }
 
-/** LLM API 响应里的 token 用量（OpenAI 兼容 shape） */
+/** LLM API 响应里的 token 用量（OpenAI 兼容 shape）。SPEC-042：可选扩展指标——
+ *  cached_tokens = prompt_tokens_details.cached_tokens（provider 未报则缺省）；
+ *  ttft_ms/duration_ms = 首 token 延迟 / 调用总时长（非流式无 ttft）。 */
 export interface LlmUsage {
     prompt_tokens: number;
     completion_tokens: number;
+    cached_tokens?: number;
+    ttft_ms?: number;
+    duration_ms?: number;
 }
 
 /** submit 入参：AgentEvent 去掉 timestamp（submit 盖 timestamp）。

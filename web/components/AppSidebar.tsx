@@ -40,6 +40,7 @@ import {
     PanelLeftOpen,
     Loader2,
     Clock3,
+    ChartColumn,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiJson } from "@/lib/api";
@@ -364,6 +365,13 @@ export function AppSidebar({
                     <PanelLeftOpen className="size-4" />
                 </button>
                 <div className="flex-1" />
+                <Link
+                    to="/usage"
+                    title={t("sidebar.usage")}
+                    className="p-2 rounded-md hover:bg-accent"
+                >
+                    <ChartColumn className="size-4 text-muted-foreground" />
+                </Link>
                 <Link
                     to="/settings"
                     title={t("sidebar.settings")}
@@ -717,13 +725,20 @@ export function AppSidebar({
                 </p>
             )}
 
-            <div className="shrink-0 border-t border-border p-2">
+            <div className="shrink-0 border-t border-border p-2 flex items-center gap-1">
+                <Link
+                    to="/usage"
+                    title={t("sidebar.usage")}
+                    className="p-2 rounded-md hover:bg-accent"
+                >
+                    <ChartColumn className="size-4 text-muted-foreground shrink-0" />
+                </Link>
                 <Link
                     to="/settings"
-                    className="flex items-center gap-1.5 w-full px-2 py-1.5 rounded-md text-sm hover:bg-accent"
+                    title={t("sidebar.settings")}
+                    className="p-2 rounded-md hover:bg-accent"
                 >
-                    <Settings className="size-3.5 text-muted-foreground shrink-0" />
-                    <span>{t("sidebar.settings")}</span>
+                    <Settings className="size-4 text-muted-foreground shrink-0" />
                 </Link>
             </div>
 

@@ -61,6 +61,10 @@ export interface UsageData {
     contextWindow: number;
     /** FR-22：产生该用量的模型 id（费用按模型单价换算；老事件缺省） */
     model?: string;
+    /** SPEC-042：缓存命中 token 数（provider 未报缺省——命中率有则显无则隐） */
+    cached_tokens?: number;
+    ttft_ms?: number;
+    duration_ms?: number;
 }
 export interface ToolCallData {
     name: string;

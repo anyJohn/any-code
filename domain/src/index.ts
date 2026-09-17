@@ -20,6 +20,8 @@ export * from "./permissions";
 export * from "./snapshot";
 export * from "./extensions";
 export * from "./jobs";
+export * from "./usageLedger";
+export * from "./commands";
 export * from "./providers/anthropic";
 
 export { bashCandidates, resolveShellKind, type ShellKind } from "./shell";

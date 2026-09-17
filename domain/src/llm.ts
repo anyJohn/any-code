@@ -191,9 +191,26 @@ export async function callLLM(
 }
 
 /** 从 CompletionUsage 取 prompt/completion tokens */
-function toUsage(u: { prompt_tokens?: number; completion_tokens?: number } | undefined): LlmUsage | undefined {
+function toUsage(
+    u: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        prompt_tokens_details?: { cached_tokens?: number } | null;
+    } | undefined,
+    timings?: { ttft_ms?: number; duration_ms?: number }
+): LlmUsage | undefined {
     if (!u || u.prompt_tokens == null) return undefined;
-    return { prompt_tokens: u.prompt_tokens, completion_tokens: u.completion_tokens ?? 0 };
+    const cached = u.prompt_tokens_details?.cached_tokens;
+    return {
+        prompt_tokens: u.prompt_tokens,
+        completion_tokens: u.completion_tokens ?? 0,
+        // SPEC-042：可选扩展指标——provider 未报则缺省（命中率有则显无则隐）
+        ...(cached != null ? { cached_tokens: cached } : {}),
+        ...(timings?.ttft_ms != null ? { ttft_ms: timings.ttft_ms } : {}),
+        ...(timings?.duration_ms != null
+            ? { duration_ms: timings.duration_ms }
+            : {}),
+    };
 }
 
 /** 非流式调用：整段返回，附 usage */
@@ -203,6 +220,7 @@ async function nonStreamCall(
     signal: AbortSignal | undefined,
     model: string
 ): Promise<LlmResult> {
+    const start = Date.now();
     const resp = await client.chat.completions.create(payload, { signal });
     const message = resp.choices[0]?.message;
     if (!message) {
@@ -216,7 +234,11 @@ async function nonStreamCall(
     const reasoning = (message as unknown as Record<string, unknown>).reasoning_content;
     const _meta: MessageMeta | undefined =
         typeof reasoning === "string" && reasoning ? { reasoning } : undefined;
-    return { ...message, usage: toUsage(resp.usage), _meta } as LlmResult;
+    return {
+        ...message,
+        usage: toUsage(resp.usage, { duration_ms: Date.now() - start }),
+        _meta,
+    } as LlmResult;
 }
 
 /** 流式调用：累积 chunk 成完整 message，onDelta 发增量，abort 返回截断；末片带 usage */
@@ -230,6 +252,8 @@ async function streamCall(
     model: string
 ): Promise<LlmResult> {
     // include_usage：末片 chunk.usage 带 token 用量
+    const start = Date.now();
+    let ttftMs: number | undefined;
     const stream = await client.chat.completions.create(
         { ...payload, stream: true, stream_options: { include_usage: true } },
         { signal }
@@ -246,9 +270,16 @@ async function streamCall(
     const argEmitted: number[] = []; // 上次发心跳时的字节数
     try {
         for await (const chunk of stream) {
-            if (chunk.usage) usage = toUsage(chunk.usage);
+            if (chunk.usage) {
+                // SPEC-042：ttft/duration 附在末片 usage 上（末片必到——include_usage）
+                usage = toUsage(chunk.usage, {
+                    ttft_ms: ttftMs,
+                    duration_ms: Date.now() - start,
+                });
+            }
             const delta = chunk.choices[0]?.delta;
             if (!delta) continue;
+            if (ttftMs === undefined) ttftMs = Date.now() - start;
             // reasoning_content：部分思考型模型在思考阶段输出，字段位于 delta 扩展。
             // 累积进 reasoning（落盘用 _meta.reasoning），同时发实时 delta 回调（SSE 展示，不入盘）。
             if ((delta as Record<string, unknown>).reasoning_content) {

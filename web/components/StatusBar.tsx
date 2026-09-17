@@ -6,6 +6,7 @@ import { apiJson } from "@/lib/api";
 import { fmtTokens } from "@/lib/format";
 import { useT } from "@/i18n";
 import type { AgentEvent, UsageData } from "@/lib/sseEvents";
+import { SessionUsageDialog } from "@/components/UsageDialog";
 
 interface StatusInfo {
     provider: string;
@@ -42,6 +43,7 @@ export function StatusBar({
     refreshKey?: number;
 }) {
     const { t } = useT();
+    const [usageOpen, setUsageOpen] = useState(false);
     const [status, setStatus] = useState<StatusInfo>({
         provider: "",
         model: "",
@@ -110,14 +112,33 @@ export function StatusBar({
             }
         }
     }
+    // 倒序找最近一次主对话（author 为空）的 Usage——sub-agent 的用量/上下文
+    // 会把主对话口径带偏（P2：账本与弹窗按含 sub-agent 全量累计，展示层不跟随）
     for (let i = events.length - 1; i >= 0; i--) {
         const ev = events[i];
-        if (ev.type === "Usage") {
+        if (ev.type === "Usage" && !ev.author) {
             promptTokens = ev.data.prompt_tokens;
             ctxWindow = ev.data.contextWindow || status.contextWindow;
             break;
         }
     }
+    // SPEC-042：最新一次调用的性能指标（DEC-150 最新值口径；DEC-151 有则显无则隐）
+    let latestUsage: UsageData | null = null;
+    for (let i = events.length - 1; i >= 0; i--) {
+        const ev = events[i];
+        if (ev.type === "Usage" && !ev.author) {
+            latestUsage = ev.data as UsageData;
+            break;
+        }
+    }
+    const hitRate =
+        latestUsage?.cached_tokens != null && latestUsage.prompt_tokens > 0
+            ? latestUsage.cached_tokens / latestUsage.prompt_tokens
+            : null;
+    const tokPerSec =
+        latestUsage?.duration_ms != null && latestUsage.duration_ms > 0
+            ? latestUsage.completion_tokens / (latestUsage.duration_ms / 1000)
+            : null;
     const pct =
         ctxWindow > 0 ? Math.min(100, (promptTokens / ctxWindow) * 100) : 0;
     const labelName = status.modelName || status.model;
@@ -152,20 +173,58 @@ export function StatusBar({
                     />
                 </div>
             </div>
-            {/* 累计 tokens（窄屏隐藏费用外次要项 SPEC-036 B-004） */}
-            {totalPrompt + totalCompletion > 0 && (
+            {/* 性能指标（SPEC-042）：最新调用缓存命中/速度/TTFT，有数据才显示（DEC-151） */}
+            {hitRate !== null && (
                 <span
-                    className="shrink-0 tabular-nums hidden sm:inline"
+                    className="shrink-0 tabular-nums hidden md:inline"
+                    title={t("statusBar.cacheHit", {
+                        pct: (hitRate * 100).toFixed(0),
+                        cached: latestUsage!.cached_tokens!,
+                        prompt: latestUsage!.prompt_tokens,
+                    })}
+                >
+                    cache {Math.round(hitRate * 100)}%
+                </span>
+            )}
+            {tokPerSec !== null && (
+                <span
+                    className="shrink-0 tabular-nums hidden lg:inline"
+                    title={t("statusBar.tokPerSec", {
+                        tokPerSec: tokPerSec.toFixed(1),
+                    })}
+                >
+                    {tokPerSec.toFixed(0)} tok/s
+                </span>
+            )}
+            {latestUsage?.ttft_ms != null && (
+                <span
+                    className="shrink-0 tabular-nums hidden lg:inline"
+                    title={t("statusBar.ttft", { ms: latestUsage.ttft_ms })}
+                >
+                    ttft {latestUsage.ttft_ms}ms
+                </span>
+            )}
+            {/* 累计 tokens（窄屏隐藏费用外次要项 SPEC-036 B-004）；点击开用量面板（SPEC-042 DEC-153） */}
+            {totalPrompt + totalCompletion > 0 && (
+                <button
+                    className="shrink-0 tabular-nums hidden sm:inline hover:text-foreground cursor-pointer"
                     title={`${totalPrompt} + ${totalCompletion} tokens`}
+                    aria-label={t("usagePanel.open")}
+                    onClick={() => setUsageOpen(true)}
                 >
                     {t("statusBar.total", {
                         tokens: fmtTokens(totalPrompt + totalCompletion),
                     })}
                     {cost !== null && cost > 0 && ` · $${cost.toFixed(4)}`}
-                </span>
+                </button>
             )}
             <span className="shrink-0 hidden md:inline">skill: {status.skillCount}</span>
             <span className="shrink-0 hidden md:inline">mcp: {status.mcpCount}</span>
+            <SessionUsageDialog
+                open={usageOpen}
+                onOpenChange={setUsageOpen}
+                events={events}
+            />
         </div>
     );
 }

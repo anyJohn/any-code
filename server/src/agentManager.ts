@@ -4,6 +4,7 @@ import {
     DURABLE_TYPES,
     type AgentEvent,
     type SessionKey,
+    appendUsageRecord,
 } from "@any-code/domain";
 import { runningSessions, runningWorkspaces } from "./singleFlight.js";
 
@@ -182,12 +183,35 @@ export class AgentManager {
                             prompt_tokens?: number;
                             completion_tokens?: number;
                             model?: string;
+                            cached_tokens?: number;
+                            ttft_ms?: number;
+                            duration_ms?: number;
                         };
                         await agent.getService().appendUsage(key, e, {
                             promptTokens: d?.prompt_tokens ?? 0,
                             completionTokens: d?.completion_tokens ?? 0,
                             ...(d?.model ? { model: d.model } : {}),
                         });
+                        // SPEC-042 B-003：工作区用量账本（只增不改，费用显示时换算）。
+                        // fire-and-forget：审计类旁路不阻断 SSE 事件流（C-002），
+                        // 失败打 warning（AC-005——静默缺行将导致账目对不上）。
+                        void appendUsageRecord(projectKey, {
+                            ts: e.timestamp,
+                            sessionId,
+                            ...(e.author ? { author: e.author } : {}),
+                            ...(d?.model ? { model: d.model } : {}),
+                            prompt_tokens: d?.prompt_tokens ?? 0,
+                            completion_tokens: d?.completion_tokens ?? 0,
+                            ...(d?.cached_tokens != null
+                                ? { cached_tokens: d.cached_tokens }
+                                : {}),
+                            ...(d?.ttft_ms != null ? { ttft_ms: d.ttft_ms } : {}),
+                            ...(d?.duration_ms != null
+                                ? { duration_ms: d.duration_ms }
+                                : {}),
+                        }).catch((err) =>
+                            console.warn("[usage-ledger] append failed:", err)
+                        );
                     } else {
                         await agent.getService().appendEvent(key, e);
                     }

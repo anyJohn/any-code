@@ -280,6 +280,16 @@ export async function agentLoop(
                     completion_tokens: msg.usage.completion_tokens,
                     contextWindow: ctx.llm?.contextWindow ?? 128000,
                     model: ctx.llm?.defaultModel, // FR-22：模型戳，费用按模型单价换算
+                    // SPEC-042：可选扩展指标（provider 未报则缺省，命中率有则显无则隐）
+                    ...(msg.usage.cached_tokens != null
+                        ? { cached_tokens: msg.usage.cached_tokens }
+                        : {}),
+                    ...(msg.usage.ttft_ms != null
+                        ? { ttft_ms: msg.usage.ttft_ms }
+                        : {}),
+                    ...(msg.usage.duration_ms != null
+                        ? { duration_ms: msg.usage.duration_ms }
+                        : {}),
                 },
                 turnId,
             });

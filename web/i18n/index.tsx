@@ -23,7 +23,8 @@ export type Language = "zh" | "en";
 /** 语言偏好：system = 跟随系统语言（language 由 navigator 判定解析）。 */
 export type LanguagePref = Language | "system";
 
-const DICTS: Record<Language, Record<string, string>> = { zh, en };
+/** 语言字典（export 供 i18n 覆盖测试静态断言——缺 key 会回退裸 key 字符串，编译期抓不到） */
+export const DICTS: Record<Language, Record<string, string>> = { zh, en };
 const STORAGE_KEY = "anycode:lang";
 
 export type TFn = (key: string, params?: Record<string, string | number>) => string;
