@@ -1,6 +1,6 @@
 {
     "name": "@any-code/desktop",
-    "version": "0.0.7",
+    "version": "0.0.8",
     "private": true,
     "description": "AnyCode desktop client (Electron + hono sidecar)",
     "author": "AnyJohn",
