@@ -117,6 +117,9 @@ export class AgentManager {
             }
             return null;
         }
+        // SSE 历史与序号属于单次 run。复用前清掉上一轮终态，避免 /run 或 /stream
+        // 重放旧 Done/Error/Stopped，让客户端误以为新任务已经结束；会话消息仍保留。
+        entry.agent.eventHistory$.next([]);
         return entry.agent;
     }
 
