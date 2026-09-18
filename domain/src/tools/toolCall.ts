@@ -11,6 +11,7 @@ import {
     registerInteraction,
     unregisterInteraction,
 } from "../pendingInteractions";
+import { ToolName } from "./toolName.enum";
 import { validateToolArgs } from "./validateArgs";
 import { resolvePathWithEscape } from "../workspace";
 import { runBeforeToolHook, runAfterToolHook } from "../extensions";
@@ -143,13 +144,18 @@ export async function toolCall(
             continue;
         }
 
-        // FR-10：按工具 JSON Schema 校验参数，非法拒绝执行、错误回传模型自纠
-        const invalid = validateToolArgs(args, tool.schema);
-        if (invalid) {
-            result.push(
-                toolRow(toolCall, `[Error] Invalid arguments for tool ${funcName}: ${invalid}`)
-            );
-            continue;
+        // FR-10：按工具 JSON Schema 校验参数，非法拒绝执行、错误回传模型自纠。
+        // ask_question 例外（bugfix 2026-09-17）：部分模型（DeepSeek/GLM 系）把 options
+        // 传成 {label,...} 对象数组且拒收后重试仍如此（schema 记忆混淆）——跳过其校验，
+        // 由 handler 的 normalizeOptions 容错归一化，避免校验/重试死循环。
+        if (funcName !== ToolName.AskQuestion) {
+            const invalid = validateToolArgs(args, tool.schema);
+            if (invalid) {
+                result.push(
+                    toolRow(toolCall, `[Error] Invalid arguments for tool ${funcName}: ${invalid}`)
+                );
+                continue;
+            }
         }
 
         // 权限预判（纯同步，SPEC-032）：决定并行可行性与串行 gate 行为

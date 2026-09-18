@@ -27,6 +27,27 @@ interface AskQuestionItem {
     multiSelect?: boolean;
 }
 
+/**
+ * options 容错归一化（bugfix 2026-09-17）：部分模型（DeepSeek/GLM 系）反复把
+ * options 传成 {label, description} 对象数组（混入其他 agent 工具的 schema 记忆），
+ * schema 校验拒收后重试仍是对象——死循环。此处宽容提取 label 字段（或 value/text
+ * 常见变体），字符串原样保留；无法提取的对象转 JSON 文本兜底，宁可显示丑也不卡死。
+ */
+function normalizeOptions(raw: unknown): string[] | undefined {
+    if (!Array.isArray(raw)) return undefined;
+    return raw.map((o) => {
+        if (typeof o === "string") return o;
+        if (o && typeof o === "object") {
+            const rec = o as Record<string, unknown>;
+            for (const k of ["label", "value", "text", "name", "option"]) {
+                if (typeof rec[k] === "string") return rec[k] as string;
+            }
+            return JSON.stringify(o);
+        }
+        return String(o);
+    });
+}
+
 function formatAnswers(questions: AskQuestionItem[], answers: string[]): string {
     return questions
         .map((q, i) => `Q: ${q.question}\nA: ${answers[i] ?? "(no answer)"}`)
@@ -44,7 +65,7 @@ export async function askQuestionFunc(
     const questions = items.map((q) => ({
         question: q.question,
         header: q.header,
-        options: q.options,
+        options: normalizeOptions(q.options),
         multiSelect: q.multiSelect,
     }));
 

@@ -57,6 +57,36 @@ describe("ask_question handler（AC-003）", () => {
         await p;
     });
 
+    it("对象数组 options 容错归一化（bugfix 2026-09-17）：{label}/{value} 提取字段，无字段转 JSON", async () => {
+        const ctx = mkCtx();
+        const p = askQuestionFunc(
+            {
+                questions: [
+                    {
+                        question: "q1",
+                        options: [
+                            { label: "方案A (Recommended)", description: "说明" },
+                            { value: "方案B" },
+                            "方案C",
+                            { foo: "bar" },
+                        ],
+                    },
+                ],
+            },
+            ctx
+        );
+        const submit = ctx.eventStream.submit as unknown as ReturnType<typeof vi.fn>;
+        const ev = submit.mock.calls.find((c) => c[0]?.type === "Interaction");
+        expect(ev![0].data.questions[0].options).toEqual([
+            "方案A (Recommended)",
+            "方案B",
+            "方案C",
+            '{"foo":"bar"}',
+        ]);
+        resolveInteraction(ev![0].data.id, ["方案A (Recommended)"]);
+        await p;
+    });
+
     it("answered → return 'Q: ..\\nA: ..' 多行（多选 join ', '）", async () => {
         const ctx = mkCtx();
         const p = askQuestionFunc(

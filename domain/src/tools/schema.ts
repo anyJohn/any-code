@@ -298,7 +298,7 @@ const askQuestionSchema: ChatCompletionTool = {
                                 maxItems: 4,
                                 items: { type: "string" },
                                 description:
-                                    "2-4 choice labels. Omit for a free-text question. The first may be the recommended option (suffix ' (Recommended)').",
+                                    "2-4 choice labels. Each option MUST be a plain string like \"Use approach A\" — never an object with label/description fields. Omit for a free-text question. The first may be the recommended option (suffix ' (Recommended)').",
                             },
                             multiSelect: {
                                 type: "boolean",
