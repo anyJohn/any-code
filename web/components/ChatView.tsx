@@ -285,6 +285,36 @@ export function ChatView({
         }
     };
 
+    // 聊天框上传（SPEC-043 聊天框入口）：POST upload 落工作区根 → 成功即 addFile
+    // 引用为 chip（图片 chip 发送时自动走 images 通道，其余拼 Files: 路径）
+    const [uploading, setUploading] = useState(false);
+    const onUploadAndAttach = async (files: FileList | null) => {
+        if (!files || files.length === 0 || !projectKey) return;
+        setUploading(true);
+        try {
+            for (const f of Array.from(files)) {
+                const fd = new FormData();
+                fd.append("file", f);
+                const res = await fetch(`/api/workspaces/${projectKey}/upload`, {
+                    method: "POST",
+                    body: fd,
+                });
+                if (!res.ok) {
+                    const body = (await res.json().catch(() => ({}))) as {
+                        statusMessage?: string;
+                    };
+                    appendSystem(body.statusMessage ?? `上传失败：${f.name}`);
+                    continue;
+                }
+                const json = (await res.json()) as { path: string };
+                // 上传即引用：与 @ 选取同通道（同名文件 addFile 覆盖旧 chip）
+                fileRef.addFile({ path: json.path, name: json.path.split("/").pop() ?? json.path });
+            }
+        } finally {
+            setUploading(false);
+        }
+    };
+
     const editQueueItem = (q: { id: string; text: string }) => {
         removeQueueItem(q.id);
         setDraft(q.text);
@@ -506,6 +536,8 @@ export function ChatView({
                 selectFile={fileRef.selectFile}
                 send={send}
                 stop={stop}
+                onUploadFiles={onUploadAndAttach}
+                uploading={uploading}
                 onHistoryUp={onHistoryUp}
                 onHistoryDown={onHistoryDown}
                 runRawCommand={command.runRawCommand}

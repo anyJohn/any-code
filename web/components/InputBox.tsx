@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { Square } from "lucide-react";
+import { Paperclip, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { CommandItem } from "@/hooks/useCommand";
@@ -32,6 +32,10 @@ interface InputBoxProps {
     // 发送
     send: () => void;
     stop: () => void;
+    /** 上传文件并直接引用为 chip（SPEC-043 聊天框入口）：files 由 hidden input 取得 */
+    onUploadFiles?: (files: FileList | null) => void;
+    /** 上传进行中：按钮转圈禁用 */
+    uploading?: boolean;
     // 消息历史 ↑/↓ 回填（shell history 风格）；返回 false = 未消费，走 textarea 默认光标移动
     onHistoryUp?: () => boolean;
     onHistoryDown?: () => boolean;
@@ -69,6 +73,8 @@ export function InputBox({
     selectFile,
     send,
     stop,
+    onUploadFiles,
+    uploading,
     onHistoryUp,
     onHistoryDown,
     runRawCommand,
@@ -82,6 +88,8 @@ export function InputBox({
     const busy = pending || compacting;
     const taRef = useRef<HTMLTextAreaElement>(null);
     const cmdListRef = useRef<HTMLDivElement>(null);
+    // 上传入口（SPEC-043 聊天框）：hidden input 触发系统文件选择
+    const uploadInputRef = useRef<HTMLInputElement>(null);
 
     // 高亮项滚入可视区（键盘导航时弹层跟随）
     useEffect(() => {
@@ -363,6 +371,34 @@ export function InputBox({
                                 onSwitched={() => onModelSwitched?.()}
                             />
                             <div className="flex items-center gap-1.5">
+                                {/* 上传并引用（SPEC-043 聊天框入口）：系统文件选择 → 上传工作区 → 自动加 chip */}
+                                {onUploadFiles && (
+                                    <>
+                                        <input
+                                            ref={uploadInputRef}
+                                            type="file"
+                                            multiple
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                onUploadFiles(e.target.files);
+                                                if (uploadInputRef.current)
+                                                    uploadInputRef.current.value = "";
+                                            }}
+                                        />
+                                        <button
+                                            type="button"
+                                            disabled={uploading}
+                                            onClick={() => uploadInputRef.current?.click()}
+                                            title={t("inputBox.upload")}
+                                            className={cn(
+                                                "p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors",
+                                                uploading && "opacity-50 animate-pulse"
+                                            )}
+                                        >
+                                            <Paperclip className="size-4" />
+                                        </button>
+                                    </>
+                                )}
                                 <PermissionPicker sessionId={sessionId ?? null} />
                                 {pending ? (
                                     <>

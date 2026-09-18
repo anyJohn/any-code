@@ -39,6 +39,7 @@ export const zh: Record<string, string> = {
     "tab.runtime": "运行",
     "files.search": "搜索文件…",
     "files.upload": "上传文件到工作区",
+    "inputBox.upload": "上传文件并引用",
     "files.toggleIgnored": "切换显示 gitignore 隐藏文件",
     "files.empty": "没有匹配的文件",
     "files.binary": "二进制文件，不支持预览",

@@ -38,6 +38,7 @@ export const en: Record<string, string> = {
     "tab.runtime": "Runtime",
     "files.search": "Search files…",
     "files.upload": "Upload files to workspace",
+    "inputBox.upload": "Upload and attach files",
     "files.toggleIgnored": "Toggle gitignored/hidden files",
     "files.empty": "No matching files",
     "files.binary": "Binary file — preview not supported",
