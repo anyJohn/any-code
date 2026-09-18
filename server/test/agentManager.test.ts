@@ -50,7 +50,7 @@ describe("AgentManager（FR-30 / SPEC-033）", () => {
         runningWorkspaces().clear();
     });
 
-    it("register 扇出带 per-run 序号；终态 → finalize（destroy + 出表 + 清标记）", async () => {
+    it("register 扇出带 per-run 序号；终态 → finalize（入热缓存 + 出表 + 清标记）", async () => {
         const m = mkManager();
         const agent = mkFakeAgent();
         const entry = m.register(agent as never, "s1", "/w");
@@ -63,10 +63,65 @@ describe("AgentManager（FR-30 / SPEC-033）", () => {
         await new Promise((r) => setTimeout(r, 0));
         expect(frames).toEqual([0, 1]); // per-run 单调序号
         expect(m.get("s1")).toBeUndefined(); // 终态出表
-        expect(agent.destroy).toHaveBeenCalledOnce();
+        expect(agent.destroy).not.toHaveBeenCalled(); // 入热缓存而非 destroy（SPEC-043）
         expect(runningSessions().has("s1")).toBe(false);
         expect(runningWorkspaces().has("pk-test")).toBe(false);
         expect(entry.subscribers.size).toBeGreaterThanOrEqual(0);
+    });
+
+    it("热缓存：终态后 takeWarm 命中返回同一 agent；过期/错配 → null 并 destroy", async () => {
+        const m = mkManager();
+        const agent = mkFakeAgent();
+        m.register(agent as never, "s1", "/w");
+        agent.emit(mkEvent({ type: "Done", message: "完成" }));
+        await new Promise((r) => setTimeout(r, 0));
+
+        // 命中：同会话同工作区
+        const warm = m.takeWarm("s1", "/w");
+        expect(warm).toBe(agent);
+        // 取走后再取 → null
+        expect(m.takeWarm("s1", "/w")).toBeNull();
+
+        // 错配工作区 → null 且 destroy
+        const agent2 = mkFakeAgent();
+        m.register(agent2 as never, "s2", "/w2");
+        agent2.emit(mkEvent({ type: "Done", message: "完成" }));
+        await new Promise((r) => setTimeout(r, 0));
+        expect(m.takeWarm("s2", "/other")).toBeNull();
+        expect(agent2.destroy).toHaveBeenCalledOnce();
+    });
+
+    it("热缓存容量 8：第 9 个入缓存时逐出最旧并 destroy（AC-008）", async () => {
+        const m = mkManager();
+        const agents: ReturnType<typeof mkFakeAgent>[] = [];
+        for (let i = 0; i < 9; i++) {
+            const a = mkFakeAgent();
+            agents.push(a);
+            m.register(a as never, `s${i}`, "/w");
+            a.emit(mkEvent({ type: "Done", message: "完成" }));
+        }
+        await new Promise((r) => setTimeout(r, 0));
+        // 最旧（s0）被逐出销毁；s1..s8 仍在缓存
+        expect(agents[0].destroy).toHaveBeenCalledOnce();
+        expect(m.takeWarm("s0", "/w")).toBeNull();
+        expect(m.takeWarm("s8", "/w")).toBe(agents[8]);
+    });
+
+    it("ask 挂起的 agent 不入缓存（C-003）：终态即 destroy", async () => {
+        const m = mkManager();
+        const agent = mkFakeAgent();
+        m.register(agent as never, "s1", "/w");
+        agent.emit(
+            mkEvent({
+                type: "PermissionAsk",
+                message: "permission: bash",
+                data: { id: "ask1", tool: "bash", summary: "rm -rf /" },
+            }),
+        );
+        agent.emit(mkEvent({ type: "Stopped", message: "停止" }));
+        await new Promise((r) => setTimeout(r, 0));
+        expect(agent.destroy).toHaveBeenCalledOnce();
+        expect(m.takeWarm("s1", "/w")).toBeNull();
     });
 
     it("statusList：PermissionAsk → waiting_ask + pendingAsk；Permission decided → running", async () => {

@@ -74,6 +74,16 @@ export class AgentManager {
     private queue = new Map<string, { projectKey: string; resolve: () => void }>();
     /** 已授予（含排队中被唤醒尚未 register）的槽位数——防"唤醒到注册窗口"被新 acquire 抢槽 */
     private active = 0;
+    /**
+     * 热会话缓存（SPEC-043 DEC-158）：run 终态后不立即 destroy 的闲置 agent。
+     * 同会话连续 run 直接复用内存态——跳过 resume（21MB 会话全量读盘）/
+     * initConfig / initMcp 三段初始化。Map 插入序即 LRU：命中删除重插，容量满逐最旧。
+     */
+    private warm = new Map<string, { agent: AnyAgent; workspacePath: string; warmedAt: number }>();
+    /** 缓存容量 / 保留时长（超时惰性清理：命中与放入时检查）。 */
+    private static WARM_CAPACITY = 8;
+    private static WARM_TTL_MS = 5 * 60_000;
+    private warmTimer: ReturnType<typeof setInterval> | null = null;
 
     /** maxRunsFn 可注入（测试）；缺省读 config。 */
     constructor(private maxRunsFn: () => number = defaultMaxRuns) {}
@@ -86,6 +96,79 @@ export class AgentManager {
 
     isBusy(sessionId: string): boolean {
         return this.runs.has(sessionId) || this.queue.has(sessionId);
+    }
+
+    /**
+     * 取热缓存 agent（命中即从缓存移除——调用方将 register 它重新服役）。
+     * 过期/不匹配 → null 并 destroy 过期项。workspacePath 校验防同名会话跨工作区错配。
+     */
+    takeWarm(sessionId: string, workspacePath: string): AnyAgent | null {
+        const entry = this.warm.get(sessionId);
+        if (!entry) return null;
+        this.warm.delete(sessionId);
+        if (
+            Date.now() - entry.warmedAt > AgentManager.WARM_TTL_MS ||
+            entry.workspacePath !== workspacePath
+        ) {
+            try {
+                entry.agent.destroy();
+            } catch {
+                // 逐出尽力而为
+            }
+            return null;
+        }
+        return entry.agent;
+    }
+
+    /** run 终态后调用：无在途任务（C-003）的 agent 入热缓存；容量满/超时逐最旧。 */
+    private warmUp(entry: RunEntry): void {
+        // C-003：权限 ask 挂起（用户停在前）的 agent 状态不干净，不缓存
+        if (entry.pendingAsk) {
+            entry.agent.destroy();
+            return;
+        }
+        // 容量满：逐最旧（Map 迭代序 = 插入序）
+        while (this.warm.size >= AgentManager.WARM_CAPACITY) {
+            const oldest = this.warm.keys().next();
+            if (oldest.done) break;
+            const victim = this.warm.get(oldest.value)!;
+            this.warm.delete(oldest.value);
+            try {
+                victim.agent.destroy();
+            } catch {
+                // 逐出尽力而为
+            }
+        }
+        this.warm.set(entry.sessionId, {
+            agent: entry.agent,
+            workspacePath: entry.workspacePath,
+            warmedAt: Date.now(),
+        });
+        this.ensureWarmSweeper();
+    }
+
+    /** 惰性超时清扫（30s 一拍）：过期项 destroy。无缓存时自停。 */
+    private ensureWarmSweeper(): void {
+        if (this.warmTimer) return;
+        this.warmTimer = setInterval(() => {
+            const now = Date.now();
+            for (const [id, entry] of this.warm) {
+                if (now - entry.warmedAt > AgentManager.WARM_TTL_MS) {
+                    this.warm.delete(id);
+                    try {
+                        entry.agent.destroy();
+                    } catch {
+                        // 清扫尽力而为
+                    }
+                }
+            }
+            if (this.warm.size === 0) {
+                clearInterval(this.warmTimer!);
+                this.warmTimer = null;
+            }
+        }, 30_000);
+        // 不阻断进程退出
+        this.warmTimer.unref?.();
     }
 
     /** 并发闸当前是否还有空位（route 用来决定是否发"排队中"提示帧）。 */
@@ -255,12 +338,13 @@ export class AgentManager {
         return this.cancelQueued(sessionId) ? "cancelled" : null;
     }
 
-    /** 终态收尾：拆内部订阅 → destroy → 清标记/出表 → 释放并发槽。 */
+    /** 终态收尾：拆内部订阅 → agent 入热缓存（SPEC-043 DEC-158）→ 清标记/出表 → 释放并发槽。 */
     private finalize(entry: RunEntry): void {
         if (!this.runs.has(entry.sessionId)) return; // 重入守卫
         this.runs.delete(entry.sessionId);
         entry.unsubscribe();
-        entry.agent.destroy();
+        // 热缓存接管 agent 生命周期（ask 挂起等不干净状态由 warmUp 内部 destroy）
+        this.warmUp(entry);
         runningSessions().delete(entry.sessionId);
         runningWorkspaces().delete(entry.projectKey);
         this.releaseSlot();
@@ -276,6 +360,14 @@ export class AgentManager {
             }
         }
         this.runs.clear();
+        for (const w of this.warm.values()) {
+            try {
+                w.agent.destroy();
+            } catch {
+                // 退出路径尽力而为
+            }
+        }
+        this.warm.clear();
         for (const q of this.queue.values()) q.resolve();
         this.queue.clear();
     }

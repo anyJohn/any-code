@@ -458,3 +458,84 @@ describe("POST/GET /api/sessions/:id/permission-mode（SPEC-037）", () => {
         expect(((await list.json()) as { items: unknown[] }).items).toEqual([]);
     });
 });
+
+// SPEC-043 B-004 文件上传：multipart 落工作区根 / 重名后缀 / 10MB 上限（AC-004/005）。
+// HOME 隔离 + 临时工作区目录，与上面 describe 同模式。
+describe("POST /api/workspaces/:projectKey/upload（SPEC-043）", () => {
+    const app = createApp();
+    const origHome = process.env.HOME;
+    let home: string;
+    let wsDir: string;
+    let projectKey: string;
+
+    beforeAll(async () => {
+        home = mkdtempSync(join(tmpdir(), "anycode-up-"));
+        process.env.HOME = home;
+        mkdirSync(join(home, ".anycode"), { recursive: true });
+        writeFileSync(
+            join(home, ".anycode", "config.yaml"),
+            [
+                "providers:",
+                "  openai:",
+                "    apiKey: sk-test",
+                "    models: [{ id: m1 }]",
+                "    defaultModel: m1",
+                "default: openai",
+            ].join("\n"),
+            "utf-8"
+        );
+        wsDir = mkdtempSync(join(tmpdir(), "anycode-ws-"));
+        const res = await app.request("/api/workspaces", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ path: wsDir }),
+        });
+        const json = (await res.json()) as { projectKey: string };
+        projectKey = json.projectKey;
+    });
+
+    afterAll(() => {
+        process.env.HOME = origHome;
+        rmSync(home, { recursive: true, force: true });
+        rmSync(wsDir, { recursive: true, force: true });
+    });
+
+    const upload = (name: string, bytes: number) => {
+        const fd = new FormData();
+        fd.append("file", new File([new Uint8Array(bytes)], name));
+        return app.request(`/api/workspaces/${projectKey}/upload`, {
+            method: "POST",
+            body: fd,
+        });
+    };
+
+    it("上传 → 201 + 落盘工作区根（B-004）", async () => {
+        const res = await upload("hello.png", 32);
+        expect(res.status).toBe(201);
+        const json = (await res.json()) as { path: string; size: number };
+        expect(json.path).toBe("hello.png");
+        expect(json.size).toBe(32);
+        expect(readFileSync(join(wsDir, "hello.png"))).toBeTruthy();
+    });
+
+    it("重名 → 自动加后缀 name(1).ext（AC-005）", async () => {
+        const res = await upload("hello.png", 16);
+        expect(res.status).toBe(201);
+        const json = (await res.json()) as { path: string };
+        expect(json.path).toBe("hello(1).png");
+    });
+
+    it("超过 10MB → 413（AC-004）", async () => {
+        const res = await upload("big.bin", 10 * 1024 * 1024 + 1);
+        expect(res.status).toBe(413);
+    });
+
+    it("缺 file 字段 → 400", async () => {
+        const fd = new FormData();
+        const res = await app.request(`/api/workspaces/${projectKey}/upload`, {
+            method: "POST",
+            body: fd,
+        });
+        expect(res.status).toBe(400);
+    });
+});

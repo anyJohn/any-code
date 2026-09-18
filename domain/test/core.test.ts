@@ -339,3 +339,113 @@ describe("agentLoop 分级压缩与错误恢复（FR-6 / AR-9）", () => {
         expect(compacts.some((e) => e.message.includes("被动压缩"))).toBe(true);
     });
 });
+
+describe("agentLoop 多模态用户消息（SPEC-043 B-003/I-001）", () => {
+    beforeEach(() => vi.mocked(callLLM).mockReset());
+
+    it("视觉模型（ctx.vision）+ images → user 消息为 parts（text + image_url，AC-001）", async () => {
+        vi.mocked(callLLM).mockResolvedValueOnce(assistantMsg("ok") as never);
+        const ctx = mkCtx();
+        ctx.vision = true;
+        const messages: ChatMessage[] = [];
+        await agentLoop("看图", messages, undefined, undefined, undefined, ctx, [], undefined, {
+            content: "看图",
+            images: [{ mimeType: "image/png", base64: "aGk=" }],
+        });
+        expect(messages).toHaveLength(2);
+        const content = messages[0].content as unknown as Array<Record<string, unknown>>;
+        expect(Array.isArray(content)).toBe(true);
+        expect(content[0]).toEqual({ type: "text", text: "看图" });
+        expect(content[1]).toEqual({
+            type: "image_url",
+            image_url: { url: "data:image/png;base64,aGk=" },
+        });
+    });
+
+    it("非视觉模型 + images → 降级为文本占位，无 image_url 块（AC-002/I-001）", async () => {
+        vi.mocked(callLLM).mockResolvedValueOnce(assistantMsg("ok") as never);
+        const ctx = mkCtx(); // vision 未声明 = 不支持（保守）
+        const messages: ChatMessage[] = [];
+        await agentLoop("看图", messages, undefined, undefined, undefined, ctx, [], undefined, {
+            content: "看图",
+            images: [{ mimeType: "image/png", base64: "aGk=" }],
+        });
+        const content = messages[0].content as string;
+        expect(typeof content).toBe("string");
+        expect(content).toContain("不支持视觉输入");
+        expect(content).not.toContain("image_url");
+    });
+});
+
+describe("toolCall 图片结果注入（SPEC-043 B-002）", () => {
+    beforeEach(() => vi.mocked(callLLM).mockReset());
+
+    it("handler 返回 images + 视觉 ctx → 合成 user 消息带 image_url 块", async () => {
+        const { toolCall } = await import("../src/tools/toolCall.js");
+        const ctx = mkCtx() as never as import("../src/context").ToolContext;
+        ctx.vision = true;
+        ctx.eventStream = { submit: vi.fn() } as never;
+        const tool: import("../src/tools/index").Tool = {
+            schema: {
+                type: "function",
+                function: {
+                    name: "read",
+                    description: "t",
+                    parameters: { type: "object", properties: {} },
+                },
+            },
+            handler: vi.fn().mockResolvedValue({
+                content: "[Image file: a.png]",
+                images: [{ mimeType: "image/png", base64: "aGk=" }],
+            }),
+            meta: { readOnly: true, concurrencySafe: true },
+        };
+        const call = {
+            id: "tc1",
+            type: "function" as const,
+            function: { name: "read", arguments: "{}" },
+        };
+        const result = await toolCall([call], ctx, [tool]);
+        // tool result（纯文本）+ 合成 user 消息（image_url）
+        expect(result).toHaveLength(2);
+        expect(result[0].role).toBe("tool");
+        expect(result[1].role).toBe("user");
+        const parts = result[1].content as unknown as Array<Record<string, unknown>>;
+        expect(parts[0].type).toBe("text");
+        expect(parts[1]).toEqual({
+            type: "image_url",
+            image_url: { url: "data:image/png;base64,aGk=" },
+        });
+    });
+
+    it("非视觉 ctx → 合成消息为文本占位，无 image_url（I-001）", async () => {
+        const { toolCall } = await import("../src/tools/toolCall.js");
+        const ctx = mkCtx() as never as import("../src/context").ToolContext;
+        ctx.eventStream = { submit: vi.fn() } as never;
+        const tool: import("../src/tools/index").Tool = {
+            schema: {
+                type: "function",
+                function: {
+                    name: "read",
+                    description: "t",
+                    parameters: { type: "object", properties: {} },
+                },
+            },
+            handler: vi.fn().mockResolvedValue({
+                content: "[Image file: a.png]",
+                images: [{ mimeType: "image/png", base64: "aGk=" }],
+            }),
+            meta: { readOnly: true, concurrencySafe: true },
+        };
+        const call = {
+            id: "tc1",
+            type: "function" as const,
+            function: { name: "read", arguments: "{}" },
+        };
+        const result = await toolCall([call], ctx, [tool]);
+        expect(result).toHaveLength(2);
+        const content = result[1].content as string;
+        expect(typeof content).toBe("string");
+        expect(content).toContain("does not support vision");
+    });
+});

@@ -98,6 +98,8 @@ class AnyAgent {
     private permissionAllowOnce = new Set<string>();
     /** 会话内已拒绝缓存（todo#13）：拒绝过的 cacheKey 本会话不再弹窗，短路拒绝 */
     private permissionDeniedOnce = new Set<string>();
+    /** 本次任务的用户贴图（SPEC-043 B-003）：submit 时暂存，executeTask 消费后清空。 */
+    private pendingImages?: Array<{ mimeType: string; base64: string }>;
     // 工作区快照服务（AR-4）：per-agent，写类工具执行前自动快照
     private snapshots: ReturnType<typeof createSnapshotService>;
     // bash 后台任务注册表（SPEC-038 桌模型）：工作区级注入，跨会话共享
@@ -325,7 +327,12 @@ class AnyAgent {
         //（任务跟注册表走，server 退出时统一清理）
     }
 
-    submit(task: string) {
+    /** 提交任务（SPEC-043：attachments 可带图片，仅首条用户消息支持）。 */
+    submit(
+        task: string,
+        attachments?: { images?: Array<{ mimeType: string; base64: string }> }
+    ) {
+        this.pendingImages = attachments?.images;
         this.task$.next(task);
     }
 
@@ -480,6 +487,9 @@ class AnyAgent {
         // 斜杠命令展开（SPEC-040 B-003）：submit 边界唯一 choke point——主任务与
         // queue 消息都经 expandTask，skill/custom 在此解析，TUI/CLI 同语义
         const expanded = expandTask(task, this.workspace, skills);
+        // 用户贴图（SPEC-043 B-003）：本次任务消费即清（队列遗留转新任务不带图）
+        const taskImages = this.pendingImages;
+        this.pendingImages = undefined;
         const drainQueued = async () => {
             while (this.userQueue.length) {
                 const item = this.userQueue.shift()!;
@@ -509,6 +519,11 @@ class AnyAgent {
             // 技能目录合并表：use_skill 工具按 name 取全文（SPEC-031 B-005）；命令展开共用
             skills,
             permissions: this.buildPermissionContext(),
+            // SPEC-043 DEC-154：当前模型视觉能力（read 图片/贴图注入判定，I-001）
+            vision: this.config
+                .getCurrentProvider()
+                .models.find((m) => m.id === this.config.getCurrentProvider().defaultModel)
+                ?.vision === true,
             // FR-11：provider 表供 sub-agent 定义覆盖（def.provider/def.model）
             providers: this.config.providers,
             // FR-13：bash 后台任务注册表
@@ -552,9 +567,11 @@ class AnyAgent {
                 }
             },
             // 命令展开：LLM content 与 display 分离，User 事件携带 command 标记（SPEC-040 B-003）
-            expanded.command
-                ? { content: expanded.content, command: expanded.command }
-                : undefined
+            {
+                content: expanded.content,
+                command: expanded.command,
+                images: taskImages,
+            }
         );
         this.abortController = null;
         this.activeRun = null;

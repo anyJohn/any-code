@@ -286,4 +286,86 @@ export function registerWorkspacesRoutes(app: Hono): void {
         const records = await readUsageLedger(projectKey);
         return c.json({ records });
     });
+
+    // 文件上传（SPEC-043 B-004）：multipart 落工作区根，重名自动加后缀 name(1).ext。
+    // 限 10MB（DEC-156）；文件名 sanitize（C-004）+ resolvePath 防穿越。
+    app.post("/api/workspaces/:projectKey/upload", async (c) => {
+        const workspace = resolveWorkspace(c.req.param("projectKey"));
+        if (!workspace) return c.json({ statusMessage: "workspace not found" }, 404);
+        const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+        let form: FormData;
+        try {
+            form = await c.req.formData();
+        } catch {
+            return c.json({ statusMessage: "multipart form expected" }, 400);
+        }
+        const file = form.get("file");
+        if (!(file instanceof File)) return c.json({ statusMessage: "file field required" }, 400);
+        if (file.size > MAX_UPLOAD_BYTES)
+            return c.json({ statusMessage: `文件超过 10MB 上限（${file.size} bytes）` }, 413);
+        // 文件名 sanitize：取 basename、剥控制字符与路径分隔符（C-004）
+        const rawName = basename(file.name || "upload.bin").replace(/[\\/\x00-\x1f]/g, "_");
+        if (!rawName || rawName === "." || rawName === "..")
+            return c.json({ statusMessage: "invalid filename" }, 400);
+        // 重名后缀：name(1).ext / name(2).ext ...
+        const dot = rawName.lastIndexOf(".");
+        const stem = dot > 0 ? rawName.slice(0, dot) : rawName;
+        const ext = dot > 0 ? rawName.slice(dot) : "";
+        let finalName = rawName;
+        for (let i = 1; existsSync(join(workspace.rootPath, finalName)); i++) {
+            finalName = `${stem}(${i})${ext}`;
+        }
+        let abs: string;
+        try {
+            abs = resolvePath(workspace, finalName); // 逃逸兜底（C-004 双保险）
+        } catch {
+            return c.json({ statusMessage: "path escapes workspace" }, 400);
+        }
+        const buf = Buffer.from(await file.arrayBuffer());
+        const { writeFile } = await import("node:fs/promises");
+        await writeFile(abs, buf);
+        return c.json({ status: "uploaded", path: finalName, size: buf.length }, 201);
+    });
+
+    // 图片二进制读取（SPEC-043 B-005）：@ 选取的图片 chip 发送时前端要 base64。
+    // 限图片扩展名 + 10MB；响应 raw bytes（前端 FileReader 转 data URL）。
+    app.get("/api/workspaces/:projectKey/image", (c) => {
+        const workspace = resolveWorkspace(c.req.param("projectKey"));
+        if (!workspace) return c.json({ statusMessage: "workspace not found" }, 404);
+        const rel = c.req.query("path")?.trim();
+        if (!rel) return c.json({ statusMessage: "path required" }, 400);
+        const ext = rel.toLowerCase().split(".").pop() ?? "";
+        const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "ico", "avif"]);
+        if (!IMAGE_EXTS.has(ext)) return c.json({ statusMessage: "not an image file" }, 400);
+        let abs: string;
+        try {
+            abs = resolvePath(workspace, rel);
+        } catch {
+            return c.json({ statusMessage: "path escapes workspace" }, 400);
+        }
+        let stat: import("node:fs").Stats;
+        try {
+            stat = statSync(abs);
+        } catch {
+            return c.json({ statusMessage: "file not found" }, 404);
+        }
+        if (!stat.isFile()) return c.json({ statusMessage: "not a file" }, 400);
+        if (stat.size > 10 * 1024 * 1024)
+            return c.json({ statusMessage: "图片超过 10MB 上限" }, 400);
+        const MIME: Record<string, string> = {
+            png: "image/png",
+            jpg: "image/jpeg",
+            jpeg: "image/jpeg",
+            gif: "image/gif",
+            webp: "image/webp",
+            bmp: "image/bmp",
+            svg: "image/svg+xml",
+            ico: "image/x-icon",
+            avif: "image/avif",
+        };
+        const buf = readFileSync(abs);
+        return c.body(buf as unknown as ArrayBuffer, 200, {
+            "Content-Type": MIME[ext] ?? "application/octet-stream",
+        });
+    });
 }

@@ -45,6 +45,9 @@ export interface ToolContext {
     };
     /** 命名 provider 表（FR-11）：sub-agent 按 def.provider 覆盖 llm 时查此表 */
     providers?: Record<string, import("./config").LlmProvider>;
+    /** 当前模型是否支持视觉输入（SPEC-043 DEC-154）：toolCall 注入图片块前判定（I-001）。
+     *  undefined = 未声明（保守按不支持处理）。 */
+    vision?: boolean;
     /** 当前 sub-agent 委托深度（FR-11）：主 agent 0；AgentTool 内 +1，超 def.maxDepth 拒绝 */
     subagentDepth?: number;
     /** bash 后台任务注册表（FR-13）：undefined = 未启用（bash 后台参数不可用） */

@@ -67,7 +67,11 @@ export function registerSessionsRoutes(app: Hono): void {
     // agent 交给 AgentManager 托管，断开连接只退订不中止；停止走 POST /stop 或终态。
     app.post("/api/sessions/:sessionId/run", async (c) => {
         const sessionId = c.req.param("sessionId");
-        let body: { task?: string; workspacePath?: string } = {};
+        let body: {
+            task?: string;
+            workspacePath?: string;
+            images?: Array<{ mimeType?: string; base64?: string }>;
+        } = {};
         try {
             body = await c.req.json();
         } catch {
@@ -77,6 +81,16 @@ export function registerSessionsRoutes(app: Hono): void {
         const workspacePath = body?.workspacePath?.trim();
         if (!task) return c.json({ statusMessage: "task required" }, 400);
         if (!workspacePath) return c.json({ statusMessage: "workspacePath required" }, 400);
+        // 用户贴图（SPEC-043 B-003）：宽松归一化，非法项丢弃（防注入垃圾块）
+        const images = (body?.images ?? [])
+            .filter(
+                (i): i is { mimeType: string; base64: string } =>
+                    typeof i?.mimeType === "string" &&
+                    i.mimeType.startsWith("image/") &&
+                    typeof i?.base64 === "string" &&
+                    i.base64.length > 0
+            )
+            .slice(0, 5);
 
         const manager = getAgentManager();
         if (runningSessions().has(sessionId) || manager.isBusy(sessionId))
@@ -158,17 +172,21 @@ export function registerSessionsRoutes(app: Hono): void {
                         runningWorkspaces().delete(wsKey);
                         return;
                     }
-                    // 兜底 try/catch：create 失败（坏 config 等）必须释放槽位并返错误帧
-                    let agent: AnyAgent;
-                    try {
-                        agent = await AnyAgent.create({ rootPath: workspacePath, sessionId, jobs: getWorkspaceJobs(wsKey) });
-                    } catch (e) {
-                        release();
-                        runningSessions().delete(sessionId);
-                        runningWorkspaces().delete(wsKey);
-                        send(synth(`agent 启动失败：${(e as Error).message}`));
-                        finish();
-                        return;
+                    // 兜底 try/catch：create 失败（坏 config 等）必须释放槽位并返错误帧。
+                    // SPEC-043 B-007：先查热缓存——同会话连续 run 复用内存态 agent，
+                    // 跳过 resume（大会话全量读盘）/initConfig/initMcp 三段初始化。
+                    let agent: AnyAgent | null = manager.takeWarm(sessionId, workspacePath);
+                    if (!agent) {
+                        try {
+                            agent = await AnyAgent.create({ rootPath: workspacePath, sessionId, jobs: getWorkspaceJobs(wsKey) });
+                        } catch (e) {
+                            release();
+                            runningSessions().delete(sessionId);
+                            runningWorkspaces().delete(wsKey);
+                            send(synth(`agent 启动失败：${(e as Error).message}`));
+                            finish();
+                            return;
+                        }
                     }
                     if (!agent.getSession()) {
                         release();
@@ -190,7 +208,7 @@ export function registerSessionsRoutes(app: Hono): void {
                         send(frame);
                         if (TERMINAL.has(frame.event.type)) finish();
                     });
-                    agent.submit(task);
+                    agent.submit(task, images.length ? { images } : undefined);
                 })();
             },
         });

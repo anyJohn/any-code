@@ -56,6 +56,46 @@ function toolRow(call: ChatCompletionMessageToolCall, content: string): ChatMess
     return { role: "tool", tool_call_id: call.id, content };
 }
 
+/**
+ * 图片结果注入（SPEC-043 B-002）：OpenAI 兼容层 tool result 只收字符串内容，
+ * handler 产出的图片（read 读图等）转成后续合成 user 消息的 image_url 块——
+ * 对齐 pi / opencode 的成熟做法。视觉能力由调用方（agentLoop）按当前模型过滤（I-001）。
+ */
+function imagesToUserMessage(images: Array<{ mimeType: string; base64: string }>): ChatMessage {
+    return {
+        role: "user",
+        content: [
+            {
+                type: "text",
+                text: "[Attached image(s) from tool result:]",
+            },
+            ...images.map((img) => ({
+                type: "image_url" as const,
+                image_url: { url: `data:${img.mimeType};base64,${img.base64}` },
+            })),
+        ],
+    };
+}
+
+/** 收集本批工具结果的图片；有则追加合成 user 消息。非视觉模型降级为文本占位（I-001）。 */
+function appendImageMessages(
+    ctx: ToolContext,
+    result: ChatMessage[],
+    outputs: Array<{ images?: Array<{ mimeType: string; base64: string }> }>
+): void {
+    const images = outputs.flatMap((o) => o.images ?? []);
+    if (images.length === 0) return;
+    if (ctx.vision !== true) {
+        // 非视觉模型：不发 image_url 块（provider 会拒收），文本占位兜底（DEC-154）
+        result.push({
+            role: "user",
+            content: `[Image attached but current model does not support vision input. ${images.length} image(s), ${images.map((i) => i.mimeType).join(", ")}. Ask the user to describe the image or switch to a vision-capable model.]`,
+        });
+        return;
+    }
+    result.push(imagesToUserMessage(images));
+}
+
 /** 权限审计事件（B-008，durable）：asked / decided（含 deny 硬拦与超时）。 */
 function audit(
     ctx: ToolContext,
@@ -236,10 +276,12 @@ export async function toolCall(
             emitTool(plans[i], out, ctx, turnId);
             result.push(toolRow(plans[i].call, out.content));
         });
+        appendImageMessages(ctx, result, outputs);
         return result;
     }
 
     // ── 串行路径：逐个 gate（ask 阻塞裁决一次只弹一个）+ 执行 ──
+    const serialOutputs: Array<{ images?: Array<{ mimeType: string; base64: string }> }> = [];
     for (const p of plans) {
         const denied = await permissionGate(p, ctx);
         if (denied !== null) {
@@ -273,7 +315,9 @@ export async function toolCall(
         emitTool(p, out, ctx, turnId);
         runAfterToolHook(ctx.hooks, p.funcName, p.args, out.content);
         result.push(toolRow(p.call, out.content));
+        serialOutputs.push(out);
     }
+    appendImageMessages(ctx, result, serialOutputs);
     return result;
 }
 

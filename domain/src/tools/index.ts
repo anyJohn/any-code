@@ -51,6 +51,12 @@ export interface ToolMeta {
 export interface ToolResult {
     content: string;
     data?: Record<string, unknown>;
+    /**
+     * 图片附件（SPEC-043 B-002）：handler 产出的视觉内容（read 读图等）。
+     * 不进 tool result（OpenAI 兼容层限制）——由 toolCall 转为后续合成 user
+     * 消息的 image_url 块注入（对齐 pi/opencode）。data URL 形态。
+     */
+    images?: Array<{ mimeType: string; base64: string }>;
 }
 
 /**

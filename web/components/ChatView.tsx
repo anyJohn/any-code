@@ -11,6 +11,12 @@ import { useFileReference } from "@/hooks/useFileReference";
 import { bumpSessions } from "@/store/workspaceSlice";
 import { fmtTokens } from "@/lib/format";
 import type { AgentEvent } from "@/lib/sseEvents";
+
+/** 图片扩展名判定（SPEC-043 B-005）：图片 chip 分流用。 */
+const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|svg|ico|avif)$/i;
+function isImagePath(path: string): boolean {
+    return IMAGE_EXT_RE.test(path);
+}
 import { InputBox } from "./InputBox";
 import { MessageList } from "./MessageList";
 import { StatusBar } from "./StatusBar";
@@ -205,11 +211,49 @@ export function ChatView({
             return;
         }
         let message = task;
-        if (fileRef.chips.length) {
+        // 图片 chip（SPEC-043 B-005）与非图片 chip 分流：图片转 base64 走 images，
+        // 其余照旧拼 Files: 路径文本
+        const imageChips = fileRef.chips.filter((c) => isImagePath(c.path));
+        const fileChips = fileRef.chips.filter((c) => !isImagePath(c.path));
+        if (fileChips.length) {
             message =
                 task +
                 "\n\nFiles: " +
-                fileRef.chips.map((c) => fileRef.formatEntry(c)).join(", ");
+                fileChips.map((c) => fileRef.formatEntry(c)).join(", ");
+        }
+        let images: Array<{ mimeType: string; base64: string }> | undefined;
+        if (imageChips.length && projectKey) {
+            const fetched = await Promise.all(
+                imageChips.slice(0, 5).map(async (c) => {
+                    try {
+                        const res = await fetch(
+                            `/api/workspaces/${projectKey}/image?path=${encodeURIComponent(c.path)}`
+                        );
+                        if (!res.ok) return null;
+                        const blob = await res.blob();
+                        const b64 = await new Promise<string>((resolve, reject) => {
+                            const r = new FileReader();
+                            r.onload = () => {
+                                const url = r.result as string;
+                                resolve(url.slice(url.indexOf(",") + 1));
+                            };
+                            r.onerror = () => reject(r.error);
+                            r.readAsDataURL(blob);
+                        });
+                        return { mimeType: blob.type || "image/png", base64: b64 };
+                    } catch {
+                        return null;
+                    }
+                })
+            );
+            images = fetched.filter((x): x is NonNullable<typeof x> => x !== null);
+            if (images.length) {
+                message =
+                    task +
+                    (imageChips.length !== fileChips.length || !fileChips.length
+                        ? `\n\n[图片: ${imageChips.map((c) => c.path).join(", ")}]`
+                        : "");
+            }
         }
         fileRef.chips.forEach((c) => fileRef.removeChip(c.path));
         setDraft("");
@@ -229,7 +273,7 @@ export function ChatView({
                 return;
             }
         }
-        submit(message);
+        submit(message, images?.length ? { images } : undefined);
     };
 
     const removeQueueItem = (id: string) => {

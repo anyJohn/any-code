@@ -269,7 +269,10 @@ export function useAgent(
     const submitGateRef = useRef(false);
 
     const submit = useCallback(
-        async (task: string) => {
+        async (
+            task: string,
+            attachments?: { images?: Array<{ mimeType: string; base64: string }> }
+        ) => {
             // SPEC-040：入口即 trim——server /run 对 task trim 后回显 User 事件，
             // 乐观插入必须与回显同文，去重才成立（否则尾随空白产生双气泡）
             task = task.trim();
@@ -319,7 +322,11 @@ export function useAgent(
                 await pump(sid, `/api/sessions/${sid}/run`, {
                     method: "POST",
                     headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ task, workspacePath: rootPath }),
+                    body: JSON.stringify({
+                        task,
+                        workspacePath: rootPath,
+                        ...(attachments?.images?.length ? { images: attachments.images } : {}),
+                    }),
                 }, ac);
                 abortRef.current = null;
             } finally {

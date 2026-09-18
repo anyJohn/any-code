@@ -21,10 +21,13 @@ import {
 
 /**
  * 一个模型：id（调 API 的真实模型名）+ name（展示名，可选）。
+ * vision（SPEC-043 DEC-154）：模型是否支持图片输入（image_url 内容块）。
+ * 缺省 false——非视觉模型收到图片块时由发送方降级为文本占位（I-001）。
  */
 export interface LlmModel {
     id: string;
     name?: string;
+    vision?: boolean;
 }
 
 /**

@@ -49,15 +49,40 @@ export async function agentLoop(
     onCompact?: (messages: ChatMessage[]) => void | Promise<void>,
     /** 命令展开（SPEC-040 B-003）：display 与 LLM content 分离时，content 是展开文本，
      *  User 事件携带 command 结构化标记（message 仍是原始输入 task）。 */
-    userSpec?: { content: string; command?: { name: string; args?: string; body?: string } }
+    userSpec?: {
+        content: string;
+        command?: { name: string; args?: string; body?: string };
+        /** 用户贴图（SPEC-043 B-003）：视觉模型转 parts（text + image_url），
+         *  非视觉模型降级为文本占位（I-001，DEC-154）。 */
+        images?: Array<{ mimeType: string; base64: string }>;
+    }
 ): Promise<AgentLoopResult> {
     // 迭代上限缺省无限（用户决策 2026-09-17：150 在长任务中提前截断；停止按钮随时可 abort，
     // AgentDefinition.maxIterations 仍可为 sub-agent 设上限）。0/负数同样视为不设限。
     const maxIter = maxIterations && maxIterations > 0 ? maxIterations : Infinity;
-    const userMsg: ChatMessage = {
-        role: "user",
-        content: userSpec?.content ?? task,
-    };
+    const textContent = userSpec?.content ?? task;
+    // 用户贴图 → 多模态 parts（视觉模型）或文本占位（非视觉，I-001）
+    const userMsg: ChatMessage = (() => {
+        if (!userSpec?.images?.length) {
+            return { role: "user" as const, content: textContent };
+        }
+        if (ctx.vision === true) {
+            return {
+                role: "user" as const,
+                content: [
+                    { type: "text" as const, text: textContent },
+                    ...userSpec.images.map((img) => ({
+                        type: "image_url" as const,
+                        image_url: { url: `data:${img.mimeType};base64,${img.base64}` },
+                    })),
+                ],
+            };
+        }
+        return {
+            role: "user" as const,
+            content: `${textContent}\n\n[用户附加了 ${userSpec.images.length} 张图片（${userSpec.images.map((i) => i.mimeType).join(", ")}），但当前模型不支持视觉输入——请提示用户换用支持视觉的模型或直接描述图片内容。]`,
+        };
+    })();
     messages.push(userMsg);
     await onMessage?.(userMsg);
     // User 事件入流（durable，作 reload 真值）。web live 端已乐观插入 user 气泡，

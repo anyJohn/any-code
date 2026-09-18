@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiJson } from "@/lib/api";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronRight, Folder, FileText, Eye, EyeOff } from "lucide-react";
+import { ChevronDown, ChevronRight, Folder, FileText, Eye, EyeOff, Upload } from "lucide-react";
 
 export interface FileListItem {
     path: string;
@@ -56,6 +56,11 @@ export function FilesTab({
     const [query, setQuery] = useState("");
     const [showIgnored, setShowIgnored] = useState(false);
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
+    const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState("");
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    // 刷新版本号：上传成功后 bump 触发重载
+    const [refreshTick, setRefreshTick] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -74,7 +79,32 @@ export function FilesTab({
         return () => {
             cancelled = true;
         };
-    }, [projectKey, showIgnored]);
+    }, [projectKey, showIgnored, refreshTick]);
+
+    // SPEC-043 B-004：上传文件到工作区根（multipart），成功后刷新列表
+    const onUploadFiles = async (list: FileList | null) => {
+        if (!list || list.length === 0) return;
+        setUploading(true);
+        setUploadError("");
+        try {
+            for (const f of Array.from(list)) {
+                const fd = new FormData();
+                fd.append("file", f);
+                const res = await fetch(`/api/workspaces/${projectKey}/upload`, {
+                    method: "POST",
+                    body: fd,
+                });
+                if (!res.ok) {
+                    const body = (await res.json().catch(() => ({}))) as { statusMessage?: string };
+                    setUploadError(body.statusMessage ?? `上传失败：${f.name}`);
+                }
+            }
+            setRefreshTick((k) => k + 1);
+        } finally {
+            setUploading(false);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+        }
+    };
 
     const q = query.trim().toLowerCase();
     const filtered = q
@@ -145,6 +175,25 @@ export function FilesTab({
                         placeholder={t("files.search")}
                         className="flex-1 min-w-0 text-xs rounded-md border border-input bg-background px-2 py-1.5 outline-none focus:ring-1 focus-within:ring-ring"
                     />
+                    {/* 上传到工作区根（SPEC-043 B-004）：多选，成功后刷新列表 */}
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => void onUploadFiles(e.target.files)}
+                    />
+                    <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploading}
+                        title={t("files.upload")}
+                        className={cn(
+                            "p-1.5 rounded-md border border-input hover:bg-accent shrink-0",
+                            uploading && "opacity-50"
+                        )}
+                    >
+                        <Upload className="size-3.5" />
+                    </button>
                     <button
                         onClick={() => setShowIgnored((v) => !v)}
                         title={t("files.toggleIgnored")}
@@ -160,6 +209,7 @@ export function FilesTab({
                         )}
                     </button>
                 </div>
+                {uploadError && <div className="text-xs text-destructive">{uploadError}</div>}
                 {error && <div className="text-xs text-destructive">{error}</div>}
                 {!error && filtered.length === 0 && (
                     <div className="py-10 text-center text-sm text-muted-foreground">

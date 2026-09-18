@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import { statSync } from "node:fs";
 import path from "node:path";
 import type { ToolContext } from "../../context";
+import type { ToolResult } from "../index";
 import { resolvePathWithEscape } from "../../workspace";
 import { decodeFileText } from "../../textDecode";
 
@@ -33,7 +34,7 @@ const IMAGE_EXTS = new Set([
 export const readFunc = async (
     args: ReadArgs,
     ctx: ToolContext
-): Promise<string> => {
+): Promise<ToolResult> => {
     const { workspace } = ctx;
     try {
         const { offset = 1, limit = 2000 } = args;
@@ -44,21 +45,18 @@ export const readFunc = async (
 
         const buf = await fs.readFile(filePath);
 
-        // 图片文件：base64 而非硬解文本（todo#15）
+        // 图片文件（SPEC-043 B-002）：返回结构化 images（toolCall 转合成 user 消息的
+        // image_url 块）；文本部分只带元数据——视觉模型看图，非视觉模型靠文本提示兜底。
         if (IMAGE_EXTS.has(path.extname(filePath).toLowerCase())) {
+            const ext = path.extname(filePath).toLowerCase();
             const mime =
-                path.extname(filePath).toLowerCase() === ".svg"
-                    ? "image/svg+xml"
-                    : `image/${path
-                          .extname(filePath)
-                          .toLowerCase()
-                          .slice(1)
-                          .replace("jpg", "jpeg")}`;
-            const b64 = buf.toString("base64");
-            const head =
-                `[Binary image file: ${path.basename(filePath)}, ${buf.length} bytes, ${mime}. ` +
-                `Base64 follows — you cannot visually render it; ask the user to attach the image to the chat if visual inspection is needed.]\n\n`;
-            return head + b64.slice(0, 2000) + (b64.length > 2000 ? "\n[... base64 truncated]" : "");
+                ext === ".svg" ? "image/svg+xml" : `image/${ext.slice(1).replace("jpg", "jpeg")}`;
+            return {
+                content:
+                    `[Image file: ${path.basename(filePath)}, ${buf.length} bytes, ${mime}] ` +
+                    "(image attached for vision-capable models; if you cannot see it, ask the user to describe it)",
+                images: [{ mimeType: mime, base64: buf.toString("base64") }],
+            };
         }
 
         const content = decodeFileText(buf).text;
@@ -85,18 +83,22 @@ export const readFunc = async (
             .join("\n");
 
         if (end < totalLines) {
-            return `${numbered}\n\n[... Truncated - ${
-                totalLines - end
-            } more lines. Use offset=${end + 1} to continue reading.]`;
+            return {
+                content: `${numbered}\n\n[... Truncated - ${
+                    totalLines - end
+                } more lines. Use offset=${end + 1} to continue reading.]`,
+            };
         }
         if (start > 1) {
-            return `[... Lines ${start}-${end} of ${totalLines} total lines]\n\n${numbered}`;
+            return {
+                content: `[... Lines ${start}-${end} of ${totalLines} total lines]\n\n${numbered}`,
+            };
         }
-        return numbered;
+        return { content: numbered };
     } catch (error) {
         if (error instanceof Error) {
-            return `Error: ${error.message}`;
+            return { content: `Error: ${error.message}` };
         }
-        return `Error: ${String(error)}`;
+        return { content: `Error: ${String(error)}` };
     }
 };
