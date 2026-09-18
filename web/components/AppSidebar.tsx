@@ -389,12 +389,18 @@ export function AppSidebar({
             <div className="shrink-0 flex items-center gap-1 px-2 h-12 border-b border-border">
                 <Link
                     to="/"
-                    title="AnyCode"
+                    title={`AnyCode v${__APP_VERSION__}`}
                     className="flex items-center gap-2 flex-1 min-w-0 rounded-md px-1.5 py-1 hover:bg-accent transition-colors"
                 >
                     <Logo size={22} />
                     <span className="text-sm font-semibold tracking-tight text-foreground">
                         AnyCode
+                    </span>
+                    <span
+                        className="text-[10px] font-medium text-muted-foreground/70 tabular-nums shrink-0"
+                        title={`v${__APP_VERSION__}`}
+                    >
+                        v{__APP_VERSION__}
                     </span>
                 </Link>
                 <button
