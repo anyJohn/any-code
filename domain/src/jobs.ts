@@ -34,6 +34,19 @@ const OUTPUT_CAP = 200_000;
 
 export class JobRegistry {
     private jobs = new Map<string, BashJob & { child: ChildProcess }>();
+    /**
+     * 任务完成回调（bugfix 2026-09-18「后台任务完成后 agent 卡在 bash 执行中」）：
+     * job 完成时逐个通知——AnyAgent 挂此回调把结果注入对话（agent 空闲则自动
+     * 开新轮，忙碌则进队列迭代边界注入）。没有它，job 结果永远停在注册表里，
+     * agent 以为主任务已完成，用户看到的是卡死的执行中指示。
+     */
+    private doneListeners = new Set<(job: BashJob) => void>();
+
+    /** 订阅任务完成事件。返回退订函数。 */
+    onDone(fn: (job: BashJob) => void): () => void {
+        this.doneListeners.add(fn);
+        return () => this.doneListeners.delete(fn);
+    }
 
     /** 后台启动命令；返回 job id。 */
     launch(
@@ -78,6 +91,14 @@ export class JobRegistry {
                 done.sort((a, b) => (a.finishedAt ?? 0) - (b.finishedAt ?? 0));
                 for (const old of done.slice(0, done.length - DONE_JOB_LIMIT)) {
                     this.jobs.delete(old.id);
+                }
+            }
+            // 通知订阅者（agent 注入结果用）；listener 异常不炸注册表
+            for (const fn of this.doneListeners) {
+                try {
+                    fn(job);
+                } catch {
+                    // 通知失败不影响 job 状态
                 }
             }
         });

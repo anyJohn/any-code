@@ -198,6 +198,15 @@ export function registerSessionsRoutes(app: Hono): void {
                         return;
                     }
                     manager.register(agent, sessionId, workspacePath);
+                    // 未消化的后台任务结果（warm 期间 job 完成）：作为上下文前缀
+                    // 拼进本轮任务——模型先看到结果再处理用户输入。
+                    // bugfix 2026-09-18：没有它 warm 期间完成的 job 结果永远停在注册表。
+                    // （不能用 queueUserMessage：activeRun 要到 executeTask 才建立）
+                    const jobResults = agent.takePendingJobResults();
+                    const taskWithJobs =
+                        jobResults.length > 0
+                            ? `${jobResults.join("\n\n")}\n\n---\n\n${task}`
+                            : task;
                     // 重放本 run 已有事件（create 阶段的 System/Warning 等），seq 即 history 下标。
                     // 影子事件（ToolStart 等）按 replayable 过滤——尾段之前的已完成影子不下发。
                     const history = agent.eventHistory$.value;
@@ -208,7 +217,7 @@ export function registerSessionsRoutes(app: Hono): void {
                         send(frame);
                         if (TERMINAL.has(frame.event.type)) finish();
                     });
-                    agent.submit(task, images.length ? { images } : undefined);
+                    agent.submit(taskWithJobs, images.length ? { images } : undefined);
                 })();
             },
         });

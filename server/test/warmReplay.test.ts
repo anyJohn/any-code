@@ -34,6 +34,8 @@ function createFakeAgent() {
         getSession: () => session,
         getService: () => service,
         getProjectKey: () => projectKeyOf(workspacePath),
+        // 真实 AnyAgent 的接口（route 层消费）：无挂起结果时返回空数组
+        takePendingJobResults: vi.fn(() => []),
         submit: vi.fn((task: string) => {
             session.messages.push({ role: "user", content: task });
             stream.submit({ type: "User", message: task });

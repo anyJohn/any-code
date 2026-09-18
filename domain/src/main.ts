@@ -41,7 +41,7 @@ import {
 } from "./permissions";
 import { createSnapshotService } from "./snapshot";
 import { loadWorkspaceExtensions, type ExtensionHooks } from "./extensions";
-import { JobRegistry } from "./jobs";
+import { JobRegistry, type BashJob } from "./jobs";
 import {
     BehaviorSubject,
     catchError,
@@ -135,7 +135,44 @@ class AnyAgent {
         if (seeded.length) {
             console.info(`[Seed] 内置技能已就位：${seeded.join(", ")}`);
         }
+        // 后台任务完成回注（bugfix 2026-09-18）：job 完成 → 空闲则自动开新轮把结果
+        // 交给模型消化（"任务 A 完成，输出如下…"），忙碌则进队列迭代边界注入。
+        // 没有它 agent 以为主任务已 Done，后台结果永远停在注册表（用户看到卡死的
+        // "bash 执行中"）。注意：**只挂传入的共享注册表**（server 工作区级）——
+        // 自建的（CLI/测试缺省）生命周期随 agent，agent 挂了注册表也没意义。
+        if (opts.jobs) {
+            this.jobDoneUnsub = opts.jobs.onDone((job) => this.onJobDone(job));
+        }
         this.initProcessor();
+    }
+
+    /** jobs.onDone 的退订函数（destroy 时拆，防 warm 缓存里旧 agent 收到新事件）。 */
+    private jobDoneUnsub: (() => void) | null = null;
+
+    /** job 完成回注：忙碌 → 队列（迭代边界注入）；空闲 → 自动开新轮。 */
+    private onJobDone(job: BashJob): void {
+        const status =
+            job.exitCode === 0 ? "成功" : `失败（exit code ${job.exitCode}）`;
+        const head = `[后台任务完成] job_id=${job.id} ${status}\n命令：${job.command}\n输出：\n${job.output || "（无输出）"}`;
+        if (this.activeRun && !this.abortController?.signal.aborted) {
+            // 运行中：队列注入（agentLoop 迭代边界 drain，消息顺序合法）
+            this.queueUserMessage(head);
+            return;
+        }
+        // 空闲但**不在运行**（含 warm 缓存中）：标记待消化。server 侧 takeWarm/register
+        // 后调 takePendingJobResults() 转为新任务——warm 中的 agent 直接 submit 会
+        // 产生"没有 run 承载的游离任务"（无 SSE 订阅、无状态表，结果无人可见）。
+        this.pendingJobResults.push(head);
+    }
+
+    /** 未消化的后台任务结果（warm 期间 job 完成）：takeWarm 后由 route 取走转任务。 */
+    private pendingJobResults: string[] = [];
+
+    /** 取走全部未消化的 job 结果（有则 route 应为它们开新 run）。取后即清。 */
+    takePendingJobResults(): string[] {
+        const out = this.pendingJobResults;
+        this.pendingJobResults = [];
+        return out;
     }
 
     /** 异步工厂：构造 +（若给定 sessionId）恢复历史 session。无 sessionId 时不创建，等首条消息。 */
@@ -318,6 +355,10 @@ class AnyAgent {
         this.stop$.complete();
         this.destroy$.next();
         this.destroy$.complete();
+        // 拆 job 完成回调（bugfix 2026-09-18）：destroy 后 agent 不再收到 job 事件
+        //——否则 warm 缓存外/已被销毁的 agent 会被 onJobDone 唤醒 submit
+        this.jobDoneUnsub?.();
+        this.jobDoneUnsub = null;
         // per-agent eventStream，切换时清空释放内存
         this.eventStream.clear();
         // MCP 连接清理（per-agent）：kill stdio 子进程 / 关 SSE 连接
