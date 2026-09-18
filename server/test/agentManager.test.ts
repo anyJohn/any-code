@@ -22,6 +22,9 @@ function mkFakeAgent(events: AgentEvent[] = []) {
             get value() {
                 return history;
             },
+            next(events: AgentEvent[]) {
+                history = events;
+            },
         },
         eventStream$: {
             subscribe(fn: (e: AgentEvent) => void) {
@@ -69,16 +72,18 @@ describe("AgentManager（FR-30 / SPEC-033）", () => {
         expect(entry.subscribers.size).toBeGreaterThanOrEqual(0);
     });
 
-    it("热缓存：终态后 takeWarm 命中返回同一 agent；过期/错配 → null 并 destroy", async () => {
+    it.each(["Done", "Error", "Stopped"] as const)("热缓存：%s 后 takeWarm 清空运行事件并返回同一 agent；错配 → null 并 destroy", async (type) => {
         const m = mkManager();
         const agent = mkFakeAgent();
         m.register(agent as never, "s1", "/w");
-        agent.emit(mkEvent({ type: "Done", message: "完成" }));
+        agent.emit(mkEvent({ type, message: "完成" }));
         await new Promise((r) => setTimeout(r, 0));
 
         // 命中：同会话同工作区
+        expect(agent.eventHistory$.value.map((e) => e.type)).toEqual([type]);
         const warm = m.takeWarm("s1", "/w");
         expect(warm).toBe(agent);
+        expect(agent.eventHistory$.value).toEqual([]); // 新 run 不重放上一轮终态
         // 取走后再取 → null
         expect(m.takeWarm("s1", "/w")).toBeNull();
 
