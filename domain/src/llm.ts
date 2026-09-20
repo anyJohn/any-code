@@ -30,6 +30,24 @@ export function isRetryableError(err: unknown): boolean {
     );
 }
 
+/**
+ * 图片输入被拒判定（SPEC-043 DEC-159）：vision 缺省开后，未声明能力的模型收到
+ * image_url 块时 provider 会以 4xx 拒绝。按各家措辞宽匹配，命中则去掉图片降级重发。
+ * 只在"确实带了图片"的前提下调用，避免误判普通 4xx 参数错误。
+ */
+export function isImageUnsupportedError(err: unknown): boolean {
+    const status = (err as { status?: unknown })?.status;
+    // 只认"确定性拒绝"的 4xx：429 是瞬时限流（isRetryableError 走重试路径），
+    // 5xx/网络类同理——都不该触发图片降级，否则会把用户的图静默吃掉。
+    if (typeof status !== "number" || status < 400 || status >= 500 || status === 429) {
+        return false;
+    }
+    const msg = String((err as Error)?.message ?? err);
+    return /image_url|image url|vision|multimodal|multi-modal|does not support image|unsupported.{0,20}image|invalid.{0,20}content.{0,20}type/i.test(
+        msg
+    );
+}
+
 /** 尊重服务端 Retry-After 头（秒或 HTTP 日期；日期解析失败忽略）。 */
 export function retryAfterDelayMs(err: unknown): number | undefined {
     const headers = (err as { headers?: unknown })?.headers;

@@ -85,8 +85,10 @@ function appendImageMessages(
 ): void {
     const images = outputs.flatMap((o) => o.images ?? []);
     if (images.length === 0) return;
-    if (ctx.vision !== true) {
-        // 非视觉模型：不发 image_url 块（provider 会拒收），文本占位兜底（DEC-154）
+    // DEC-159：缺省视为支持（未声明 = 支持）；仅显式 vision:false 走文本占位。
+    // 未声明而实际不支持 → provider 4xx，由 core.ts catch 分支去图重试兜底。
+    if (ctx.vision === false) {
+        // 显式非视觉模型：不发 image_url 块（provider 会拒收），文本占位兜底（DEC-154）
         result.push({
             role: "user",
             content: `[Image attached but current model does not support vision input. ${images.length} image(s), ${images.map((i) => i.mimeType).join(", ")}. Ask the user to describe the image or switch to a vision-capable model.]`,

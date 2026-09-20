@@ -14,7 +14,7 @@ export interface ConfigResponse {
         {
             apiKey: string;
             baseURL?: string;
-            /** vision：模型级视觉能力（SPEC-043 DEC-154），缺省 false */
+            /** vision：模型级视觉能力（SPEC-043 DEC-159），缺省 true（未声明 = 支持） */
             models: { id: string; name?: string; vision?: boolean }[];
             defaultModel: string;
             streaming: boolean;
@@ -44,8 +44,7 @@ export interface ProviderForm {
     apiKey: string;
     baseURL: string;
     /** vision：该模型是否支持图片输入（image_url 内容块）；仅当前生效模型的能力被 domain 消费 */
-    models: { id: string; name: string; vision: boolean }[];
-    defaultModel: string;
+    models: { id: string; name: string; vision: boolean }[];    defaultModel: string;
     streaming: boolean;
     /** contextWindow 输入（字符串，空=auto：探测/模型表/128000） */
     contextWindow: string;
@@ -70,7 +69,7 @@ export const emptyProvider = (): ProviderForm => ({
     name: "",
     apiKey: "",
     baseURL: "",
-    models: [{ id: "", name: "", vision: false }],
+    models: [{ id: "", name: "", vision: true }],
     defaultModel: "",
     streaming: true,
     contextWindow: "",
@@ -130,7 +129,8 @@ export function fromResponse(res: ConfigResponse): {
             const models = (p.models ?? []).map((m) => ({
                 id: m.id ?? "",
                 name: m.name ?? "",
-                vision: m.vision === true,
+                // DEC-159：缺省 true（未声明 = 支持）；仅显式 false 才算不支持
+                vision: m.vision !== false,
             }));
             // defaultModel 不在 models 中 → 取首个，避免下拉框初始显示空白
             const validIds = models.map((m) => m.id).filter(Boolean);
@@ -206,8 +206,9 @@ export function toConfigShape(
             .map((m) => ({
                 id: m.id.trim(),
                 name: m.name.trim(),
-                // 仅显式开启才写 vision——缺省 false 不落盘，yaml 保持干净
-                ...(m.vision ? { vision: true } : {}),
+                // DEC-159：缺省 true（未声明 = 支持）——仅关闭时才写 vision:false，
+                // 显式 true 是冗余的（与缺省同义），不落盘，yaml 保持干净
+                ...(m.vision ? {} : { vision: false }),
             }))
             .filter((m) => m.id);
         // defaultModel 空 + models 非空 → 取首个，避免表单未选导致后端校验失败

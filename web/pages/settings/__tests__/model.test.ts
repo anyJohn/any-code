@@ -24,12 +24,12 @@ function resp(
     };
 }
 
-describe("settings model 表单 ↔ config 转换（vision 往返）", () => {
-    it("fromResponse：vision 缺省 false，显式 true 保留", () => {
+describe("settings model 表单 ↔ config 转换（vision 往返，DEC-159 缺省开）", () => {
+    it("fromResponse：vision 缺省 true，显式 false 保留", () => {
         const { providers } = fromResponse(
             resp([
-                { id: "gpt-4o", name: "GPT-4o", vision: true },
-                { id: "deepseek-chat" },
+                { id: "gpt-4o", name: "GPT-4o" },
+                { id: "deepseek-chat", vision: false },
             ])
         );
         expect(providers[0].models).toEqual([
@@ -38,7 +38,7 @@ describe("settings model 表单 ↔ config 转换（vision 往返）", () => {
         ]);
     });
 
-    it("toConfigShape：vision=true 落盘，false 不写字段（yaml 保持干净）", () => {
+    it("toConfigShape：vision=false 落盘，true 不写字段（缺省即 true，yaml 保持干净）", () => {
         const p = emptyProvider();
         p.name = "openai";
         p.models = [
@@ -47,22 +47,22 @@ describe("settings model 表单 ↔ config 转换（vision 往返）", () => {
         ];
         const out = toConfigShape([p], "openai", []);
         expect(out.providers?.openai.models).toEqual([
-            { id: "gpt-4o", name: "GPT-4o", vision: true },
-            { id: "deepseek-chat", name: "" },
+            { id: "gpt-4o", name: "GPT-4o" },
+            { id: "deepseek-chat", name: "", vision: false },
         ]);
     });
 
     it("往返：fromResponse → toConfigShape 后 vision 语义不变", () => {
         const { providers } = fromResponse(
-            resp([{ id: "glm-4v", vision: true }])
+            resp([{ id: "glm-4v", vision: false }])
         );
         const out = toConfigShape(providers, "openai", []);
         expect(out.providers?.openai.models).toEqual([
-            { id: "glm-4v", name: "", vision: true },
+            { id: "glm-4v", name: "", vision: false },
         ]);
     });
 
-    it("emptyProvider：新增模型默认无视觉能力", () => {
-        expect(emptyProvider().models[0].vision).toBe(false);
+    it("emptyProvider：新增模型默认具备视觉能力", () => {
+        expect(emptyProvider().models[0].vision).toBe(true);
     });
 });

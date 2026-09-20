@@ -215,7 +215,7 @@ export const en: Record<string, string> = {
     "providerItem.streamingHint": "Off = wait for the full reply (some providers do not support streaming)",
     "providerItem.visionLabel": "Vision",
     "providerItem.visionShort": "Vision",
-    "providerItem.visionHint": "This model accepts image input. Only the switch of the currently active model is used — images fall back to a text placeholder on models without it.",
+    "providerItem.visionHint": "This model accepts image input, on by default. Only the switch of the currently active model is used — turning it off degrades images to a text placeholder; if it is on but the model does not actually support images, the request is retried without them and you get a warning.",
     "providerItem.test": "Test",
     "providerItem.testFailed": "Model test failed",
     "providerItem.testHint": "A passing model can be set as default",

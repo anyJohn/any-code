@@ -109,7 +109,7 @@ export function ProviderItem({
         patchProvider(index, {
             models: [
                 ...p.models,
-                ...fresh.map((id) => ({ id, name: "", vision: false })),
+                ...fresh.map((id) => ({ id, name: "", vision: true })),
             ],
         });
         if (!p.defaultModel.trim() && fresh.length) {
@@ -467,7 +467,7 @@ export function ProviderItem({
                                                 </span>
                                             );
                                         })()}
-                                        {/* vision（SPEC-043 DEC-154）：模型级图片输入能力——只有当前生效模型的开关被 domain 消费 */}
+                                        {/* vision（SPEC-043 DEC-159）：模型级图片输入能力——只有当前生效模型的开关被 domain 消费 */}
                                         <span
                                             className="flex items-center gap-1.5 shrink-0"
                                             title={t("providerItem.visionHint")}
@@ -544,7 +544,7 @@ export function ProviderItem({
                                                 {
                                                     id: "",
                                                     name: "",
-                                                    vision: false,
+                                                    vision: true,
                                                 },
                                             ],
                                         })

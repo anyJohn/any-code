@@ -560,11 +560,13 @@ class AnyAgent {
             // 技能目录合并表：use_skill 工具按 name 取全文（SPEC-031 B-005）；命令展开共用
             skills,
             permissions: this.buildPermissionContext(),
-            // SPEC-043 DEC-154：当前模型视觉能力（read 图片/贴图注入判定，I-001）
+            // SPEC-043 DEC-159：当前模型视觉能力（read 图片/贴图注入判定）。
+            // 缺省视为支持（未声明 = 支持）；仅显式 vision:false 才降级为文本占位。
+            // 未声明而实际不支持 → provider 4xx，core.ts catch 分支去图重试兜底。
             vision: this.config
                 .getCurrentProvider()
                 .models.find((m) => m.id === this.config.getCurrentProvider().defaultModel)
-                ?.vision === true,
+                ?.vision !== false,
             // FR-11：provider 表供 sub-agent 定义覆盖（def.provider/def.model）
             providers: this.config.providers,
             // FR-13：bash 后台任务注册表

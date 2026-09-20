@@ -362,9 +362,26 @@ describe("agentLoop 多模态用户消息（SPEC-043 B-003/I-001）", () => {
         });
     });
 
-    it("非视觉模型 + images → 降级为文本占位，无 image_url 块（AC-002/I-001）", async () => {
+    it("vision 未声明（缺省开）→ 直接发 parts（DEC-159：未声明 = 支持）", async () => {
         vi.mocked(callLLM).mockResolvedValueOnce(assistantMsg("ok") as never);
-        const ctx = mkCtx(); // vision 未声明 = 不支持（保守）
+        const ctx = mkCtx(); // vision 未声明 = 支持（缺省翻开）
+        const messages: ChatMessage[] = [];
+        await agentLoop("看图", messages, undefined, undefined, undefined, ctx, [], undefined, {
+            content: "看图",
+            images: [{ mimeType: "image/png", base64: "aGk=" }],
+        });
+        const content = messages[0].content as unknown as Array<Record<string, unknown>>;
+        expect(Array.isArray(content)).toBe(true);
+        expect(content[1]).toEqual({
+            type: "image_url",
+            image_url: { url: "data:image/png;base64,aGk=" },
+        });
+    });
+
+    it("显式 vision:false + images → 降级为文本占位，无 image_url 块（AC-002/I-001）", async () => {
+        vi.mocked(callLLM).mockResolvedValueOnce(assistantMsg("ok") as never);
+        const ctx = mkCtx();
+        ctx.vision = false; // 显式声明不支持
         const messages: ChatMessage[] = [];
         await agentLoop("看图", messages, undefined, undefined, undefined, ctx, [], undefined, {
             content: "看图",
@@ -374,6 +391,80 @@ describe("agentLoop 多模态用户消息（SPEC-043 B-003/I-001）", () => {
         expect(typeof content).toBe("string");
         expect(content).toContain("不支持视觉输入");
         expect(content).not.toContain("image_url");
+    });
+});
+
+describe("agentLoop 图片降级（SPEC-043 DEC-159：缺省开 + provider 拒绝兜底）", () => {
+    beforeEach(() => vi.mocked(callLLM).mockReset());
+
+    it("provider 4xx 拒绝图片 → 去图转文本占位后同轮重试成功", async () => {
+        const ctx = mkCtx();
+        (ctx as { llm?: unknown }).llm = {
+            apiKey: "k", models: [{ id: "m" }], defaultModel: "m",
+            streaming: false, contextWindow: 128000,
+        };
+        // 第一次：带 image_url 的请求被拒（4xx + 图片相关文案）；第二次：去图后成功
+        vi.mocked(callLLM)
+            .mockRejectedValueOnce(
+                Object.assign(new Error("Invalid content type: image_url is not supported"), {
+                    status: 400,
+                })
+            )
+            .mockResolvedValueOnce(assistantMsg("recovered") as never);
+        const messages: ChatMessage[] = [];
+        const res = await agentLoop("看图", messages, 5, undefined, undefined, ctx, [], undefined, {
+            content: "看图",
+            images: [{ mimeType: "image/png", base64: "aGk=" }],
+        });
+        expect(res.stopReason).toBe("completed");
+        expect(res.result).toBe("recovered");
+        // 重发时该消息已无 image_url，只剩文本占位
+        const content = messages[0].content as string;
+        expect(typeof content).toBe("string");
+        expect(content).not.toContain("image_url");
+        expect(content).toContain("rejected image input");
+        // 用户可见提示
+        const warnings = (ctx.eventStream.submit as ReturnType<typeof vi.fn>).mock.calls
+            .map((c) => c[0])
+            .filter((e) => e.type === "Warning");
+        expect(warnings.some((e) => e.message.includes("不支持图片输入"))).toBe(true);
+        // ctx.vision 已翻转，后续轮次不再注入工具结果图片
+        expect(ctx.vision).toBe(false);
+    });
+
+    it("无图片的普通 4xx → 不降级，原样上抛", async () => {
+        const ctx = mkCtx();
+        (ctx as { llm?: unknown }).llm = {
+            apiKey: "k", models: [{ id: "m" }], defaultModel: "m",
+            streaming: false, contextWindow: 128000,
+        };
+        vi.mocked(callLLM).mockRejectedValueOnce(
+            Object.assign(new Error("Invalid API key"), { status: 401 })
+        );
+        await expect(
+            agentLoop("task", [], 5, undefined, undefined, ctx, [])
+        ).rejects.toThrow("Invalid API key");
+        expect(vi.mocked(callLLM)).toHaveBeenCalledTimes(1); // 未重试
+    });
+
+    it("降级只做一次：去图后仍失败 → 上抛（不循环）", async () => {
+        const ctx = mkCtx();
+        (ctx as { llm?: unknown }).llm = {
+            apiKey: "k", models: [{ id: "m" }], defaultModel: "m",
+            streaming: false, contextWindow: 128000,
+        };
+        const imgErr = () =>
+            Object.assign(new Error("image_url not supported"), { status: 400 });
+        vi.mocked(callLLM)
+            .mockRejectedValueOnce(imgErr())
+            .mockRejectedValueOnce(imgErr());
+        await expect(
+            agentLoop("看图", [], 5, undefined, undefined, ctx, [], undefined, {
+                content: "看图",
+                images: [{ mimeType: "image/png", base64: "aGk=" }],
+            })
+        ).rejects.toThrow("image_url not supported");
+        expect(vi.mocked(callLLM)).toHaveBeenCalledTimes(2); // 首轮 + 一次降级重试
     });
 });
 
@@ -418,9 +509,10 @@ describe("toolCall 图片结果注入（SPEC-043 B-002）", () => {
         });
     });
 
-    it("非视觉 ctx → 合成消息为文本占位，无 image_url（I-001）", async () => {
+    it("显式 vision:false ctx → 合成消息为文本占位，无 image_url（I-001）", async () => {
         const { toolCall } = await import("../src/tools/toolCall.js");
         const ctx = mkCtx() as never as import("../src/context").ToolContext;
+        ctx.vision = false; // 显式声明不支持（DEC-159）
         ctx.eventStream = { submit: vi.fn() } as never;
         const tool: import("../src/tools/index").Tool = {
             schema: {

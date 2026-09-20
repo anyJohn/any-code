@@ -13,7 +13,33 @@ import {
     AUTOCOMPACT_BUFFER,
     MICROCOMPACT_RATIO,
 } from "./compact";
-import { isContextOverflowError } from "./llm";
+import { isContextOverflowError, isImageUnsupportedError } from "./llm";
+
+/**
+ * 图片降级（SPEC-043 DEC-159）：vision 缺省开后，未声明能力的模型可能被 provider
+ * 以 4xx 拒绝 image_url 块——此时把带图消息整体替换为文本占位，同一轮重发。
+ * 处理完所有带图消息（user parts 与工具合成 user 消息两种形态），返回替换条数（0 = 无需降级）。
+ */
+function stripImagesToTextPlaceholder(messages: ChatMessage[]): number {
+    let n = 0;
+    for (let k = 0; k < messages.length; k++) {
+        const m = messages[k];
+        if (!Array.isArray(m.content)) continue;
+        const parts = m.content as unknown as Array<Record<string, unknown>>;
+        const images = parts.filter((p) => p?.type === "image_url");
+        if (images.length === 0) continue;
+        const text = parts
+            .filter((p) => p?.type === "text")
+            .map((p) => String(p.text ?? ""))
+            .join("\n");
+        messages[k] = {
+            role: m.role,
+            content: `${text}\n\n[Image attached but the model rejected image input. ${images.length} image(s) were removed to keep the request valid. Ask the user to describe the image or switch to a vision-capable model.]`,
+        } as ChatMessage;
+        n++;
+    }
+    return n;
+}
 
 /**
  * AR-23 日志不变式：统计"未确认落盘却进入了模型请求"的非 system 消息数。
@@ -61,12 +87,14 @@ export async function agentLoop(
     // AgentDefinition.maxIterations 仍可为 sub-agent 设上限）。0/负数同样视为不设限。
     const maxIter = maxIterations && maxIterations > 0 ? maxIterations : Infinity;
     const textContent = userSpec?.content ?? task;
-    // 用户贴图 → 多模态 parts（视觉模型）或文本占位（非视觉，I-001）
+    // 用户贴图 → 多模态 parts（视觉模型）或文本占位（显式声明不支持，I-001）
     const userMsg: ChatMessage = (() => {
         if (!userSpec?.images?.length) {
             return { role: "user" as const, content: textContent };
         }
-        if (ctx.vision === true) {
+        // DEC-159：缺省视为支持（未声明 = 支持）；仅显式 vision:false 才走降级。
+        // 未声明而实际不支持 → provider 4xx，由 catch 分支去图重试兜底。
+        if (ctx.vision !== false) {
             return {
                 role: "user" as const,
                 content: [
@@ -95,6 +123,8 @@ export async function agentLoop(
     let lastUsage: { prompt_tokens: number } | undefined;
     // AR-9：被动压缩只试一次（压缩后仍超限则原错误上抛，避免循环）
     let reactiveCompacted = false;
+    // SPEC-043 DEC-159：图片降级只试一次（去图后重发仍失败 = 真错误，上抛）
+    let imageDegraded = false;
     for (let i = 0; i < maxIter; i++) {
         // 迭代边界先查中断：stop() 已 abort 的话直接返回，不发起 LLM 调用
         if (ctx.signal.aborted) {
@@ -245,6 +275,25 @@ export async function agentLoop(
             // callLLM 流式 abort 时返回截断（不抛），此处只兜底其他异常
             if (ctx.signal.aborted) {
                 return { result: "[stopped]", messages, stopReason: "stopped" };
+            }
+            // SPEC-043 DEC-159 图片降级：vision 缺省开（未声明=支持），但模型真不支持时
+            // provider 会 4xx 拒绝 image_url 块 → 去掉图片转文本占位后重试同一轮。
+            // 只降级一次（降级后无图可去，再失败就是真错误）。
+            if (ctx.llm && !imageDegraded && isImageUnsupportedError(err)) {
+                const n = stripImagesToTextPlaceholder(messages);
+                if (n > 0) {
+                    imageDegraded = true;
+                    // 后续轮次不再注入工具结果图片（同一模型同样会拒）
+                    ctx.vision = false;
+                    // 落盘同步：否则 reload 后 messages 又从 session 读回带图版本，重蹈覆辙
+                    await onCompact?.(messages);
+                    ctx.eventStream.submit({
+                        type: "Warning",
+                        message: `当前模型不支持图片输入（${(err as Error).message.slice(0, 80)}），已移除 ${n} 条消息中的图片后重试。可在设置页关掉该模型的「视觉能力」开关（省掉这次无效往返），或换用支持视觉的模型。`,
+                    });
+                    i -= 1; // 重试本轮（continue 会 i++，此处抵消）
+                    continue;
+                }
             }
             // AR-9 错误恢复梯度：上下文超限被 provider 拒绝 → 被动压缩后重试同一轮
             if (ctx.llm && !reactiveCompacted && isContextOverflowError(err)) {

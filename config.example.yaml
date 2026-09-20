@@ -12,7 +12,7 @@ providers:
     models: # 该 provider 支持的模型列表
       - id: gpt-4o # 调 API 的真实模型名
         name: GPT-4o # 展示名（可选）
-        vision: true # 可选，该模型支持图片输入（image_url）；缺省 false
+        vision: true # 可选，该模型支持图片输入（image_url）；缺省 true，仅显式 false 才算不支持
       - id: gpt-4o-mini
         name: GPT-4o Mini
     defaultModel: gpt-4o # 当前生效模型 id

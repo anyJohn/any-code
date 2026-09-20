@@ -49,4 +49,13 @@ describe("ProviderItem 开关（streaming / vision）", () => {
         expect(switches[0].getAttribute("data-state")).toBe("checked");
         expect(switches[1].getAttribute("data-state")).toBe("unchecked");
     });
+
+    it("DEC-159 缺省开：新增模型行的 vision 开关默认选中", () => {
+        renderItem(); // emptyProvider 的默认模型
+        expect(
+            screen
+                .getAllByRole("switch", { name: "视觉能力" })[0]
+                .getAttribute("data-state")
+        ).toBe("checked");
+    });
 });

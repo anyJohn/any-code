@@ -45,8 +45,9 @@ export interface ToolContext {
     };
     /** 命名 provider 表（FR-11）：sub-agent 按 def.provider 覆盖 llm 时查此表 */
     providers?: Record<string, import("./config").LlmProvider>;
-    /** 当前模型是否支持视觉输入（SPEC-043 DEC-154）：toolCall 注入图片块前判定（I-001）。
-     *  undefined = 未声明（保守按不支持处理）。 */
+    /** 当前模型是否支持视觉输入（SPEC-043 DEC-159）：toolCall 注入图片块前判定。
+     *  缺省/undefined = 支持（未声明 = 支持）；仅显式 false 才降级为文本占位。
+     *  未声明而实际不支持 → provider 4xx → core.ts 去图重试兜底。 */
     vision?: boolean;
     /** 当前 sub-agent 委托深度（FR-11）：主 agent 0；AgentTool 内 +1，超 def.maxDepth 拒绝 */
     subagentDepth?: number;

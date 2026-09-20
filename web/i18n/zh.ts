@@ -216,7 +216,7 @@ export const zh: Record<string, string> = {
     "providerItem.streamingHint": "关闭后等完整回复一次性返回（部分 provider 不支持流式）",
     "providerItem.visionLabel": "视觉能力",
     "providerItem.visionShort": "视觉",
-    "providerItem.visionHint": "该模型支持图片输入（vision）。仅当前生效模型的开关会被使用——切到未开启的模型时，图片会降级为文字提示。",
+    "providerItem.visionHint": "该模型支持图片输入（vision），默认开启。仅当前生效模型的开关会被使用——关掉后图片降级为文字提示；开着但模型实际不支持时，请求被拒后会自动去图重试并提示。",
     "providerItem.test": "测试",
     "providerItem.testFailed": "测试模型失败",
     "providerItem.testHint": "测试通过可作默认模型",

@@ -21,8 +21,9 @@ import {
 
 /**
  * 一个模型：id（调 API 的真实模型名）+ name（展示名，可选）。
- * vision（SPEC-043 DEC-154）：模型是否支持图片输入（image_url 内容块）。
- * 缺省 false——非视觉模型收到图片块时由发送方降级为文本占位（I-001）。
+ * vision（SPEC-043 DEC-154 → DEC-159）：模型是否支持图片输入（image_url 内容块）。
+ * 缺省 true（未声明 = 支持）；显式 false 时由发送方降级为文本占位（I-001）。
+ * 缺省翻开的兜底：未声明而实际不支持 → provider 4xx → core.ts 去图重试（DEC-159）。
  */
 export interface LlmModel {
     id: string;
