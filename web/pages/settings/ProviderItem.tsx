@@ -21,6 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { ProviderForm, ModelTestResult } from "./model";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 /** 单个 provider：可折叠卡片（头部 = 已提交名称 + 默认模型 + 删除），体内是完整表单。
  *  名称提交（Enter/blur）后才同步标题/下拉框；空名红框拦截。 */
@@ -106,7 +107,10 @@ export function ProviderItem({
         );
         const fresh = [...selectedIds].filter((id) => !existing.has(id));
         patchProvider(index, {
-            models: [...p.models, ...fresh.map((id) => ({ id, name: "" }))],
+            models: [
+                ...p.models,
+                ...fresh.map((id) => ({ id, name: "", vision: false })),
+            ],
         });
         if (!p.defaultModel.trim() && fresh.length) {
             patchProvider(index, { defaultModel: fresh[0] });
@@ -463,6 +467,43 @@ export function ProviderItem({
                                                 </span>
                                             );
                                         })()}
+                                        {/* vision（SPEC-043 DEC-154）：模型级图片输入能力——只有当前生效模型的开关被 domain 消费 */}
+                                        <span
+                                            className="flex items-center gap-1.5 shrink-0"
+                                            title={t("providerItem.visionHint")}
+                                        >
+                                            <Switch
+                                                checked={m.vision}
+                                                onCheckedChange={(v) =>
+                                                    patchProvider(index, {
+                                                        models: p.models.map(
+                                                            (x, xidx) =>
+                                                                xidx === mi
+                                                                    ? {
+                                                                          ...x,
+                                                                          vision: v,
+                                                                      }
+                                                                    : x
+                                                        ),
+                                                    })
+                                                }
+                                                aria-label={t(
+                                                    "providerItem.visionLabel"
+                                                )}
+                                            />
+                                            <span
+                                                className={cn(
+                                                    "text-[10px]",
+                                                    m.vision
+                                                        ? "text-foreground"
+                                                        : "text-muted-foreground"
+                                                )}
+                                            >
+                                                {t(
+                                                    "providerItem.visionShort"
+                                                )}
+                                            </span>
+                                        </span>
                                     </div>
                                 ))}
                                 <div className="flex items-center gap-2">
@@ -500,7 +541,11 @@ export function ProviderItem({
                                         patchProvider(index, {
                                             models: [
                                                 ...p.models,
-                                                { id: "", name: "" },
+                                                {
+                                                    id: "",
+                                                    name: "",
+                                                    vision: false,
+                                                },
                                             ],
                                         })
                                     }
@@ -536,21 +581,28 @@ export function ProviderItem({
                                     </SelectContent>
                                 </Select>
                             </label>
-                            <label className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    className="size-3.5 accent-primary"
+                            <div className="flex items-center justify-between gap-2 pt-1">
+                                <span className="flex flex-col gap-0.5 min-w-0">
+                                    <span className="text-xs text-foreground">
+                                        {t("providerItem.streamingLabel")}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground">
+                                        {t("providerItem.streamingHint")}
+                                    </span>
+                                </span>
+                                <Switch
+                                    className="shrink-0"
                                     checked={p.streaming}
-                                    onChange={(e) =>
+                                    onCheckedChange={(v) =>
                                         patchProvider(index, {
-                                            streaming: e.target.checked,
+                                            streaming: v,
                                         })
                                     }
+                                    aria-label={t(
+                                        "providerItem.streamingLabel"
+                                    )}
                                 />
-                                <span className="text-xs text-muted-foreground">
-                                    {t("providerItem.streamingLabel")}
-                                </span>
-                            </label>
+                            </div>
                         </div>
                     </CollapsibleContent>
                 </div>

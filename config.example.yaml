@@ -7,11 +7,12 @@ providers:
   openai:
     apiKey: sk-your-key
     baseURL: https://api.openai.com/v1 # 可选
-    streaming: true # 可选，缺省 true
+    streaming: true # 可选，缺省 true；false = 等完整回复一次性返回
     contextWindow: 128000 # 可选，缺省 128000
     models: # 该 provider 支持的模型列表
       - id: gpt-4o # 调 API 的真实模型名
         name: GPT-4o # 展示名（可选）
+        vision: true # 可选，该模型支持图片输入（image_url）；缺省 false
       - id: gpt-4o-mini
         name: GPT-4o Mini
     defaultModel: gpt-4o # 当前生效模型 id

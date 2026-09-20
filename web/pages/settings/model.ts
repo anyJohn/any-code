@@ -14,7 +14,8 @@ export interface ConfigResponse {
         {
             apiKey: string;
             baseURL?: string;
-            models: { id: string; name?: string }[];
+            /** vision：模型级视觉能力（SPEC-043 DEC-154），缺省 false */
+            models: { id: string; name?: string; vision?: boolean }[];
             defaultModel: string;
             streaming: boolean;
             contextWindow?: number;
@@ -42,7 +43,8 @@ export interface ProviderForm {
     name: string;
     apiKey: string;
     baseURL: string;
-    models: { id: string; name: string }[];
+    /** vision：该模型是否支持图片输入（image_url 内容块）；仅当前生效模型的能力被 domain 消费 */
+    models: { id: string; name: string; vision: boolean }[];
     defaultModel: string;
     streaming: boolean;
     /** contextWindow 输入（字符串，空=auto：探测/模型表/128000） */
@@ -68,7 +70,7 @@ export const emptyProvider = (): ProviderForm => ({
     name: "",
     apiKey: "",
     baseURL: "",
-    models: [{ id: "", name: "" }],
+    models: [{ id: "", name: "", vision: false }],
     defaultModel: "",
     streaming: true,
     contextWindow: "",
@@ -128,6 +130,7 @@ export function fromResponse(res: ConfigResponse): {
             const models = (p.models ?? []).map((m) => ({
                 id: m.id ?? "",
                 name: m.name ?? "",
+                vision: m.vision === true,
             }));
             // defaultModel 不在 models 中 → 取首个，避免下拉框初始显示空白
             const validIds = models.map((m) => m.id).filter(Boolean);
@@ -200,7 +203,12 @@ export function toConfigShape(
         const name = p.name.trim();
         if (!name) continue;
         const models = p.models
-            .map((m) => ({ id: m.id.trim(), name: m.name.trim() }))
+            .map((m) => ({
+                id: m.id.trim(),
+                name: m.name.trim(),
+                // 仅显式开启才写 vision——缺省 false 不落盘，yaml 保持干净
+                ...(m.vision ? { vision: true } : {}),
+            }))
             .filter((m) => m.id);
         // defaultModel 空 + models 非空 → 取首个，避免表单未选导致后端校验失败
         const defaultModel =

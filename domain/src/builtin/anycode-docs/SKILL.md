@@ -16,9 +16,9 @@ providers: # 命名 provider map
   <name>:
     apiKey: sk-...
     baseURL: https://.../v1 # 可选，OpenAI 兼容（也支持 protocol: anthropic）
-    models: [{ id: gpt-4o, name: GPT-4o }]
+    models: [{ id: gpt-4o, name: GPT-4o, vision: true }] # vision: 可选，该模型支持图片输入（缺省 false）
     defaultModel: gpt-4o
-    streaming: true # 可选，缺省 true
+    streaming: true # 可选，缺省 true；false = 等完整回复一次性返回
     contextWindow: 128000 # 可选，与自动探测取 min
     maxOutputTokens: 4096 # 可选，配才传 max_tokens
 default: <name> # 当前生效 provider
