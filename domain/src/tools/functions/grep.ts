@@ -1,7 +1,7 @@
 import { runRipgrep } from "../../ripgrep";
 import type { ToolContext } from "../../context";
 import { resolvePath } from "../../workspace";
-import { statSync } from "node:fs";
+import { statSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
 
 interface GrepArgs {
@@ -14,6 +14,42 @@ interface GrepArgs {
 }
 
 const MAX_MATCHES = 250;
+
+/**
+ * rg 失败原因诊断（bugfix 2026-09-20）：原先 spawn 失败（code=null）时错误对象被丢弃，
+ * stderr 为空 → 只能回退成误导性的「ripgrep 启动失败」，真实原因（cwd 不存在 / 二进制缺失 /
+ * 权限）全部丢失。这里按 errno 给出可执行的诊断，并附上 cwd 便于定位。
+ */
+function describeRgFailure({
+    stderr,
+    spawnError,
+    cwd,
+}: {
+    stderr: string;
+    spawnError?: NodeJS.ErrnoException;
+    cwd: string;
+}): string {
+    const stderrText = stderr.trim();
+    if (!spawnError) {
+        // rg 自己退出码 2：stderr 有真实原因
+        return stderrText || `ripgrep 执行失败（cwd=${cwd}）`;
+    }
+    const code = spawnError.code;
+    if (code === "ENOENT") {
+        // 区分「搜索路径不存在」与「rg 二进制不存在」——两者的修法完全不同
+        const cwdExists = existsSync(cwd);
+        return cwdExists
+            ? `ripgrep binary not found（重装 anycode，或设 ANYCODE_RG_PATH 指向 rg 二进制）`
+            : `搜索路径不存在：${cwd}（先用 explore 或 glob 确认路径，注意路径相对工作区根解析）`;
+    }
+    if (code === "EACCES") {
+        return `无权限访问：${cwd}（${spawnError.message}）`;
+    }
+    if (code === "ENOTDIR") {
+        return `路径中某一段不是目录：${cwd}`;
+    }
+    return `${spawnError.message}（cwd=${cwd}）`;
+}
 
 /**
  * 内容搜索。用 ripgrep `rg --regexp=PATTERN`——尊重 .gitignore、默认跳 VCS/node_modules。
@@ -63,11 +99,11 @@ export const grepFunc = async (
         // 显式传 path：rg 无 path 且 stdin 非 tty 时会读 stdin 阻塞，故显式给搜索路径
         rgArgs.push(rgPath ?? cwd);
 
-        const { stdout, stderr, code } = await runRipgrep(rgArgs, { cwd });
+        const { stdout, stderr, code, spawnError } = await runRipgrep(rgArgs, { cwd });
 
         // code 1 = 无匹配（正常），code 2 = 错误；null = spawn 失败——绝不能解释为"无匹配"
         if (code === 2 || code === null) {
-            return `Error: ${stderr.trim() || `ripgrep 启动失败（cwd=${cwd}）`}`;
+            return `Error: ${describeRgFailure({ stderr, spawnError, cwd })}`;
         }
 
         const lines = stdout.split("\n").filter((l) => l !== "");

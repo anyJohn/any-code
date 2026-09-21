@@ -28,6 +28,22 @@ function cdpUrlOf(ctx: ToolContext): string {
     return typeof cfg.cdpUrl === "string" ? cfg.cdpUrl : "";
 }
 
+/** 从 cdpUrl 反推调试端口，用于把报错文案里的端口对齐用户实际配置（bugfix 2026-09-20：
+ *  原先硬编码 9222，用户配 9333 时提示的端口是错的，排查被带偏）。 */
+function portOf(cdpUrl: string): string {
+    try {
+        return new URL(cdpUrl).port || "9222";
+    } catch {
+        return "9222";
+    }
+}
+
+/** 启动浏览器的提示：端口取自实际配置，而非硬编码 9222。 */
+function startHint(cdpUrl: string): string {
+    const port = portOf(cdpUrl);
+    return `chrome --remote-debugging-port=${port}`;
+}
+
 // ———— 连接缓存（按 cdpUrl 记忆；context 取第一个，页面取最近活跃页） ————
 let conn: { url: string; browser: Browser } | null = null;
 
@@ -62,7 +78,7 @@ async function browserOf(cdpUrl: string): Promise<Browser> {
     }
     if (!cdpUrl)
         throw new Error(
-            "cdpUrl is not configured (tools.browser_use.config.cdpUrl). Start the browser first: chrome --remote-debugging-port=9222"
+            "cdpUrl is not configured (tools.browser_use.config.cdpUrl). Set it in settings, then start the browser with remote debugging (chrome --remote-debugging-port=<port>)."
         );
     try {
         const browser = await chromium.connectOverCDP(cdpUrl, {
@@ -75,40 +91,60 @@ async function browserOf(cdpUrl: string): Promise<Browser> {
         const kind = await probeCdp(cdpUrl);
         if (kind === "refused")
             throw new Error(
-                `Browser is not running: no service is listening on ${cdpUrl}. Start it with remote debugging: chrome --remote-debugging-port=9222 (if the port is not 9222, use the actual port and verify cdpUrl in settings)`
+                `Browser is not running: no service is listening on ${cdpUrl}. Start it with: ${startHint(cdpUrl)} (or fix cdpUrl in settings if the port differs)`
             );
         if (kind === "http")
             throw new Error(
                 `cdpUrl may be misconfigured: a service is listening on ${cdpUrl} but it is not a browser debugging endpoint (/json/version responded abnormally). Verify cdpUrl in settings points to the browser's --remote-debugging-port`
             );
         throw new Error(
-            `CDP connection failed (endpoint reachable, handshake error): ${raw}. Try restarting the browser: chrome --remote-debugging-port=9222`
+            `CDP connection failed (endpoint reachable, handshake error): ${raw}. Try restarting the browser: ${startHint(cdpUrl)}`
         );
     }
 }
 
+/** 上下文里是否有可用 page（bugfix 2026-09-20：原先只看 contexts()[0] 存不存在，
+ *  但"有 context 却零 page"（窗口全关只剩后台进程 / 刚启动没开页）会让 activePage
+ *  拿到 undefined 并误报 "no open window"）。 */
+function firstPage(browser: Browser): Page | undefined {
+    for (const ctx of browser.contexts()) {
+        const p = ctx.pages()[0];
+        if (p) return p;
+    }
+    return undefined;
+}
+
 async function contextOf(cdpUrl: string, browser: Browser): Promise<BrowserContext> {
-    const ctx = browser.contexts()[0];
-    if (ctx) return ctx;
-    // 无上下文 = 调试端口活着但没有任何页面目标（窗口全关只剩后台进程 / 刚启动没开页）。
-    // 经 CDP HTTP 端点自开一个空白页（新版 Chrome 要求 PUT），Playwright 随即能看到上下文。
+    // 已有可用 page → 直接用它的 context
+    const existing = firstPage(browser);
+    if (existing) return existing.context();
+
+    // 有 context 但零 page（或压根没 context）：经 CDP HTTP 端点自开一个空白页
+    //（新版 Chrome 要求 PUT），Playwright 随即能看到上下文。
     try {
         await fetch(cdpUrl.replace(/\/+$/, "") + "/json/new?about:blank", { method: "PUT" });
     } catch {
         // 开页失败走下方报错
     }
-    const retry = browser.contexts()[0];
-    if (retry) return retry;
+    const retry = firstPage(browser);
+    if (retry) return retry.context();
+    // 兜底：仍有 context（只是没 page）也返回它——后续 activePage 会开新页
+    const anyCtx = browser.contexts()[0];
+    if (anyCtx) return anyCtx;
     throw new Error(
-        "No usable page on the CDP endpoint: the browser runs in debug mode but has no open window. Keep at least one window open (or restart: chrome --remote-debugging-port=9222 and open any page)"
+        `No usable page on the CDP endpoint: the browser is reachable at ${cdpUrl} but exposes no page target, and opening a blank tab via /json/new failed. Open a window in that browser, or restart it: ${startHint(cdpUrl)}`
     );
 }
 
 async function activePage(cdpUrl: string, browser: Browser): Promise<Page> {
-    const pages = (await contextOf(cdpUrl, browser)).pages();
+    const ctx = await contextOf(cdpUrl, browser);
+    const pages = ctx.pages();
     // 取最后一个非 about:blank 页；全空白则取最后一页
     const real = pages.filter((p) => !p.url().startsWith("about:"));
-    return (real[real.length - 1] ?? pages[pages.length - 1]) as Page;
+    const picked = real[real.length - 1] ?? pages[pages.length - 1];
+    if (picked) return picked;
+    // 零 page：现开一个（此前会返回 undefined 让调用方崩在 page.xxx 上）
+    return await ctx.newPage();
 }
 
 /** ref（ariaSnapshot ai 模式生成，形如 f1e3）→ aria-ref 定位器；否则按 CSS 选择器。 */

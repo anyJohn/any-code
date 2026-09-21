@@ -8,6 +8,8 @@ export interface RipgrepResult {
     stdout: string;
     stderr: string;
     code: number | null;
+    /** spawn 层失败（非 rg 退出码）：ENOENT/cwd 不存在/权限等。code===null 时必有值。 */
+    spawnError?: NodeJS.ErrnoException;
 }
 
 let cachedRg: string | undefined;
@@ -67,8 +69,9 @@ export function runRipgrep(
                     child.stderr.on("data", (d: Buffer) => {
                         stderr += d.toString();
                     });
-                    child.on("error", () =>
-                        resolve({ stdout, stderr, code: null })
+                    child.on("error", (err: NodeJS.ErrnoException) =>
+                        // 保留原始错误：ENOENT（cwd 不存在/二进制缺失）、EACCES 等要靠它区分文案
+                        resolve({ stdout, stderr, code: null, spawnError: err })
                     );
                     child.on("close", (code) =>
                         resolve({ stdout, stderr, code })
@@ -79,5 +82,6 @@ export function runRipgrep(
             stdout: "",
             stderr: `ripgrep: ${(e as Error).message}`,
             code: null,
+            spawnError: e as NodeJS.ErrnoException,
         }));
 }

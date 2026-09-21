@@ -118,3 +118,45 @@ describe("browser_* 原生工具（CDP，真 chromium）", () => {
         expect(String(r)).toContain("action");
     });
 });
+
+// bugfix 2026-09-20：原先只检查 contexts()[0] 是否存在，但"有 context 却零 page"
+// （窗口全关只剩后台进程 / 刚启动没开页）会取到 undefined 并误报 "no open window"。
+describe("browser_use 零页面自愈与文案对齐（bugfix）", () => {
+    it("端口无服务 → 提示里的端口取自配置，不是硬编码 9222", async () => {
+        // 用一个确定没开的端口
+        const dead = "http://127.0.0.1:19999";
+        const out = await browserUseTool.handler({ action: "content" }, ctx(dead));
+        const s = String(out);
+        expect(s).toMatch(/Browser is not running/);
+        expect(s).toContain("--remote-debugging-port=19999"); // 对齐实际配置
+        expect(s).not.toContain("9222"); // 旧的硬编码不得出现
+    });
+
+    it.skipIf(!chromeBin)(
+        "关掉所有页面后仍可用（自愈：自动开空白页，不再误报 no open window）",
+        async () => {
+            const cdp = `http://127.0.0.1:${port}`;
+            // 关掉该浏览器下所有 page target，造出"有 context 零 page"状态
+            const list = (await (await fetch(`${cdp}/json/list`)).json()) as Array<{
+                id: string;
+                type: string;
+            }>;
+            for (const t of list.filter((x) => x.type === "page")) {
+                await fetch(`${cdp}/json/close/${t.id}`);
+            }
+            await new Promise((r) => setTimeout(r, 500));
+            const after = (await (await fetch(`${cdp}/json/list`)).json()) as Array<{
+                type: string;
+            }>;
+            expect(after.filter((t) => t.type === "page")).toHaveLength(0); // 前置条件成立
+
+            // 零 page 状态下调用走 activePage 的 action：应自愈成功，而不是报 "no open window"
+            // （tabs 走 contextOf，测不到 activePage 的 undefined 路径，故用 eval）
+            const r = await browserUseTool.handler({ action: "eval", js: "1+1" }, ctx(cdp));
+            const s = String(r);
+            expect(s).not.toMatch(/No usable page|no open window/);
+            expect(s).toContain("2"); // 真的执行成功（自愈后拿到了页面）
+        },
+        30000
+    );
+});
