@@ -135,8 +135,10 @@ export function useCommand({ appendSystem, submit, projectKey, rootPath, current
     }, [customCommands, t]);
 
     // 执行斜杠指令：name=命令名（无 /），args=首个空格之后的参数串
+    /** raw：runRawCommand 传入的用户原始输入——未知命令降级为普通消息时原样送模型
+     *  （todo #18：`/home/...` 路径、拼错的命令都不该被拦成"未知指令"错误）。 */
     const executeCommand = useCallback(
-        async (name: string, args: string) => {
+        async (name: string, args: string, raw?: string) => {
             switch (name) {
                 case "new":
                     navigate("/chat/new");
@@ -279,7 +281,9 @@ export function useCommand({ appendSystem, submit, projectKey, rootPath, current
                         submit(`/${name}${args ? ` ${args}` : ""}`);
                         return;
                     }
-                    appendSystem(t("command.unknownCommand", { name }));
+                    // 未知命令降级为普通消息（todo #18）：绝对路径等以 / 开头的
+                    // 普通输入不该报错；拼错的命令交模型自会提示纠正
+                    submit(raw ?? `/${name}${args ? ` ${args}` : ""}`);
                 }
             }
         },
@@ -315,7 +319,8 @@ export function useCommand({ appendSystem, submit, projectKey, rootPath, current
             const rest = rawDraft.slice(1).trim();
             const [name, ...argParts] = rest.split(/\s+/);
             setDraft("");
-            void executeCommand(name ?? "", argParts.join(" "));
+            // raw 原样透传：未知命令降级为普通消息时不得走 "name args" 重组（丢格式）
+            void executeCommand(name ?? "", argParts.join(" "), rawDraft.trim());
         },
         [executeCommand]
     );

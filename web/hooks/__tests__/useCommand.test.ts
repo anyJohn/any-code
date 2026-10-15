@@ -149,3 +149,28 @@ describe("useCommand /compact (AC-006)", () => {
         );
     });
 });
+
+describe("未知命令降级为普通消息（todo #18）", () => {
+    beforeEach(() => vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("[]")))));
+    afterEach(() => vi.unstubAllGlobals());
+
+    it("绝对路径输入 → 原样 submit，不报未知指令", async () => {
+        const deps = mkDeps();
+        const { result } = renderHook(() => useCommand(deps));
+        await act(async () => {
+            result.current.runRawCommand("/home/user/项目/opensource-agents/");
+        });
+        expect(deps.submit).toHaveBeenCalledWith("/home/user/项目/opensource-agents/");
+        expect(deps.appendSystem).not.toHaveBeenCalled();
+    });
+
+    it("拼错的命令 → 原样 submit（交模型提示纠正）", async () => {
+        const deps = mkDeps();
+        const { result } = renderHook(() => useCommand(deps));
+        await act(async () => {
+            result.current.runRawCommand("/modle gpt");
+        });
+        expect(deps.submit).toHaveBeenCalledWith("/modle gpt");
+        expect(deps.appendSystem).not.toHaveBeenCalled();
+    });
+});

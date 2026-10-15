@@ -99,7 +99,6 @@ export const en: Record<string, string> = {
     "command.rewindUnsupported": "Snapshot rollback not supported in this session",
     "command.sessionList": "Sessions:",
     "command.sessionsDesc": "List recent sessions",
-    "command.unknownCommand": "Unknown command: {name}",
     "common.cancel": "Cancel",
     "common.close": "Close",
     "common.copy": "Copy",

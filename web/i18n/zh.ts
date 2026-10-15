@@ -100,7 +100,6 @@ export const zh: Record<string, string> = {
     "command.rewindUnsupported": "当前会话不支持快照回滚",
     "command.sessionList": "会话列表:",
     "command.sessionsDesc": "列出最近会话",
-    "command.unknownCommand": "未知指令: {name}",
     "common.cancel": "取消",
     "common.close": "关闭",
     "common.copy": "复制",
