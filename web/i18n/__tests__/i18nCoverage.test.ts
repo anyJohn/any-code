@@ -65,4 +65,19 @@ describe("i18n key 覆盖（缺 key 回退裸 key 字符串——静态断言防
         expect(missingZh, `zh 缺 domain key: ${missingZh.join(", ")}`).toEqual([]);
         expect(missingEn, `en 缺 domain key: ${missingEn.join(", ")}`).toEqual([]);
     });
+
+    it("全字典占位符 zh/en 一致（防渲染时丢参数显示 {xxx} 原文）", () => {
+        const placeholders = (s: string) =>
+            [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+        const mismatched = Object.keys(DICTS.zh).filter(
+            (k) =>
+                k in DICTS.en &&
+                JSON.stringify(placeholders(DICTS.zh[k])) !==
+                    JSON.stringify(placeholders(DICTS.en[k]))
+        );
+        expect(
+            mismatched,
+            `占位符不一致: ${mismatched.join(", ")}`
+        ).toEqual([]);
+    });
 });
