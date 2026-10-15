@@ -58,7 +58,7 @@ export function InteractionModal({
                                 </span>
                             )}
                             <p className="text-sm text-foreground whitespace-pre-wrap break-words">
-                                {q.question}
+                                {q.questionI18nKey ? t(q.questionI18nKey) : q.question}
                             </p>
                             {q.options && q.options.length > 0 ? (
                                 <>
@@ -104,7 +104,10 @@ export function InteractionModal({
                                                         }
                                                     }}
                                                 >
-                                                    {opt}
+                                                    {/* 本地化只改显示；选中/提交仍是 canonical 值（optionI18nKeys） */}
+                                                    {q.optionI18nKeys?.[opt]
+                                                        ? t(q.optionI18nKeys[opt])
+                                                        : opt}
                                                 </button>
                                             );
                                         })}

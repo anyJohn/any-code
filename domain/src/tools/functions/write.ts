@@ -30,7 +30,7 @@ export const writeFunc = async (
         const stalenessWarn = stalenessWarning(
             ctx.fileState,
             filePath,
-            "覆写"
+            "overwritten"
         );
 
         // 原子写：同目录 temp + rename，同文件系统原子发布，崩溃不留半写

@@ -35,18 +35,18 @@ describe("exploreFunc", () => {
     // 假阴性会让人以为目录存在。现显式报错。
     it("目录不存在 → 明确报错（不再返回空树假装成功）", async () => {
         const out = await exploreFunc({ directoryPath: "no/such/dir" }, P());
-        expect(out).toMatch(/目录不存在/);
+        expect(out).toMatch(/directory does not exist/);
         expect(out).toContain("no/such/dir");
     });
 
     it("路径是文件而非目录 → 提示用 read", async () => {
         const out = await exploreFunc({ directoryPath: "sub/a.ts" }, P());
-        expect(out).toMatch(/不是目录/);
+        expect(out).toMatch(/not a directory/);
         expect(out).toMatch(/read/);
     });
 
     it("工作区外路径 → 路径逃逸拦截", async () => {
         const out = await exploreFunc({ directoryPath: "../../../etc" }, P());
-        expect(out).toMatch(/路径逃逸/);
+        expect(out).toMatch(/Path escapes workspace/);
     });
 });

@@ -50,7 +50,7 @@ describe("writeFunc（SPEC-022）", () => {
             { filePath: "c.txt", content: "new" },
             P(fileState)
         )).content;
-        expect(out).toMatch(/外部改动/);
+        expect(out).toMatch(/changed externally/);
         expect(fs.readFileSync(f).toString()).toBe("new"); // 仍写入
     });
 
@@ -59,6 +59,6 @@ describe("writeFunc（SPEC-022）", () => {
             { filePath: "d.txt", content: "fresh" },
             P()
         )).content;
-        expect(out).not.toMatch(/外部改动/);
+        expect(out).not.toMatch(/changed externally/);
     });
 });

@@ -8,12 +8,12 @@ export const skillFunc = async (
     ctx: ToolContext
 ): Promise<string> => {
     const name = args?.name?.trim();
-    if (!name) return "Error: name 不能为空";
+    if (!name) return "Error: name is required";
     const entry = ctx.skills?.get(name);
     if (!entry) {
         const available = ctx.skills ? [...ctx.skills.keys()].join(", ") : "";
-        return `Error: 技能 "${name}" 不存在。可用技能：${
-            available || "（无）"
+        return `Error: skill "${name}" not found. Available skills: ${
+            available || "(none)"
         }`;
     }
     const dirLine = entry.dir ? `\n<dir>${entry.dir}</dir>` : "";

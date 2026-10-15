@@ -16,14 +16,14 @@ export const mtimeOf = (p: string): number | undefined => {
 export function stalenessWarning(
     fileState: Map<string, number> | undefined,
     filePath: string,
-    action: "编辑" | "覆写"
+    action: "edited" | "overwritten"
 ): string {
     if (!fileState) return "";
     const recorded = fileState.get(filePath);
     if (recorded === undefined) return "";
     const cur = mtimeOf(filePath);
     if (cur !== undefined && Math.abs(cur - recorded) > 1) {
-        return ` [警告: 文件自上次 read 后被外部改动，已${action}]`;
+        return ` [Warning: file changed externally since last read; ${action} anyway]`;
     }
     return "";
 }

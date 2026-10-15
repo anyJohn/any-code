@@ -62,7 +62,7 @@ describe("editFunc（staleness）", () => {
             { filePath: "d.txt", oldString: "world", newString: "anycode" },
             P(fileState)
         )).content;
-        expect(out).toMatch(/外部改动/);
+        expect(out).toMatch(/changed externally/);
         expect(fs.readFileSync(f).toString()).toBe("hello anycode"); // 仍编辑
     });
 
@@ -73,7 +73,7 @@ describe("editFunc（staleness）", () => {
             { filePath: "e.txt", oldString: "world", newString: "x" },
             P()
         )).content;
-        expect(out).not.toMatch(/外部改动/);
+        expect(out).not.toMatch(/changed externally/);
     });
 
     it("编辑后记录新 mtime → 二次编辑无警告（mtime 已对齐）", async () => {
@@ -91,6 +91,6 @@ describe("editFunc（staleness）", () => {
             { filePath: "f.txt", oldString: "hello", newString: "hi" },
             P(fileState)
         );
-        expect(out2.content).not.toMatch(/外部改动/); // mtime 对齐 → 无警告
+        expect(out2.content).not.toMatch(/changed externally/); // mtime 对齐 → 无警告
     });
 });

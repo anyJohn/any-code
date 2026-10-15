@@ -113,7 +113,7 @@ describe("resolveShell（SPEC-024 AC-004）", () => {
         setPlatform("win32");
         vi.mocked(existsSync).mockReturnValue(false);
         expect(() => resolveShell("C:\\Users\\x")).toThrow(
-            /Windows 未找到 Git Bash/
+            /Git Bash not found on Windows/
         );
     });
 });
@@ -125,8 +125,8 @@ describe("executeBashFunc 输出治理（AR-2）", () => {
     it("超限输出：截断标记（总行数）+ spill 文件路径，spill 含全量", async () => {
         const ctx = mkCtx();
         const out = (await executeBashFunc({ command: "seq 1 5000" }, ctx)).content;
-        expect(out).toContain("[输出截断：共 5000 行");
-        const m = out.match(/完整输出已写入文件：([^\s（]+)/);
+        expect(out).toContain("[Output truncated: 5000 lines");
+        const m = out.match(/Full output written to file: ([^\s(]+)/);
         expect(m).toBeTruthy();
         const full = readFileSync(m![1], "utf-8");
         expect(full.split("\n").length).toBeGreaterThanOrEqual(5000);

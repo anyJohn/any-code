@@ -83,15 +83,15 @@ export async function loadWorkspaceExtensions(
                 const def = mod.default;
                 const name = def?.name;
                 if (!name || typeof name !== "string") {
-                    warnings.push(`扩展工具 ${file} 缺少 name，已跳过`);
+                    warnings.push(`Extension tool ${file} is missing name, skipped`);
                     continue;
                 }
                 if (reservedNames.has(name) || tools.some((t) => (t.schema as { function?: { name?: string } }).function?.name === name)) {
-                    warnings.push(`扩展工具 ${file} 的 name "${name}" 与已有工具冲突，已跳过`);
+                    warnings.push(`Extension tool ${file} has name "${name}" which conflicts with an existing tool, skipped`);
                     continue;
                 }
                 if (typeof def.execute !== "function") {
-                    warnings.push(`扩展工具 ${file} 缺少 execute 函数，已跳过`);
+                    warnings.push(`Extension tool ${file} is missing an execute function, skipped`);
                     continue;
                 }
                 const meta: ToolMeta = {
@@ -127,7 +127,7 @@ export async function loadWorkspaceExtensions(
                 });
             } catch (err) {
                 warnings.push(
-                    `扩展工具 ${file} 加载失败：${err instanceof Error ? err.message : String(err)}`
+                    `Extension tool ${file} failed to load: ${err instanceof Error ? err.message : String(err)}`
                 );
             }
         }
@@ -145,7 +145,7 @@ export async function loadWorkspaceExtensions(
             };
         } catch (err) {
             warnings.push(
-                `hooks.mjs 加载失败：${err instanceof Error ? err.message : String(err)}`
+                `hooks.mjs failed to load: ${err instanceof Error ? err.message : String(err)}`
             );
         }
     }

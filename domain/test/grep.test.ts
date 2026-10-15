@@ -68,8 +68,8 @@ describe("grepFunc 错误诊断（spawn 失败不再丢原因）", () => {
             { pattern: "hello", path: "no/such/dir" },
             P()
         );
-        expect(out).toMatch(/搜索路径不存在/);
-        expect(out).not.toMatch(/ripgrep 启动失败/); // 旧的误导文案不得再出现
+        expect(out).toMatch(/Search path does not exist/);
+        expect(out).not.toMatch(/ripgrep failed \(cwd=/); // 旧的误导文案不得再出现
         expect(out).toContain("no/such/dir");
     });
 
@@ -80,7 +80,7 @@ describe("grepFunc 错误诊断（spawn 失败不再丢原因）", () => {
             signal: new AbortController().signal,
         } as ToolContext;
         const out = await grepFunc({ pattern: "hello" }, ctx);
-        expect(out).toMatch(/搜索路径不存在/);
+        expect(out).toMatch(/Search path does not exist/);
         expect(out).toContain("/nonexistent-root-xyz");
     });
 

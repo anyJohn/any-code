@@ -132,7 +132,7 @@ export function resolvePath(workspace: Workspace, userPath: string): string {
     const rel = path.relative(workspace.rootPath, resolved);
     if (rel.startsWith("..") || path.isAbsolute(rel)) {
         throw new Error(
-            `路径逃逸: ${userPath}（超出工作区 ${workspace.rootPath}）`
+            `Path escapes workspace: ${userPath} (outside ${workspace.rootPath})`
         );
     }
     return resolved;

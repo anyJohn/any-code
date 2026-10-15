@@ -41,7 +41,7 @@ export const editFunc = async (
         const stalenessWarn = stalenessWarning(
             ctx.fileState,
             filePath,
-            "编辑"
+            "edited"
         );
 
         await fs.writeFile(

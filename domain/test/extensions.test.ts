@@ -52,7 +52,7 @@ describe("loadWorkspaceExtensions（AR-16）", () => {
         );
         const ext = await loadWorkspaceExtensions({ rootPath: ws, ignoredPatterns: [] }, new Set(["read"]));
         expect(ext.tools).toHaveLength(0);
-        expect(ext.warnings[0]).toContain("冲突");
+        expect(ext.warnings[0]).toContain("conflicts");
     });
 
     it("缺 execute / 缺 name → 跳过 + 告警；坏文件不阻断", async () => {

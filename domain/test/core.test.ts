@@ -227,7 +227,7 @@ describe("agentLoop（core.ts）", () => {
         expect(vi.mocked(callLLM)).toHaveBeenCalledTimes(2);
         expect(res.stopReason).toBe("max_iterations");
         const warnings = (ctx.eventStream.submit as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]).filter((e) => e.type === "Warning");
-        expect(warnings.some((e) => e.message.includes("达到上限"))).toBe(true);
+        expect(warnings.some((e) => e.message.includes("iteration limit"))).toBe(true);
     });
 
     it("AC-002 callLLM 第 6 参 onThinkingDelta → 发 THINKING 事件（SPEC-015）", async () => {
@@ -336,7 +336,7 @@ describe("agentLoop 分级压缩与错误恢复（FR-6 / AR-9）", () => {
         const compacts = (ctx.eventStream.submit as ReturnType<typeof vi.fn>).mock.calls
             .map((c) => c[0])
             .filter((e) => e.type === "Compact");
-        expect(compacts.some((e) => e.message.includes("被动压缩"))).toBe(true);
+        expect(compacts.some((e) => e.message.includes("reactively compacted"))).toBe(true);
     });
 });
 
@@ -389,7 +389,7 @@ describe("agentLoop 多模态用户消息（SPEC-043 B-003/I-001）", () => {
         });
         const content = messages[0].content as string;
         expect(typeof content).toBe("string");
-        expect(content).toContain("不支持视觉输入");
+        expect(content).toContain("does not support vision input");
         expect(content).not.toContain("image_url");
     });
 });
@@ -427,7 +427,7 @@ describe("agentLoop 图片降级（SPEC-043 DEC-159：缺省开 + provider 拒�
         const warnings = (ctx.eventStream.submit as ReturnType<typeof vi.fn>).mock.calls
             .map((c) => c[0])
             .filter((e) => e.type === "Warning");
-        expect(warnings.some((e) => e.message.includes("不支持图片输入"))).toBe(true);
+        expect(warnings.some((e) => e.message.includes("does not support image input"))).toBe(true);
         // ctx.vision 已翻转，后续轮次不再注入工具结果图片
         expect(ctx.vision).toBe(false);
     });

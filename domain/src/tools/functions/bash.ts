@@ -37,7 +37,7 @@ function detectBackgroundEscape(command: string): string | null {
     const stripped = command.replace(/"[^"]*"|'[^']*'/g, '""').trim();
     if (/^nohup\s/.test(stripped) || /^setsid\s/.test(stripped)) return "nohup/setsid";
     if (/\s&\s*disown\b/.test(stripped)) return "& disown";
-    if (/&\s*$/.test(stripped)) return "尾部的 &";
+    if (/&\s*$/.test(stripped)) return "trailing &";
     return null;
 }
 
@@ -82,11 +82,11 @@ function capBashOutput(out: string): CappedOutput {
     const spill: string | null = spillOutput(out);
     const spillFile = spill ?? undefined;
     const spillNote = spillFile
-        ? `\n[完整输出已写入文件：${spillFile}（可用 read 工具分段查看）]`
+        ? `\n[Full output written to file: ${spillFile} (use the read tool to view it in chunks)]`
         : "";
     const text =
-        `${kept}\n[输出截断：共 ${lines.length} 行 / ${Buffer.byteLength(out, "utf-8")} 字节，` +
-        `仅保留前 ${kept.split("\n").length} 行]${spillNote}`;
+        `${kept}\n[Output truncated: ${lines.length} lines / ${Buffer.byteLength(out, "utf-8")} bytes total, ` +
+        `only the first ${kept.split("\n").length} lines kept]${spillNote}`;
     return { text, truncated: true, spillFile };
 }
 
@@ -111,7 +111,7 @@ export function resolveShell(
     const binary = bashCandidates(gitBashPath)[0];
     if (!binary) {
         throw new Error(
-            "Windows 未找到 Git Bash（设 ANYCODE_BASH_PATH，或在 ~/.anycode/config.yaml 配 gitBashPath，或安装 Git for Windows）"
+            "Git Bash not found on Windows (set ANYCODE_BASH_PATH, configure gitBashPath in ~/.anycode/config.yaml, or install Git for Windows)"
         );
     }
     return { binary, cwd };
@@ -147,7 +147,7 @@ export const executeBashFunc = async (
             const escape = detectBackgroundEscape(args.command ?? "");
             if (escape) {
                 finish({
-                    content: `Error: 检测到 shell 后台符（${escape}）。需要后台运行时，请改用 run_in_background 参数——任务会进入可查询（job_output）、可终止（job_kill）的注册表，用户面板也可见。直接用 & 会留下无人回收的孤儿进程且输出丢失。`,
+                    content: `Error: shell background operator detected (${escape}). To run in the background, use the run_in_background parameter instead — the task enters a registry that is queryable (job_output), killable (job_kill), and visible in the user's panel. Using & directly leaves an orphan process with no reaper and loses its output.`,
                 });
                 return;
             }
@@ -161,7 +161,7 @@ export const executeBashFunc = async (
         // FR-13 后台执行：注册 job 立即返回（不占 120s 超时、不阻塞 loop）
         if (args.run_in_background) {
             if (!ctx.jobs) {
-                finish({ content: "Error: 后台任务不可用（当前环境未启用任务注册表）" });
+                finish({ content: "Error: background jobs are unavailable (job registry not enabled in this environment)" });
                 return;
             }
             try {
@@ -169,8 +169,8 @@ export const executeBashFunc = async (
                 const id = ctx.jobs.launch(binary, ["-c", args.command], cwd, intent);
                 finish({
                     content:
-                        `后台任务已启动：job_id=${id}\n` +
-                        `用 job_output 工具查看输出（参数 id="${id}"），完成后用 job_kill 终止（如需）。`,
+                        `Background task started: job_id=${id}\n` +
+                        `Use the job_output tool to view output (id="${id}"), and job_kill to terminate it when done (if needed).`,
                     data: { jobId: id, background: true },
                 });
             } catch (err) {

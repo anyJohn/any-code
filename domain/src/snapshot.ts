@@ -161,7 +161,7 @@ export function resolveGitPath(gitHint?: string): string | null {
 function warnGitUnavailableOnce(): void {
     if (warnedUnavailable) return;
     warnedUnavailable = true;
-    console.warn("[Snapshot] git 不可用，快照功能已停用（写类操作将没有回滚点）");
+    console.warn("[Snapshot] git unavailable, snapshot feature disabled (write operations will have no rollback point)");
 }
 
 /** 快照仓库根：~/.anycode/snapshots/<projectKey>/ */
@@ -300,25 +300,25 @@ export function createSnapshotService(
         },
 
         async rollbackTo(id: string): Promise<void> {
-            if (!(await ensureRepo())) throw new Error("git 不可用，无法回滚");
+            if (!(await ensureRepo())) throw new Error("git unavailable, cannot roll back");
             // hash 格式白名单先行（防参数注入 checkout）
-            if (!/^[0-9a-f]{7,40}$/.test(id)) throw new Error("非法快照 id");
+            if (!/^[0-9a-f]{7,40}$/.test(id)) throw new Error("invalid snapshot id");
             // 校验 id 存在（回滚目标必须来自 list，不接受任意 hash）
             const known = (await this.list()).some((s) => s.id === id);
-            if (!known) throw new Error(`快照 ${id} 不存在`);
+            if (!known) throw new Error(`snapshot ${id} not found`);
             // cwd 锚定 workspaceRoot：pathspec "." 不随 server 进程 cwd 漂移（code-review 发现 #2）
             const co = await runGit(["checkout", id, "--", "."], gitDir, {
                 workTree: workspaceRoot,
                 cwd: workspaceRoot,
             });
-            if (!co.ok) throw new Error(`回滚失败：${co.out.trim()}`);
+            if (!co.ok) throw new Error(`rollback failed: ${co.out.trim()}`);
         },
 
         async rollbackFile(id, path) {
-            if (!(await ensureRepo())) throw new Error("git 不可用，无法回滚");
-            if (!/^[0-9a-f]{7,40}$/.test(id)) throw new Error("非法快照 id");
+            if (!(await ensureRepo())) throw new Error("git unavailable, cannot roll back");
+            if (!/^[0-9a-f]{7,40}$/.test(id)) throw new Error("invalid snapshot id");
             const known = (await this.list()).some((s) => s.id === id);
-            if (!known) throw new Error(`快照 ${id} 不存在`);
+            if (!known) throw new Error(`snapshot ${id} not found`);
             // pathspec 注入防护：仅接受工作区内相对路径
             if (
                 !path ||
@@ -326,7 +326,7 @@ export function createSnapshotService(
                 path.includes("..") ||
                 path.includes("\\")
             )
-                throw new Error(`非法路径：${path}`);
+                throw new Error(`invalid path: ${path}`);
             const pathArgs = ["--", path];
             // intent-to-add 让快照后新建的未跟踪文件进 diff（与 diffFrom 同语义，index 无副作用）
             await runGit(["add", "--intent-to-add", "-A"], gitDir, {
@@ -337,7 +337,7 @@ export function createSnapshotService(
                 workTree: workspaceRoot,
                 cwd: workspaceRoot,
             });
-            if (!st.ok) throw new Error(`对比失败：${st.out.trim()}`);
+            if (!st.ok) throw new Error(`diff failed: ${st.out.trim()}`);
             const status = st.out.trim().split("\t")[0] ?? "";
             if (status.startsWith("A") || status.startsWith("?")) {
                 // 快照后新增的文件：回滚 = 从工作树删除
@@ -348,15 +348,15 @@ export function createSnapshotService(
                 workTree: workspaceRoot,
                 cwd: workspaceRoot,
             });
-            if (!co.ok) throw new Error(`回滚失败：${co.out.trim()}`);
+            if (!co.ok) throw new Error(`rollback failed: ${co.out.trim()}`);
         },
 
         async diffFrom(id, path) {
             if (!(await ensureRepo()))
-                throw new Error("git 不可用，无法对比快照");
-            if (!/^[0-9a-f]{7,40}$/.test(id)) throw new Error("非法快照 id");
+                throw new Error("git unavailable, cannot diff snapshots");
+            if (!/^[0-9a-f]{7,40}$/.test(id)) throw new Error("invalid snapshot id");
             const known = (await this.list()).some((s) => s.id === id);
-            if (!known) throw new Error(`快照 ${id} 不存在`);
+            if (!known) throw new Error(`snapshot ${id} not found`);
             // 新建未跟踪文件不进 git diff——先 intent-to-add 登记为空 blob（shadow 仓库 index，无副作用）
             await runGit(["add", "--intent-to-add", "-A"], gitDir, {
                 workTree: workspaceRoot,
@@ -373,7 +373,7 @@ export function createSnapshotService(
                     cwd: workspaceRoot,
                 }),
             ]);
-            if (!st.ok) throw new Error(`对比失败：${st.out.trim()}`);
+            if (!st.ok) throw new Error(`diff failed: ${st.out.trim()}`);
             const files = st.out
                 .split("\n")
                 .filter(Boolean)

@@ -164,7 +164,7 @@ export async function callLLM(
     onRetry?: (info: { attempt: number; maxRetries: number; delayMs: number; error: string }) => void
 ): Promise<LlmResult> {
     if (!llm) {
-        throw new Error("callLLM 需要 provider 配置（由 AnyAgent 从 config.yaml 解析传入）");
+        throw new Error("callLLM requires a provider config (resolved by AnyAgent from config.yaml)");
     }
     const provider = llm;
     const client = new OpenAI({

@@ -61,17 +61,17 @@ function describeGlobFailure({
     cwd: string;
 }): string {
     const stderrText = stderr.trim();
-    if (!spawnError) return stderrText || `ripgrep 执行失败（cwd=${cwd}）`;
+    if (!spawnError) return stderrText || `ripgrep failed (cwd=${cwd})`;
     if (spawnError.code === "ENOENT") {
         return existsSync(cwd)
-            ? `ripgrep binary not found（重装 anycode，或设 ANYCODE_RG_PATH 指向 rg 二进制）`
-            : `搜索路径不存在：${cwd}（先用 explore 确认路径，注意路径相对工作区根解析）`;
+            ? `ripgrep binary not found (reinstall anycode, or set ANYCODE_RG_PATH to the rg binary)`
+            : `Search path does not exist: ${cwd} (verify the path with explore first; paths resolve relative to the workspace root)`;
     }
     if (spawnError.code === "EACCES") {
-        return `无权限访问：${cwd}（${spawnError.message}）`;
+        return `Permission denied: ${cwd} (${spawnError.message})`;
     }
     if (spawnError.code === "ENOTDIR") {
-        return `路径中某一段不是目录：${cwd}`;
+        return `Not a directory (a path segment is a file): ${cwd}`;
     }
-    return `${spawnError.message}（cwd=${cwd}）`;
+    return `${spawnError.message} (cwd=${cwd})`;
 }

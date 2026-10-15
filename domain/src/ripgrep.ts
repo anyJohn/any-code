@@ -37,7 +37,7 @@ async function rgBinary(): Promise<string> {
     const found = candidates.find((p): p is string => !!p && existsSync(p));
     if (!found) {
         throw new Error(
-            "ripgrep binary not found（重装 anycode，或设 ANYCODE_RG_PATH 指向 rg 二进制）"
+            "ripgrep binary not found (reinstall anycode, or set ANYCODE_RG_PATH to the rg binary)"
         );
     }
     cachedRg = found;

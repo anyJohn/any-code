@@ -108,7 +108,7 @@ export async function agentLoop(
         }
         return {
             role: "user" as const,
-            content: `${textContent}\n\n[用户附加了 ${userSpec.images.length} 张图片（${userSpec.images.map((i) => i.mimeType).join(", ")}），但当前模型不支持视觉输入——请提示用户换用支持视觉的模型或直接描述图片内容。]`,
+            content: `${textContent}\n\n[The user attached ${userSpec.images.length} image(s) (${userSpec.images.map((i) => i.mimeType).join(", ")}), but the current model does not support vision input — tell the user to switch to a vision-capable model or describe the image in text.]`,
         };
     })();
     messages.push(userMsg);
@@ -153,7 +153,8 @@ export async function agentLoop(
                 await onCompact?.(messages);
                 ctx.eventStream.submit({
                     type: "Compact",
-                    message: `已清理陈旧工具结果，释放上下文`,
+                    message: `Cleared stale tool results to free context`,
+                    i18nKey: "event.microCompacted",
                     data: {
                         beforeTokens: before,
                         afterTokens: estimateTokens(messages),
@@ -173,7 +174,9 @@ export async function agentLoop(
                     await onCompact?.(res.messages);
                     ctx.eventStream.submit({
                         type: "Compact",
-                        message: `已压缩上下文 ${res.beforeTokens}→${res.afterTokens} tokens`,
+                        message: `Compacted context ${res.beforeTokens}→${res.afterTokens} tokens`,
+                        i18nKey: "event.compacted",
+                        i18nParams: { before: res.beforeTokens, after: res.afterTokens },
                         data: {
                             beforeTokens: res.beforeTokens,
                             afterTokens: res.afterTokens,
@@ -189,7 +192,7 @@ export async function agentLoop(
                 // web TERMINAL 不含 Warning → 不会误终止 run（SPEC-030 B-003/I-003，修 latent bug）。
                 ctx.eventStream.submit({
                     type: "Warning",
-                    message: `自动压缩失败：${
+                    message: `Auto-compaction failed: ${
                         err instanceof Error ? err.message : String(err)
                     }`,
                     error: serializeError(err),
@@ -223,7 +226,9 @@ export async function agentLoop(
                 ctx.logInvariant.warned = true;
                 ctx.eventStream.submit({
                     type: "Warning",
-                    message: `日志不变式告警：${unlogged} 条消息未落盘即进入模型请求（AR-23）`,
+                    message: `Log invariant warning: ${unlogged} message(s) entered the model request without being persisted (AR-23)`,
+                    i18nKey: "event.logInvariant",
+                    i18nParams: { count: unlogged },
                 });
             }
         }
@@ -268,7 +273,9 @@ export async function agentLoop(
                 (info) =>
                     ctx.eventStream.submit({
                         type: "Warning",
-                        message: `LLM 调用失败，第 ${info.attempt}/${info.maxRetries} 次重试（${info.delayMs}ms 后）：${info.error}`,
+                        message: `LLM call failed; retry ${info.attempt}/${info.maxRetries} in ${info.delayMs}ms: ${info.error}`,
+                        i18nKey: "event.llmRetry",
+                        i18nParams: { attempt: info.attempt, max: info.maxRetries, delay: info.delayMs, error: info.error },
                     })
             );
         } catch (err) {
@@ -289,7 +296,9 @@ export async function agentLoop(
                     await onCompact?.(messages);
                     ctx.eventStream.submit({
                         type: "Warning",
-                        message: `当前模型不支持图片输入（${(err as Error).message.slice(0, 80)}），已移除 ${n} 条消息中的图片后重试。可在设置页关掉该模型的「视觉能力」开关（省掉这次无效往返），或换用支持视觉的模型。`,
+                        message: `The current model does not support image input (${(err as Error).message.slice(0, 80)}); removed images from ${n} message(s) and retrying. Turn off the "Vision" switch for this model in settings to skip this wasted round-trip, or switch to a vision-capable model.`,
+                        i18nKey: "event.imageDegraded",
+                        i18nParams: { error: (err as Error).message.slice(0, 80), count: n },
                     });
                     i -= 1; // 重试本轮（continue 会 i++，此处抵消）
                     continue;
@@ -306,7 +315,9 @@ export async function agentLoop(
                         await onCompact?.(res.messages);
                         ctx.eventStream.submit({
                             type: "Compact",
-                            message: `请求超限（${(err as Error).message.slice(0, 80)}），已被动压缩 ${res.beforeTokens}→${res.afterTokens} tokens 后重试`,
+                            message: `Request over limit (${(err as Error).message.slice(0, 80)}); reactively compacted ${res.beforeTokens}→${res.afterTokens} tokens and retrying`,
+                            i18nKey: "event.reactiveCompacted",
+                            i18nParams: { error: (err as Error).message.slice(0, 80), before: res.beforeTokens, after: res.afterTokens },
                             data: {
                                 beforeTokens: res.beforeTokens,
                                 afterTokens: res.afterTokens,
@@ -389,7 +400,9 @@ export async function agentLoop(
     // 迭代上限耗尽：明确终态语义 + 用户可见建议动作（FR-14，不再静默返回字符串）
     ctx.eventStream.submit({
         type: "Warning",
-        message: `任务在 ${maxIter} 轮迭代后达到上限，可能尚未完成。可继续对话让 agent 接着做，或 /compact 释放上下文后重试。`,
+        message: `Task hit the ${maxIter}-iteration limit and may be incomplete. Continue the conversation to let the agent carry on, or run /compact to free context and retry.`,
+        i18nKey: "event.maxIterations",
+        i18nParams: { max: maxIter },
     });
     return {
         result: "Max iterations reached",

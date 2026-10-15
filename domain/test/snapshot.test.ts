@@ -59,8 +59,8 @@ describe("createSnapshotService（AR-4）", () => {
     it.skipIf(!gitOn)("回滚不存在的 id → 抛错；非法 id → 抛错（注入防护）", async () => {
         const svc = createSnapshotService(ws);
         await svc.snapshot("init");
-        await expect(svc.rollbackTo("deadbeefdeadbeef")).rejects.toThrow(/不存在/);
-        await expect(svc.rollbackTo("../etc/passwd")).rejects.toThrow(/非法快照 id/);
+        await expect(svc.rollbackTo("deadbeefdeadbeef")).rejects.toThrow(/not found/);
+        await expect(svc.rollbackTo("../etc/passwd")).rejects.toThrow(/invalid snapshot id/);
     });
 
     it.skipIf(gitOn)("git 不可用 → available false，snapshot 返回 null", async () => {
@@ -114,8 +114,8 @@ describe.skipIf(!gitOn)("createSnapshotService.diffFrom（SPEC-036 B-007）", ()
 
     it("非法 id / 不存在的快照 → 抛错", async () => {
         const svc = createSnapshotService(ws);
-        await expect(svc.diffFrom("$(rm -rf /)")).rejects.toThrow("非法快照 id");
-        await expect(svc.diffFrom("deadbeef")).rejects.toThrow("不存在");
+        await expect(svc.diffFrom("$(rm -rf /)")).rejects.toThrow("invalid snapshot id");
+        await expect(svc.diffFrom("deadbeef")).rejects.toThrow("not found");
     });
 });
 
@@ -167,9 +167,9 @@ describe.skipIf(!gitOn)("createSnapshotService.rollbackFile", () => {
     it("非法路径（绝对/穿越/反斜杠）→ 抛错", async () => {
         const svc = createSnapshotService(ws);
         const id = (await svc.snapshot("init"))!.id;
-        await expect(svc.rollbackFile(id, "/etc/passwd")).rejects.toThrow(/非法路径/);
-        await expect(svc.rollbackFile(id, "../x")).rejects.toThrow(/非法路径/);
-        await expect(svc.rollbackFile(id, "a\\b")).rejects.toThrow(/非法路径/);
+        await expect(svc.rollbackFile(id, "/etc/passwd")).rejects.toThrow(/invalid path/);
+        await expect(svc.rollbackFile(id, "../x")).rejects.toThrow(/invalid path/);
+        await expect(svc.rollbackFile(id, "a\\b")).rejects.toThrow(/invalid path/);
     });
 });
 

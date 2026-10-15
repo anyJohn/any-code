@@ -340,7 +340,7 @@ describe("toolCall 权限 seam（SPEC-032）", () => {
         const r2 = await toolCall([mkCall("bash", "tc2", '{"command":"ls -la"}')], ctx, [tool]);
         expect(handler).not.toHaveBeenCalled();
         expect(submitted(ctx).filter((e) => e.type === "PermissionAsk")).toHaveLength(0);
-        expect(r2[0].content).toContain("不要再次请求");
+        expect(r2[0].content).toContain("Do not ask for the same or a similar authorization again");
     });
 
     it("AC-006 ask 挂起等待不超时（SPEC-033 DEC-101）：任意时长推进不自动拒绝，裁决后执行", async () => {
@@ -657,7 +657,7 @@ describe("AgentTool（FR-11 sub-agent 补全）", () => {
         const tool = AgentTool(def);
         const ctx = parentCtx({ subagentDepth: 1 });
         const out = await tool.handler({ task: "x" }, ctx);
-        expect(String(out)).toContain("委托深度超限");
+        expect(String(out)).toContain("Delegation depth exceeded");
     });
 
     it("def.maxDepth 足够时允许嵌套委托（probe 捕获 subCtx）", async () => {
@@ -760,7 +760,7 @@ describe("createPlanWorkflowTool（FR-12 plan 模式）", () => {
     beforeEach(() => vi.mocked(callLLM).mockReset());
 
     it("批准流：Planning 事件（durable data）→ 批准 → 执行返回结果", async () => {
-        const { out, ctx } = await runPlan(["批准执行"]);
+        const { out, ctx } = await runPlan(["Approve"]);
         expect(out).toBe("executed-plan-1");
         const plannings = submitted(ctx).filter((e) => e.type === "Planning");
         expect(plannings).toHaveLength(1);
@@ -768,7 +768,7 @@ describe("createPlanWorkflowTool（FR-12 plan 模式）", () => {
     });
 
     it("修订流：自定义输入 → 重新规划（round 2）→ 批准后执行", async () => {
-        const { out, ctx } = await runPlan(["把步骤 1 改成只读", "批准执行"]);
+        const { out, ctx } = await runPlan(["把步骤 1 改成只读", "Approve"]);
                 // 修订后执行首轮（exec 计数独立于规划轮次）
         expect(out).toBe("executed-plan-1");
         const plannings = submitted(ctx).filter((e) => e.type === "Planning");
@@ -779,8 +779,8 @@ describe("createPlanWorkflowTool（FR-12 plan 模式）", () => {
     });
 
     it("取消流：计划未执行", async () => {
-        const { out, ctx } = await runPlan(["取消"]);
-        expect(out).toContain("未执行");
+        const { out, ctx } = await runPlan(["Cancel"]);
+        expect(out).toContain("nothing was executed");
         expect(submitted(ctx).filter((e) => e.type === "Planning")).toHaveLength(1);
     });
 
@@ -802,7 +802,7 @@ describe("createPlanWorkflowTool（FR-12 plan 模式）", () => {
         const pending = tool.handler({ task: "x" }, ctx);
         await new Promise((r) => setTimeout(r, 5));
         const ev = submitted(ctx).filter((e) => e.type === "Interaction")[0];
-        resolveInteraction(ev.data.id, ["取消"]);
+        resolveInteraction(ev.data.id, ["Cancel"]);
         await pending;
         expect(planningTools).toBeTruthy();
         expect(planningTools).not.toContain("bash");

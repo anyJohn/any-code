@@ -56,9 +56,9 @@ describe("create_skill（FR-25 ②）", () => {
         const args = { name: "dup", description: "d", content: "c" };
         await createSkillTool.handler(args, ctx());
         const again = await createSkillTool.handler(args, ctx());
-        expect((again as { content: string }).content).toContain("已存在");
+        expect((again as { content: string }).content).toContain("already exists");
         const escape = await createSkillTool.handler({ ...args, name: "../evil" }, ctx());
-        expect((escape as { content: string }).content).toContain("name 非法");
+        expect((escape as { content: string }).content).toContain("Invalid name");
         expect(existsSync(join(home, ".anycode", "evil"))).toBe(false);
     });
 

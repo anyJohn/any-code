@@ -43,4 +43,26 @@ describe("i18n key 覆盖（缺 key 回退裸 key 字符串——静态断言防
         expect(missingZh, `zh 缺 key: ${missingZh.join(", ")}`).toEqual([]);
         expect(missingEn, `en 缺 key: ${missingEn.join(", ")}`).toEqual([]);
     });
+
+    it("domain 事件 i18nKey 字面量在 zh/en 字典都存在（跨包协议防线）", () => {
+        // domain 发英文 message + i18nKey（todo #13），web 按 key 渲染——domain 侧
+        // 新增 key 而 web 漏配时，界面会显示裸 key 字符串。跨包扫描钉住。
+        const domainSrc = path.resolve(__dirname, "../../../domain/src");
+        const keys = new Set<string>();
+        for (const file of walk(domainSrc)) {
+            const src = fs.readFileSync(file, "utf-8");
+            for (const m of src.matchAll(/i18nKey:\s*"([^"]+)"/g)) {
+                keys.add(m[1]);
+            }
+            // Interaction 选项映射（optionI18nKeys: { Approve: "interaction.x", ... }）
+            for (const block of src.matchAll(/optionI18nKeys:\s*\{([\s\S]*?)\}/g)) {
+                for (const m of block[1].matchAll(/"([^"]+)"/g)) keys.add(m[1]);
+            }
+        }
+        expect(keys.size).toBeGreaterThan(0); // 扫描没失灵的 sanity check
+        const missingZh = [...keys].filter((k) => !(k in DICTS.zh));
+        const missingEn = [...keys].filter((k) => !(k in DICTS.en));
+        expect(missingZh, `zh 缺 domain key: ${missingZh.join(", ")}`).toEqual([]);
+        expect(missingEn, `en 缺 domain key: ${missingEn.join(", ")}`).toEqual([]);
+    });
 });

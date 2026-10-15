@@ -136,7 +136,7 @@ export async function listModels(
     baseURL: string | undefined,
     apiKey: string | undefined
 ): Promise<string[]> {
-    if (!apiKey?.trim()) throw new Error("需要 apiKey 才能拉取模型");
+    if (!apiKey?.trim()) throw new Error("apiKey is required to fetch models");
     const client = new OpenAI({ apiKey, baseURL });
     const list = await client.models.list();
     const arr =
@@ -384,7 +384,7 @@ export class Config {
         ) as ConfigShape | null;
         const providers = normalize(parsed?.providers ?? {});
         if (!Object.keys(providers).length) {
-            throw new Error(`配置文件 ${file} 未定义任何 provider。`);
+            throw new Error(`Config file ${file} defines no providers.`);
         }
         const def = parsed?.default ?? Object.keys(providers)[0];
         // lenient：default 不在 providers → 用首个；defaultModel 不在 models → 用首个 model。
@@ -428,17 +428,17 @@ export class Config {
         const errors: string[] = [];
         const def = data.default ?? Object.keys(providers)[0];
         if (!Object.keys(providers).length) {
-            errors.push("providers 不能为空");
+            errors.push("providers must not be empty");
         } else {
             if (!providers[def]) {
-                errors.push(`default="${def}" 未在 providers 中定义`);
+                errors.push(`default="${def}" is not defined in providers`);
             }
             for (const [name, p] of Object.entries(providers)) {
                 if (!p.models.length) {
-                    errors.push(`provider "${name}" 的 models 不能为空`);
+                    errors.push(`provider "${name}" must have at least one model`);
                 } else if (!p.models.some((m) => m.id === p.defaultModel)) {
                     errors.push(
-                        `provider "${name}" 的 defaultModel="${p.defaultModel}" 未在 models 中`
+                        `provider "${name}" has defaultModel="${p.defaultModel}" which is not in models`
                     );
                 }
             }
@@ -450,7 +450,7 @@ export class Config {
                 s.type !== "sse" &&
                 s.type !== undefined
             ) {
-                errors.push(`mcp server "${name}" type 非法（需 stdio/sse）`);
+                errors.push(`mcp server "${name}" has an invalid type (expected stdio/sse)`);
             }
         }
         if (errors.length) {
@@ -486,7 +486,7 @@ export class Config {
     static saveRaw(yamlText: string): void {
         const parsed = yaml.load(yamlText);
         if (parsed === null || typeof parsed !== "object") {
-            throw new Error("YAML 内容不是有效的配置对象");
+            throw new Error("YAML content is not a valid config object");
         }
         const file = globalConfigFile();
         backupConfig(file);
@@ -602,11 +602,11 @@ export interface SwitchResult {
 export function switchDefaultModel(modelId: string): SwitchResult {
     const cfg = Config.load();
     const provider = cfg.providers[cfg.default];
-    if (!provider) return { ok: false, message: `provider "${cfg.default}" 不存在` };
+    if (!provider) return { ok: false, message: `provider "${cfg.default}" not found` };
     if (!provider.models.some((m) => m.id === modelId)) {
         return {
             ok: false,
-            message: `model "${modelId}" 不在 provider "${cfg.default}" 的 models 中`,
+            message: `model "${modelId}" is not in provider "${cfg.default}"'s models`,
         };
     }
     provider.defaultModel = modelId;
@@ -616,7 +616,7 @@ export function switchDefaultModel(modelId: string): SwitchResult {
 
 /** 设置外观主题（暗黑模式）。仅接受 light/dark/system。 */
 export function setUiTheme(theme: string): SwitchResult {    if (!isUiTheme(theme)) {
-        return { ok: false, message: "theme 仅支持 light / dark / system" };
+        return { ok: false, message: "theme must be light / dark / system" };
     }
     const cfg = Config.load();
     cfg.ui = { ...cfg.ui, theme };
@@ -635,7 +635,7 @@ export function setGitBashPath(path: string): SwitchResult {
 /** 设置界面语言（FR-29，全字段回写）。接受 zh/en；system = 清除显式配置（跟随系统）。 */
 export function setUiLanguage(language: string): SwitchResult {
     if (language !== "zh" && language !== "en" && language !== "system") {
-        return { ok: false, message: "language 仅支持 zh / en / system" };
+        return { ok: false, message: "language must be zh / en / system" };
     }
     const cfg = Config.load();
     const { language: _dropped, ...rest } = cfg.ui;
@@ -648,7 +648,7 @@ export function setUiLanguage(language: string): SwitchResult {
 export function switchDefaultProvider(name: string): SwitchResult {
     const cfg = Config.load();
     if (!cfg.providers[name]) {
-        return { ok: false, message: `provider "${name}" 不存在` };
+        return { ok: false, message: `provider "${name}" not found` };
     }
     cfg.default = name;
     saveFull(cfg);

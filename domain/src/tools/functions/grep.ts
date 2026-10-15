@@ -32,23 +32,23 @@ function describeRgFailure({
     const stderrText = stderr.trim();
     if (!spawnError) {
         // rg 自己退出码 2：stderr 有真实原因
-        return stderrText || `ripgrep 执行失败（cwd=${cwd}）`;
+        return stderrText || `ripgrep failed (cwd=${cwd})`;
     }
     const code = spawnError.code;
     if (code === "ENOENT") {
         // 区分「搜索路径不存在」与「rg 二进制不存在」——两者的修法完全不同
         const cwdExists = existsSync(cwd);
         return cwdExists
-            ? `ripgrep binary not found（重装 anycode，或设 ANYCODE_RG_PATH 指向 rg 二进制）`
-            : `搜索路径不存在：${cwd}（先用 explore 或 glob 确认路径，注意路径相对工作区根解析）`;
+            ? `ripgrep binary not found (reinstall anycode, or set ANYCODE_RG_PATH to the rg binary)`
+            : `Search path does not exist: ${cwd} (verify the path with explore or glob first; paths resolve relative to the workspace root)`;
     }
     if (code === "EACCES") {
-        return `无权限访问：${cwd}（${spawnError.message}）`;
+        return `Permission denied: ${cwd} (${spawnError.message})`;
     }
     if (code === "ENOTDIR") {
-        return `路径中某一段不是目录：${cwd}`;
+        return `Not a directory (a path segment is a file): ${cwd}`;
     }
-    return `${spawnError.message}（cwd=${cwd}）`;
+    return `${spawnError.message} (cwd=${cwd})`;
 }
 
 /**

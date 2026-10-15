@@ -91,7 +91,7 @@ describe("web_fetch（原生工具）", () => {
         const http = await webFetchTool.handler({ url: "http://example.com" }, ctx());
         expect(http.content).toContain("https");
         const bad = await webFetchTool.handler({ url: "not-a-url" }, ctx());
-        expect(bad.content).toContain("URL 非法");
+        expect(bad.content).toContain("invalid URL");
         const empty = await webFetchTool.handler({}, ctx());
         expect(empty.content).toContain("url");
     });

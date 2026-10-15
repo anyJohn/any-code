@@ -55,7 +55,7 @@ export function loadRule(workspace: Workspace): string {
         );
     }
     return parts.length
-        ? `\n# Rules\n更具体的规则优先于更宽泛的（全局 < .agents < 项目）。\n${parts.join(
+        ? `\n# Rules\nMore specific rules take precedence over broader ones (global < .agents < project).\n${parts.join(
               "\n\n"
           )}\n\n`
         : "";

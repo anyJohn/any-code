@@ -314,7 +314,7 @@ function resourceTools(handleConns: McpConnection[]): Tool[] {
             }
             return lines.length
                 ? lines.join("\n")
-                : "当前连接的 MCP server 未暴露 resources。";
+                : "The connected MCP server exposes no resources.";
         },
         meta: { readOnly: true, concurrencySafe: true },
     });
@@ -339,7 +339,7 @@ function resourceTools(handleConns: McpConnection[]): Tool[] {
         handler: async (args) => {
             const { server, uri } = args as { server?: string; uri?: string };
             const conn = handleConns.find((c) => c.serverName === server);
-            if (!conn) return `[Error] MCP server ${server} 不在当前连接集中`;
+            if (!conn) return `[Error] MCP server ${server} is not in the current connection set`;
             try {
                 const r = await conn.readResource(uri!);
                 const text = extractText(r.content);

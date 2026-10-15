@@ -34,15 +34,15 @@ export const webFetchTool: Tool = {
     handler: async (rawArgs, ctx: ToolContext) => {
         const args = rawArgs as { url?: string; maxChars?: number };
         const url = typeof args?.url === "string" ? args.url.trim() : "";
-        if (!url) return errResult("url 不能为空");
+        if (!url) return errResult("url is required");
         let u: URL;
         try {
             u = new URL(url);
         } catch {
-            return errResult("URL 非法");
+            return errResult("invalid URL");
         }
         if (u.protocol !== "https:") {
-            return errResult("仅支持 https://（明文 http 与本地协议已拒绝）");
+            return errResult("only https:// is supported (plain http and local protocols are rejected)");
         }
         const cfg = toolConfig(ctx, "web_fetch");
         const timeoutMs =
@@ -53,22 +53,22 @@ export const webFetchTool: Tool = {
             const { status, text: raw } = await fetchWithTimeout(u.href, {}, timeoutMs);
             if (status !== 200) return errResult(`HTTP ${status}`);
             if (raw.length > TEXT_LIMIT * 4) {
-                return errResult("页面过大，拒绝读取");
+                return errResult("page too large, refusing to read");
             }
             const md = htmlToMarkdown(raw);
             const max = Math.min(
                 typeof args?.maxChars === "number" ? args.maxChars : TEXT_LIMIT,
                 TEXT_LIMIT
             );
-            const out = md.length > max ? md.slice(0, max) + "\n…(截断)" : md;
+            const out = md.length > max ? md.slice(0, max) + "\n…(truncated)" : md;
             return {
-                content: out || "(页面无可读文本)",
+                content: out || "(no readable text on the page)",
                 data: { url: u.href, status, chars: out.length },
             };
         } catch (e) {
             return errResult(
                 e instanceof Error && e.name === "TimeoutError"
-                    ? `请求超时（${timeoutMs / 1000}s）`
+                    ? `request timed out (${timeoutMs / 1000}s)`
                     : String(e instanceof Error ? e.message : e)
             );
         }

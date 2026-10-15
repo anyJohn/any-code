@@ -45,7 +45,7 @@ describe("globFunc（SPEC-021 AC-002，ripgrep）", () => {
 describe("globFunc 路径不存在（假阴性回归）", () => {
     it("目录不存在 → 明确报路径问题，而非 No files found", async () => {
         const out = await globFunc({ pattern: "*.ts", path: "no/such/dir" }, P());
-        expect(out).toMatch(/搜索路径不存在/);
+        expect(out).toMatch(/Search path does not exist/);
         expect(out).not.toMatch(/No files found/); // 旧的假阴性文案不得再出现
         expect(out).toContain("no/such/dir");
     });

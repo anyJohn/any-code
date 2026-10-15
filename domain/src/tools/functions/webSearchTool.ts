@@ -48,7 +48,7 @@ async function searchTavily(
     apiKey: string
 ): Promise<SearchItem[]> {
     if (!apiKey)
-        throw new Error("tavily provider 需要 tools.web_search.config.apiKey");
+        throw new Error("tavily provider requires tools.web_search.config.apiKey");
     const { status, text } = await fetchWithTimeout(
         "https://api.tavily.com/search",
         {
@@ -74,7 +74,7 @@ async function searchBing(
     apiKey: string
 ): Promise<SearchItem[]> {
     if (!apiKey)
-        throw new Error("bing provider 需要 tools.web_search.config.apiKey");
+        throw new Error("bing provider requires tools.web_search.config.apiKey");
     const { status, text } = await fetchWithTimeout(
         `https://api.bing.microsoft.com/v7.0/search?q=${encodeURIComponent(query)}&count=${max}`,
         { headers: { "Ocp-Apim-Subscription-Key": apiKey } }
@@ -113,7 +113,7 @@ export const webSearchTool: Tool = {
     handler: async (rawArgs, ctx: ToolContext) => {
         const args = rawArgs as { query?: string; maxResults?: number };
         const query = typeof args?.query === "string" ? args.query.trim() : "";
-        if (!query) return errResult("query 不能为空");
+        if (!query) return errResult("query is required");
         const max = Math.min(
             Math.max(typeof args?.maxResults === "number" ? args.maxResults : 8, 1),
             20
@@ -130,7 +130,7 @@ export const webSearchTool: Tool = {
                       : await searchDdg(query, max);
             if (!items.length) {
                 return {
-                    content: "(无结果——换个更具体的关键词重试)",
+                    content: "(no results — try a more specific query)",
                     data: { provider, count: 0 },
                 };
             }

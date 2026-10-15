@@ -115,10 +115,10 @@ export const exploreFunc = async (
         // bugfix 2026-09-20：目录不存在时原先返回空树（只有标题行），与"存在但为空"
         // 无法区分——假阴性会让人以为目录存在。显式报错并给出下一步。
         if (!existsSync(directoryPath)) {
-            return `Error: 目录不存在：${directoryPath}（用 explore 不带参数看工作区根，或用 glob 按文件名找）`;
+            return `Error: directory does not exist: ${directoryPath} (run explore without arguments to see the workspace root, or use glob to find files by name)`;
         }
         if (!statSync(directoryPath).isDirectory()) {
-            return `Error: 不是目录：${directoryPath}（read 可读文件内容）`;
+            return `Error: not a directory: ${directoryPath} (use read for file contents)`;
         }
         // 用户未显式传 ignorePatterns 时，用 workspace 的（含 node_modules/.git 等）
         const ignorePatterns = args.ignorePatterns ?? workspace.ignoredPatterns;

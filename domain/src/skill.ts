@@ -125,7 +125,7 @@ export function resolveSkills(workspace: Workspace): Map<string, SkillEntry> {
         const prev = merged.get(e.name);
         if (prev && prev.origin !== e.origin) {
             console.warn(
-                `[Skill] 同名技能 "${e.name}"：${e.origin} 覆盖 ${prev.origin}`
+                `[Skill] Duplicate skill "${e.name}": ${e.origin} overrides ${prev.origin}`
             );
         }
         merged.set(e.name, e);
@@ -158,7 +158,7 @@ export function renderSkillCatalog(entries: Iterable<SkillEntry>): string {
         .join("\n");
     return [
         "\n# Available Skills",
-        "任务匹配某技能 description 时，先调 use_skill 工具读它的全文再执行。",
+        "When a task matches a skill description, call the use_skill tool to read its full content before proceeding.",
         "<available_skills>",
         xml,
         "</available_skills>",

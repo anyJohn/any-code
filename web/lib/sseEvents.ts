@@ -6,6 +6,9 @@ interface EventBase {
     id: string;
     timestamp: number;
     message: string;
+    /** 界面文案本地化（镜像 domain）：有 key 时按当前语言渲染，否则用 message（英文） */
+    i18nKey?: string;
+    i18nParams?: Record<string, string | number>;
     turnId?: string;
     author?: string;
     runId?: string;
@@ -94,8 +97,12 @@ export interface PlanningEventData {
 }
 export interface InteractionQuestion {
     question: string;
+    /** 固定交互本地化（镜像 domain）：有 key 按当前语言渲染，否则用原文 */
+    questionI18nKey?: string;
     header?: string;
     options?: string[];
+    /** 选项本地化：canonical 值 → i18n key；只改显示，提交仍是 canonical 值 */
+    optionI18nKeys?: Record<string, string>;
     multiSelect?: boolean;
 }
 export interface InteractionData {

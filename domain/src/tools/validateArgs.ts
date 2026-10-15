@@ -24,13 +24,13 @@ function validateNode(value: unknown, schema: JsonSchemaNode, path: string): str
     // enum：命中枚举即通过（类型交给枚举自身）
     if (schema.enum) {
         if (!schema.enum.some((v) => v === value)) {
-            return `${path} 必须是 ${schema.enum.map((v) => JSON.stringify(v)).join(" | ")} 之一`;
+            return `${path} must be one of ${schema.enum.map((v) => JSON.stringify(v)).join(" | ")}`;
         }
         return null;
     }
 
     if (types && !types.some((t) => typeMatches(value, t))) {
-        return `${path} 类型应为 ${types.join(" | ")}，实际为 ${jsonType(value)}`;
+        return `${path} should be of type ${types.join(" | ")}, but got ${jsonType(value)}`;
     }
 
     if (isRecord(value) && schema.properties) {
@@ -97,7 +97,7 @@ export function validateToolArgs(
 
     for (const key of parameters.required ?? []) {
         if (args[key] === undefined) {
-            return `缺少必填参数 ${key}（schema required）`;
+            return `missing required parameter ${key} (schema required)`;
         }
     }
     return validateNode(args, parameters, "args");

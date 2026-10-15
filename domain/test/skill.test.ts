@@ -131,13 +131,13 @@ describe("use_skill 工具（B-005 / AC-006）", () => {
         const map = resolveSkills(ws);
         const ctx = { skills: map } as unknown as ToolContext;
         const out = await skillFunc({ name: "nope" }, ctx);
-        expect(out).toMatch(/不存在/);
-        expect(out).toContain("可用技能");
+        expect(out).toMatch(/not found/);
+        expect(out).toContain("Available skills");
     });
 
     it("空 name / 无 ctx.skills → 明确错误（不崩）", async () => {
         const ctx = {} as unknown as ToolContext;
-        expect(await skillFunc({}, ctx)).toMatch(/name 不能为空/);
-        expect(await skillFunc({ name: "x" }, ctx)).toMatch(/不存在/);
+        expect(await skillFunc({}, ctx)).toMatch(/name is required/);
+        expect(await skillFunc({ name: "x" }, ctx)).toMatch(/not found/);
     });
 });

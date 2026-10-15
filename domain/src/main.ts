@@ -133,7 +133,7 @@ class AnyAgent {
         // 落地即普通全局技能，进入 resolveSkills 目录；用户可改、项目层可覆盖。
         const seeded = seedBuiltinSkills();
         if (seeded.length) {
-            console.info(`[Seed] 内置技能已就位：${seeded.join(", ")}`);
+            console.info(`[Seed] Built-in skills seeded: ${seeded.join(", ")}`);
         }
         // 后台任务完成回注（bugfix 2026-09-18）：job 完成 → 空闲则自动开新轮把结果
         // 交给模型消化（"任务 A 完成，输出如下…"），忙碌则进队列迭代边界注入。
@@ -152,8 +152,8 @@ class AnyAgent {
     /** job 完成回注：忙碌 → 队列（迭代边界注入）；空闲 → 自动开新轮。 */
     private onJobDone(job: BashJob): void {
         const status =
-            job.exitCode === 0 ? "成功" : `失败（exit code ${job.exitCode}）`;
-        const head = `[后台任务完成] job_id=${job.id} ${status}\n命令：${job.command}\n输出：\n${job.output || "（无输出）"}`;
+            job.exitCode === 0 ? "succeeded" : `failed (exit code ${job.exitCode})`;
+        const head = `[Background job finished] job_id=${job.id} ${status}\ncommand: ${job.command}\noutput:\n${job.output || "(no output)"}`;
         if (this.activeRun && !this.abortController?.signal.aborted) {
             // 运行中：队列注入（agentLoop 迭代边界 drain，消息顺序合法）
             this.queueUserMessage(head);
@@ -416,7 +416,7 @@ class AnyAgent {
         const session = this.session;
         const sessionKey = this.sessionKey;
         if (!session || !sessionKey) {
-            throw new Error("compact 需要已存在的 session");
+            throw new Error("compact requires an existing session");
         }
         // compactMessages 保护 messages[0]=system；先确保 [0] 是 system（executeTask 每任务重建，此处补以防未跑过任务）
         this.ensureSystemHead(session.messages);
@@ -433,7 +433,9 @@ class AnyAgent {
             for (const m of res.messages) this.loggedMessages.add(m as unknown as object);
             this.eventStream.submit({
                 type: "Compact",
-                message: `已压缩上下文 ${res.beforeTokens}→${res.afterTokens} tokens`,
+                message: `Compacted context ${res.beforeTokens}→${res.afterTokens} tokens`,
+                i18nKey: "event.compacted",
+                i18nParams: { before: res.beforeTokens, after: res.afterTokens },
                 data: {
                     beforeTokens: res.beforeTokens,
                     afterTokens: res.afterTokens,
@@ -627,12 +629,14 @@ class AnyAgent {
         if (abortController.signal.aborted) {
             this.eventStream.submit({
                 type: "Stopped",
-                message: "已停止任务",
+                message: "Task stopped",
+                i18nKey: "event.stopped",
             });
         } else {
             this.eventStream.submit({
                 type: "Done",
-                message: `任务完成`,
+                message: "Task completed",
+                i18nKey: "event.done",
             });
         }
     }
@@ -647,9 +651,11 @@ class AnyAgent {
         } catch (err) {
             this.eventStream.submit({
                 type: "Warning",
-                message: `项目级权限规则加载失败，已忽略（仅用全局规则）：${
+                message: `Failed to load project-level permission rules; ignored (global rules only): ${
                     err instanceof Error ? err.message : String(err)
                 }`,
+                i18nKey: "event.projectRulesFailed",
+                i18nParams: { error: err instanceof Error ? err.message : String(err) },
             });
         }
         // AR-7：只读集合从工具元数据推导（MCP/无 meta 工具不在集合内 = 保守 ask）

@@ -346,43 +346,43 @@ export const browserUseTool: Tool = {
                             "tabs",
                         ],
                         description:
-                            "navigate=打开网页；content=读页面（可 selector 圈区域）；eval=执行 JS；snapshot=无障碍树（推荐先做，拿 ref）；click/fill=按 ref 或选择器操作；cookies=读写 cookie；tabs=页签管理",
+                            "navigate=open a URL; content=read the page (optionally scoped by selector); eval=run JS; snapshot=accessibility tree (recommended first — gives you refs); click/fill=act by ref or selector; cookies=read/write cookies; tabs=tab management",
                     },
                     url: {
                         type: "string",
-                        description: "action=navigate / tabs(new)：目标 URL（http/https）",
+                        description: "action=navigate / tabs(new): target URL (http/https)",
                     },
                     js: {
                         type: "string",
-                        description: "action=eval 时必填：要执行的 JavaScript 表达式/语句（返回 Promise 自动 await）",
+                        description: "required for action=eval: JavaScript expression/statement to run (returned Promises are awaited)",
                     },
                     selector: {
                         type: "string",
-                        description: "action=content/click/fill：CSS 选择器（content 圈区域；click/fill 也可用选择器代替 ref）",
+                        description: "action=content/click/fill: CSS selector (scopes content; click/fill also accept a selector instead of a ref)",
                     },
                     ref: {
                         type: "string",
-                        description: "action=click/fill：来自 snapshot 的元素 ref（如 s1e3）",
+                        description: "action=click/fill: element ref from snapshot (e.g. s1e3)",
                     },
                     text: {
                         type: "string",
-                        description: "action=fill 时必填：要填入的文本",
+                        description: "required for action=fill: text to fill in",
                     },
                     op: {
                         type: "string",
-                        description: "action=cookies：get/set/clear；action=tabs：list/new/select/close",
+                        description: "action=cookies: get/set/clear; action=tabs: list/new/select/close",
                     },
                     name: {
                         type: "string",
-                        description: "action=cookies(set/get)：cookie 名",
+                        description: "action=cookies(set/get): cookie name",
                     },
                     value: {
                         type: "string",
-                        description: "action=cookies(set)：cookie 值",
+                        description: "action=cookies(set): cookie value",
                     },
                     index: {
                         type: "number",
-                        description: "action=tabs(select/close)：页签下标（tabs list 查看）",
+                        description: "action=tabs(select/close): tab index (see tabs list)",
                     },
                 },
                 required: ["action"],
@@ -430,7 +430,7 @@ export const browserUseTool: Tool = {
             case "tabs":
                 return tabs(args, cdpUrl, browser);
             default:
-                return "Error: 未知 action"; // 不可达（上方已校验），仅为收窄类型
+                return "Error: unknown action"; // unreachable (validated above); narrows the type
         }
     },
     meta: { readOnly: false, concurrencySafe: false },

@@ -66,7 +66,7 @@ describe("bash run_in_background（FR-13）", () => {
             { command: "true", run_in_background: true },
             { ...ctx, jobs: undefined } as ToolContext
         );
-        expect(out.content).toContain("后台任务不可用");
+        expect(out.content).toContain("background jobs are unavailable");
     });
 });
 
@@ -79,7 +79,7 @@ describe("job 工具（FR-13）", () => {
         await vi.waitFor(() => expect(registry.get(id)!.done).toBe(true));
         const one = await jobOutputFunc({ id }, ctx);
         expect(one.content).toContain("bg-output");
-        expect(one.content).toContain("已完成");
+        expect(one.content).toContain("done");
         const list = await jobOutputFunc({}, ctx);
         expect(list.content).toContain(`[${id}]`);
     });
@@ -88,14 +88,14 @@ describe("job 工具（FR-13）", () => {
         const ctx = mkCtx(registry);
         registry.launch("/bin/sh", ["-c", "true"], process.cwd());
         const out = await jobOutputFunc({ id: "nope" }, ctx);
-        expect(out.content).toContain("不存在");
+        expect(out.content).toContain("not found");
     });
 
     it("job_kill：终止运行中任务", async () => {
         const ctx = mkCtx(registry);
         const id = registry.launch("/bin/sh", ["-c", "sleep 30"], process.cwd());
         const out = await jobKillFunc({ id }, ctx);
-        expect(out.content).toContain("已终止");
+        expect(out.content).toContain("terminated");
         await vi.waitFor(() => expect(registry.get(id)!.done).toBe(true));
     });
 });

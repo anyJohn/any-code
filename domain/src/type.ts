@@ -15,6 +15,13 @@ export interface AgentLoopResult {
 interface EventBase {
     timestamp: number;
     message: string;
+    /**
+     * 界面文案本地化（todo #13 domain 语料英文化）：message 恒为英文（模型/日志/CLI 消费），
+     * 需要显示给用户的终态类事件额外带 i18nKey + params，web 按当前语言渲染；
+     * 缺省 undefined = 直接用 message（旧事件兼容）。
+     */
+    i18nKey?: string;
+    i18nParams?: Record<string, string | number>;
     /** 一次推理回合的分组 id：同回合的 Iteration/Assistant/Tool 等共用 */
     turnId?: string;
     /** 发出该事件的 agent 名（主 agent 省略；sub-agent 用 def.name，如 "plan"） */
@@ -98,8 +105,14 @@ export interface InteractionEventData {
     id: string;
     questions: Array<{
         question: string;
+        /** 固定交互的界面本地化（todo #13，同事件 message 的 i18nKey 机制）：
+         *  有 key 时 web 按当前语言渲染，否则用原文（模型生成的自由文本问题无 key）。 */
+        questionI18nKey?: string;
         header?: string;
         options?: string[];
+        /** 选项本地化：canonical 值 → i18n key。web 只改显示，提交仍是 canonical 值
+         *  （answer 匹配与回注模型的内容不受语言影响）。 */
+        optionI18nKeys?: Record<string, string>;
         multiSelect?: boolean;
     }>;
 }

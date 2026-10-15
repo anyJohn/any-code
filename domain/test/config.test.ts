@@ -209,9 +209,9 @@ default: p
                 providers: { p: { apiKey: "sk", models: [], defaultModel: "" } },
                 default: "nope",
             })
-        ).toThrow(/default="nope" 未在 providers 中定义[\s\S]*provider "p" 的 models 不能为空/);
+        ).toThrow(/default="nope" is not defined in providers[\s\S]*provider "p" must have at least one model/);
         // 无 providers
-        expect(() => Config.save({ providers: {} })).toThrow(/providers 不能为空/);
+        expect(() => Config.save({ providers: {} })).toThrow(/providers must not be empty/);
     });
 
     it("AC-004/007 配置热更：重读文件（重新 load）default/provider 切换生效", () => {

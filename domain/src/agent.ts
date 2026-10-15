@@ -62,7 +62,7 @@ export function AgentTool(def: AgentDefinition): Tool {
             // FR-11 深度限制：ctx.subagentDepth 为当前已委托层数；超限拒绝（防递归委托）
             const depth = ctx.subagentDepth ?? 0;
             if (depth > (def.maxDepth ?? 0)) {
-                return `[Error] 委托深度超限（当前 ${depth} 层，${def.name} 允许至多 ${(def.maxDepth ?? 0)} 层再委托）。请直接完成任务，不要继续委派。`;
+                return `[Error] Delegation depth exceeded (currently ${depth} level(s); ${def.name} allows at most ${(def.maxDepth ?? 0)} more delegation(s)). Complete the task directly instead of delegating further.`;
             }
             const runId = randomUUID();
             const parentStream = ctx.eventStream;
@@ -178,9 +178,14 @@ export function createPlanWorkflowTool(): Tool {
                             questions: [
                                 {
                                     question:
-                                        "是否批准执行该计划？（自定义输入 = 修订意见，将重新规划）",
+                                        "Approve executing this plan? (custom input = revision feedback; the plan will be regenerated)",
+                                    questionI18nKey: "interaction.planReview",
                                     header: "PLAN REVIEW",
-                                    options: ["批准执行", "取消"],
+                                    options: ["Approve", "Cancel"],
+                                    optionI18nKeys: {
+                                        Approve: "interaction.planApprove",
+                                        Cancel: "interaction.planCancel",
+                                    },
                                 },
                             ],
                         },
@@ -190,17 +195,17 @@ export function createPlanWorkflowTool(): Tool {
                 const timeout = new Promise<string[]>((resolve) => {
                     setTimeout(() => {
                         unregisterInteraction(id);
-                        resolve(["取消"]);
+                        resolve(["Cancel"]);
                     }, 600_000);
                 });
                 const raced = await Promise.race([answers, timeout]);
                 if (!Array.isArray(raced)) {
                     unregisterInteraction(id);
-                    return "取消";
+                    return "Cancel";
                 }
                 const first = raced[0];
-                if (first === "批准执行") return "批准执行";
-                if (first === "取消") return "取消";
+                if (first === "Approve") return "Approve";
+                if (first === "Cancel") return "Cancel";
                 return first; // 自定义输入 = 修订意见
             };
 
@@ -212,7 +217,7 @@ export function createPlanWorkflowTool(): Tool {
                     { role: "system", content: planAgentInstruction },
                     {
                         role: "user",
-                        content: feedback ? `${task}\n\n[修订意见（上一版计划被要求修改）]：${feedback}` : task,
+                        content: feedback ? `${task}\n\n[Revision feedback (the previous plan needed changes)]: ${feedback}` : task,
                         _meta: { origin: "system" },
                     } as ChatMessage,
                 ];
@@ -247,10 +252,10 @@ export function createPlanWorkflowTool(): Tool {
 
                 // 3) 审批
                 const answer = await askApproval(planText);
-                if (answer === "取消") {
-                    return "用户取消了该计划，未执行。";
+                if (answer === "Cancel") {
+                    return "The user cancelled the plan; nothing was executed.";
                 }
-                if (answer !== "批准执行") {
+                if (answer !== "Approve") {
                     feedback = answer; // 自定义输入 = 修订意见
                     continue;
                 }
@@ -276,7 +281,7 @@ export function createPlanWorkflowTool(): Tool {
                 );
                 return execution.result;
             }
-            return `计划经 ${MAX_ROUNDS} 轮修订仍未批准，已停止。`;
+            return `Plan was not approved after ${MAX_ROUNDS} revision rounds; stopped.`;
         },
     };
 }

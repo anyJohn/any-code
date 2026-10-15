@@ -298,7 +298,7 @@ export async function toolCall(
         const hookDeny = await runBeforeToolHook(ctx.hooks, p.funcName, p.args);
         if (hookDeny !== null) {
             result.push(
-                toolRow(p.call, `[Denied by hook] 工具 ${p.funcName} 被项目钩子拒绝：${hookDeny}`)
+                toolRow(p.call, `[Denied by hook] tool ${p.funcName} was denied by a project hook: ${hookDeny}`)
             );
             continue;
         }
@@ -347,7 +347,7 @@ async function runHandler(
         // handler 异常作为工具结果喂回模型（不炸对话循环）——失败是模型可恢复的状态
         // （换策略/重试/告知用户）；abort 透传，终态由主循环处理。
         if (ctx.signal?.aborted) throw e;
-        out = `Error: 工具 ${plan.funcName} 执行异常：${e instanceof Error ? e.message : String(e)}`;
+        out = `Error: tool ${plan.funcName} threw an exception: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
         // 清理注入的回调，避免后续 tool 复用泄漏 / 误发 progress
         if (injectProgress) ctx.emitProgress = undefined;
@@ -417,7 +417,7 @@ async function permissionGate(plan: ToolPlan, ctx: ToolContext): Promise<string 
         ? `${funcName}|escape:${plan.escapeAbs}`
         : `${funcName}|${verdict.ruleKey ?? funcName}`;
     const summary = isEscape
-        ? `工作区外文件：${plan.escapeAbs}\n${JSON.stringify(truncateArgs(args))}`
+        ? `File outside workspace: ${plan.escapeAbs}\n${JSON.stringify(truncateArgs(args))}`
         : JSON.stringify(truncateArgs(args));
 
     // allow：仅用户规则放行需审计（mode 默认放行不打扰事件流，AC-007）
@@ -429,7 +429,7 @@ async function permissionGate(plan: ToolPlan, ctx: ToolContext): Promise<string 
     // deny：永不执行 handler（I-002），结果回传模型自纠（C-002）
     if (verdict.action === "deny") {
         audit(ctx, funcName, args, verdict, "decided", "deny");
-        return `[Permission denied] 工具 ${funcName} 被用户的权限规则拒绝（匹配：${verdict.ruleKey ?? funcName}）。请改用已获允许的方式，或先向用户说明并获得授权。`;
+        return `[Permission denied] tool ${funcName} was denied by the user's permission rules (matched: ${verdict.ruleKey ?? funcName}). Use an allowed approach instead, or explain the operation to the user and ask for authorization first.`;
     }
 
     // ask：会话缓存命中（D-007）→ 直通
@@ -439,7 +439,7 @@ async function permissionGate(plan: ToolPlan, ctx: ToolContext): Promise<string 
     // 否则模型按拒绝文案"说明后再请求授权"立刻重问，用户观感 = 拒绝未被感知。
     if (perm.deniedOnce.has(cacheKey)) {
         audit(ctx, funcName, args, verdict, "decided", "deny");
-        return `[Permission denied] 用户已拒绝过 ${funcName}（${verdict.ruleKey ?? funcName}）。不要再次请求同样或相似的授权；换用无需该权限的方案完成目标，或直接向用户说明原因并等待用户主动开放权限。`;
+        return `[Permission denied] the user already declined ${funcName} (${verdict.ruleKey ?? funcName}). Do not ask for the same or a similar authorization again; achieve the goal another way, or explain why you need it and wait for the user to grant it.`;
     }
 
     // ask：阻塞等裁决（B-005），挂起等待不超时（SPEC-033 DEC-101，取代 120s 自动拒绝）；
@@ -463,7 +463,7 @@ async function permissionGate(plan: ToolPlan, ctx: ToolContext): Promise<string 
     }
     // 用户拒绝：记入会话级拒绝缓存（todo#13），后续同类 ask 不再打扰
     perm.deniedOnce.add(cacheKey);
-    return `[Permission denied] 用户拒绝了本次执行：${funcName}。请改用其他方式完成目标，或先向用户说明操作意图与原因后再请求授权。`;
+    return `[Permission denied] the user declined this execution: ${funcName}. Achieve the goal another way, or explain the intent and reason before requesting authorization again.`;
 }
 
 /** 发权限裁决请求并阻塞等答案（复用 pendingInteractions 通道，与 ask_question 同构）。 */

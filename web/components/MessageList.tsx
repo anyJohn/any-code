@@ -182,7 +182,7 @@ export function MessageList({
                                             : "text-muted-foreground/70"
                                     )}
                                 >
-                                    {e.message}
+                                    {e.i18nKey ? t(e.i18nKey, e.i18nParams) : e.message}
                                 </span>
                             </div>
                         );
@@ -206,7 +206,7 @@ export function MessageList({
                                 {e.type}
                             </span>
                             <span className="text-sm text-foreground whitespace-pre-wrap break-words">
-                                {e.message}
+                                {e.i18nKey ? t(e.i18nKey, e.i18nParams) : e.message}
                             </span>
                             {errorData?.message && (
                                 <span className="text-sm text-muted-foreground whitespace-pre-wrap break-words">

@@ -337,7 +337,7 @@ describe("文件 tab / 快照 diff 路由（SPEC-036）", () => {
             `/api/workspaces/${PK}/snapshots/deadbeef/diff`
         );
         expect(missing.status).toBe(400);
-        expect(((await missing.json()) as { statusMessage: string }).statusMessage).toContain("不存在");
+        expect(((await missing.json()) as { statusMessage: string }).statusMessage).toContain("not found");
     });
 });
 

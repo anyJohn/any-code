@@ -342,7 +342,7 @@ const skillSchema: ChatCompletionTool = {
             properties: {
                 name: {
                     type: "string",
-                    description: "技能名（<available_skills> 中列出的 name）",
+                    description: "Skill name (the name listed in <available_skills>)",
                 },
             },
             required: ["name"],

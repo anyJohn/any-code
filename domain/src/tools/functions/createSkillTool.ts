@@ -28,22 +28,22 @@ export const createSkillTool: Tool = {
                     name: {
                         type: "string",
                         description:
-                            "技能名：小写字母/数字/连字符（如 pdf-merge）。也是目录名与 use_skill 的调用名",
+                            "Skill name: lowercase letters/digits/hyphens (e.g. pdf-merge). Also the directory name and the use_skill call name",
                     },
                     description: {
                         type: "string",
                         description:
-                            "一句话说明何时该用这个技能（会注入 <available_skills> 目录供模型判断）",
+                            "One sentence describing when to use this skill (injected into <available_skills> so the model can decide)",
                     },
                     content: {
                         type: "string",
-                        description: "技能正文（Markdown）：步骤、注意事项、脚本用法",
+                        description: "Skill body (Markdown): steps, caveats, script usage",
                     },
                     scope: {
                         type: "string",
                         enum: ["global", "project"],
                         description:
-                            "global=~/.anycode/skills（跨项目，缺省）；project=<工作区>/.anycode/skills（仅本项目）",
+                            "global=~/.anycode/skills (cross-project, default); project=<workspace>/.anycode/skills (this project only)",
                     },
                 },
                 required: ["name", "description", "content"],
@@ -63,15 +63,15 @@ export const createSkillTool: Tool = {
         const scope = args?.scope === "project" ? "project" : "global";
         if (!NAME_RE.test(name)) {
             return errResult(
-                "name 非法：只允许小写字母/数字/连字符（1-64 位）——它同时是目录名与 use_skill 的调用名"
+                "Invalid name: only lowercase letters/digits/hyphens (1-64 chars) — it is both the directory name and the use_skill call name"
             );
         }
         if (!description) {
             return errResult(
-                "description 不能为空（注入 <available_skills> 目录，供模型判断何时使用）"
+                "description must not be empty (injected into <available_skills> so the model can decide when to use it)"
             );
         }
-        if (!content.trim()) return errResult("content 不能为空（技能正文 Markdown）");
+        if (!content.trim()) return errResult("content must not be empty (the skill body, Markdown)");
         const dir =
             scope === "project"
                 ? join(workspaceConfigDir(ctx.workspace), "skills")
@@ -79,7 +79,7 @@ export const createSkillTool: Tool = {
         const skillDir = join(dir, name);
         if (existsSync(skillDir) || existsSync(join(dir, `${name}.md`))) {
             return errResult(
-                `技能 "${name}" 已存在（${skillDir}）。如需修改：用 edit 工具直接编辑其 SKILL.md`
+                `Skill "${name}" already exists (${skillDir}). To modify it, edit its SKILL.md directly with the edit tool`
             );
         }
         try {
@@ -93,7 +93,7 @@ export const createSkillTool: Tool = {
             return errResult(String(e instanceof Error ? e.message : e));
         }
         return {
-            content: `技能已创建：${skillDir}/SKILL.md（scope: ${scope}）\n下一条任务即可用：use_skill "${name}"`,
+            content: `Skill created: ${skillDir}/SKILL.md (scope: ${scope})\nAvailable from the next task onward: use_skill "${name}"`,
             data: { skill: name, scope, dir: skillDir },
         };
     },
